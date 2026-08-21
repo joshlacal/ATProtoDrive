@@ -18,7 +18,7 @@ actor TestCallTracker {
     }
 }
 
-@Suite("SpaceDetailModel and RepoEntry Tests")
+@Suite("SpaceDetailModel and RepoEntry Tests", .serialized)
 struct SpaceDetailModelTests {
 
     // MARK: - RepoEntry Tests
@@ -158,6 +158,44 @@ struct SpaceDetailModelTests {
         #expect(state3 == .reconsentNeeded("Account re-consent needed for space access"))
     }
 
+    @Test("classifyError identifies token rejected errors")
+    func testClassifyErrorTokenRejected() {
+        let tokenXRPC = ATProtoXRPCError(
+            error: "InvalidDelegationToken",
+            message: "Token signature invalid",
+            statusCode: 401
+        )
+        let state1 = SpaceDetailModel.classifyError(tokenXRPC)
+        #expect(state1 == .tokenRejected("InvalidDelegationToken: Token signature invalid"))
+
+        let credError = SpaceCredentialError.tokenRejected(
+            host: "swan.place",
+            error: "InvalidDelegationToken",
+            message: nil
+        )
+        let state2 = SpaceDetailModel.classifyError(credError)
+        #expect(state2 == .tokenRejected("swan.place rejected the delegation token as invalid (not an access denial). This usually means swan.place is running a different permissioned-data profile than the token issuer."))
+    }
+
+    @Test("classifyError identifies authorization refused errors")
+    func testClassifyErrorAuthorizationRefused() {
+        let authRefusedXRPC = ATProtoXRPCError(
+            error: "UserNotAuthorized",
+            message: "User is not a member",
+            statusCode: 403
+        )
+        let state1 = SpaceDetailModel.classifyError(authRefusedXRPC)
+        #expect(state1 == .authorizationRefused("UserNotAuthorized: User is not a member"))
+
+        let credError = SpaceCredentialError.authorizationRefused(
+            host: "swan.place",
+            error: "UserNotAuthorized",
+            message: "User is not a member"
+        )
+        let state2 = SpaceDetailModel.classifyError(credError)
+        #expect(state2 == .authorizationRefused("You no longer have access to this space (swan.place refused authorization: User is not a member)"))
+    }
+
     @Test("classifyError identifies general errors")
     func testClassifyErrorGeneral() {
         let networkError = NSError(
@@ -167,8 +205,11 @@ struct SpaceDetailModelTests {
         )
         let state = SpaceDetailModel.classifyError(networkError)
         #expect(state == .general("The Internet connection appears to be offline."))
-    }
 
+        let generalCredError = SpaceCredentialError.exchangeFailed(statusCode: 500, message: "Internal Server Error")
+        let state2 = SpaceDetailModel.classifyError(generalCredError)
+        #expect(state2 == .general("Space credential exchange failed with status 500: Internal Server Error"))
+    }
     // MARK: - fetchAllRepos Pagination Tests
 
     @Test("fetchAllRepos accumulates across multiple pages using cursor")
@@ -543,4 +584,376 @@ struct SpaceDetailModelTests {
         #expect(model.error == "Error message")
         #expect(model.errorState == .general("Error message"))
     }
+
+    // MARK: - Production Path Error Classification Tests
+
+    private final class ModelMockURLProtocol: URLProtocol, @unchecked Sendable {
+        private static let lock = NSLock()
+        private nonisolated(unsafe) static var handler: (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?
+
+        static func setHandler(_ newHandler: (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?) {
+            lock.lock()
+            defer { lock.unlock() }
+            handler = newHandler
+        }
+
+        override class func canInit(with request: URLRequest) -> Bool { true }
+        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+        override func startLoading() {
+            ModelMockURLProtocol.lock.lock()
+            let currentHandler = ModelMockURLProtocol.handler
+            ModelMockURLProtocol.lock.unlock()
+
+            guard let currentHandler else {
+                client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+                return
+            }
+
+            do {
+                let (response, data) = try currentHandler(request)
+                client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+                client?.urlProtocol(self, didLoad: data)
+                client?.urlProtocolDidFinishLoading(self)
+            } catch {
+                client?.urlProtocol(self, didFailWithError: error)
+            }
+        }
+
+        override func stopLoading() {}
+    }
+
+    private static func makeMockSession() -> URLSession {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ModelMockURLProtocol.self]
+        return URLSession(configuration: config)
+    }
+
+    private static let swanDIDDocJSON = """
+    {
+      "@context": ["https://www.w3.org/ns/did/v1"],
+      "id": "did:plc:6u6rzv6fk3ga37kgs3tybgdk",
+      "verificationMethod": [
+        {
+          "id": "did:plc:6u6rzv6fk3ga37kgs3tybgdk#atproto",
+          "type": "Multikey",
+          "controller": "did:plc:6u6rzv6fk3ga37kgs3tybgdk",
+          "publicKeyMultibase": "zQ3shb9WV8D4wR8m2C7q8sT2x6b6Z9p"
+        }
+      ],
+      "service": [
+        {
+          "id": "#atproto_pds",
+          "type": "AtprotoPersonalDataServer",
+          "serviceEndpoint": "https://swan.place"
+        }
+      ]
+    }
+    """
+
+    @MainActor
+    @Test("Case 3: Production path handles 401 InvalidDelegationToken: names swan.place, preserves sidebar & persisted state")
+    func testProductionPathCase3TokenRejected() async throws {
+        URLProtocol.registerClass(ModelMockURLProtocol.self)
+        defer {
+            URLProtocol.unregisterClass(ModelMockURLProtocol.self)
+            ModelMockURLProtocol.setHandler(nil)
+        }
+
+        let session = Self.makeMockSession()
+        let accountDID = "did:plc:user123"
+        let authorityDID = "did:plc:6u6rzv6fk3ga37kgs3tybgdk"
+        let spaceURI = "at://\(authorityDID)/space/my.bulletin.board/self"
+
+        UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: accountDID))
+        defer {
+            UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: accountDID))
+        }
+
+        SpaceListModel.saveCustomSpaceURIs([spaceURI], for: accountDID)
+
+        let client = await ATProtoClient(baseURL: URL(string: "https://bsky.social")!)
+        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: client))
+        let credentials = SpaceCredentialManager(
+            client: client,
+            resolver: resolver,
+            urlSession: session,
+            delegationTokenProvider: { _ in "mock-delegation-token" }
+        )
+
+        let account = AccountStore.Account(
+            id: accountDID,
+            handle: "user.test",
+            client: client,
+            credentials: credentials,
+            authMode: .cab
+        )
+
+        ModelMockURLProtocol.setHandler { request in
+            let urlString = request.url?.absoluteString ?? ""
+            if urlString.contains("plc.directory") || urlString.contains(".well-known/did.json") {
+                let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+                return (resp, Data(Self.swanDIDDocJSON.utf8))
+            }
+            if urlString.contains("com.atproto.space.getDelegationToken") {
+                let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+                let body = #"{"token":"mock-delegation-token"}"#.data(using: .utf8)!
+                return (resp, body)
+            }
+            if urlString == "https://swan.place/xrpc/com.atproto.space.getSpaceCredential" {
+                let resp = HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+                let body = #"{"error":"InvalidDelegationToken"}"#.data(using: .utf8)!
+                return (resp, body)
+            }
+            let resp = HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
+            return (resp, Data())
+        }
+
+        let spaceItem = try SpaceItem(uriString: spaceURI, accountDID: accountDID)
+        let spaceListModel = SpaceListModel()
+        await spaceListModel.load(accountDID: accountDID) { _ in (200, ComAtprotoSpaceListSpaces.Output(spaces: [])) }
+
+        // Verify space exists in sidebar before load
+        #expect(spaceListModel.spaces.contains(where: { $0.ref.uriString() == spaceURI }))
+
+        let detailModel = SpaceDetailModel()
+        // Run the real production load path (no injected fetchRepos closure)
+        await detailModel.load(space: spaceItem, account: account)
+
+        // Assert the user-visible state
+        guard case .tokenRejected(let message) = detailModel.errorState else {
+            Issue.record("Expected .tokenRejected errorState, got \(String(describing: detailModel.errorState))")
+            return
+        }
+
+        // Assert authority host is named in message
+        #expect(message.contains("swan.place"))
+        #expect(message.contains("rejected the delegation token as invalid (not an access denial)"))
+        #expect(message.contains("different permissioned-data profile"))
+        #expect(detailModel.error == message)
+        #expect(detailModel.repos.isEmpty)
+
+        // Assert persisted space state in UserDefaults SURVIVED
+        let persistedURIs = SpaceListModel.loadCustomSpaceURIs(for: accountDID)
+        #expect(persistedURIs.contains(spaceURI))
+
+        // Assert sidebar entry in SpaceListModel SURVIVED
+        await spaceListModel.load(accountDID: accountDID) { _ in (200, ComAtprotoSpaceListSpaces.Output(spaces: [])) }
+        #expect(spaceListModel.spaces.contains(where: { $0.ref.uriString() == spaceURI }))
+    }
+    @MainActor
+    @Test("Case 1: Production path handles SpaceDeleted: shows tombstone and removes state on delete")
+    func testProductionPathCase1SpaceDeleted() async throws {
+        URLProtocol.registerClass(ModelMockURLProtocol.self)
+        defer {
+            URLProtocol.unregisterClass(ModelMockURLProtocol.self)
+            ModelMockURLProtocol.setHandler(nil)
+        }
+
+        let session = Self.makeMockSession()
+        let accountDID = "did:plc:user1"
+        let authorityDID = "did:plc:case1deletedauthority"
+        let spaceURI = "at://\(authorityDID)/space/my.bulletin.board/self"
+
+        UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: accountDID))
+        defer {
+            UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: accountDID))
+        }
+        SpaceListModel.saveCustomSpaceURIs([spaceURI], for: accountDID)
+
+        let client = await ATProtoClient(baseURL: URL(string: "https://bsky.social")!)
+        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: client))
+        let credentials = SpaceCredentialManager(
+            client: client,
+            resolver: resolver,
+            urlSession: session,
+            delegationTokenProvider: { _ in "mock-delegation-token" }
+        )
+
+        let account = AccountStore.Account(
+            id: accountDID,
+            handle: "user.test",
+            client: client,
+            credentials: credentials,
+            authMode: .cab
+        )
+
+        let didDoc = """
+        {
+          "@context": ["https://www.w3.org/ns/did/v1"],
+          "id": "\(authorityDID)",
+          "verificationMethod": [{ "id": "\(authorityDID)#atproto", "type": "Multikey", "controller": "\(authorityDID)", "publicKeyMultibase": "zQ3shb9WV8D4wR8m2C7q8sT2x6b6Z9p" }],
+          "service": [{ "id": "#atproto_pds", "type": "AtprotoPersonalDataServer", "serviceEndpoint": "https://swan-case1.place" }]
+        }
+        """
+
+        ModelMockURLProtocol.setHandler { request in
+            let urlString = request.url?.absoluteString ?? ""
+            if urlString.contains(authorityDID) || urlString.contains("did:plc") {
+                let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+                return (resp, Data(didDoc.utf8))
+            }
+            if urlString == "https://swan-case1.place/xrpc/com.atproto.space.getSpaceCredential" {
+                let resp = HTTPURLResponse(url: request.url!, statusCode: 400, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+                let body = #"{"error":"SpaceDeleted","message":"Space was deleted by owner"}"#.data(using: .utf8)!
+                return (resp, body)
+            }
+            let resp = HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
+            return (resp, Data())
+        }
+
+        let spaceItem = try SpaceItem(uriString: spaceURI, accountDID: accountDID)
+        let detailModel = SpaceDetailModel()
+        await detailModel.load(space: spaceItem, account: account)
+
+        guard case .tombstone(let message) = detailModel.errorState else {
+            Issue.record("Expected .tombstone, got \(String(describing: detailModel.errorState))")
+            return
+        }
+        #expect(message.contains("SpaceDeleted"))
+        #expect(message.contains("Space was deleted by owner"))
+
+        // Delete space removes it from persistence
+        let spaceListModel = SpaceListModel()
+        try await spaceListModel.deleteSpace(space: spaceItem, account: account, transport: { _ in 200 })
+        let persistedURIs = SpaceListModel.loadCustomSpaceURIs(for: accountDID)
+        #expect(!persistedURIs.contains(spaceURI))
+    }
+
+    @MainActor
+    @Test("Case 2: Production path handles 403 UserNotAuthorized: shows access denied message")
+    func testProductionPathCase2AuthorizationRefused() async throws {
+        URLProtocol.registerClass(ModelMockURLProtocol.self)
+        defer {
+            URLProtocol.unregisterClass(ModelMockURLProtocol.self)
+            ModelMockURLProtocol.setHandler(nil)
+        }
+
+        let session = Self.makeMockSession()
+        let accountDID = "did:plc:user2"
+        let authorityDID = "did:plc:case2refusedauthority"
+        let spaceURI = "at://\(authorityDID)/space/my.bulletin.board/self"
+
+        let client = await ATProtoClient(baseURL: URL(string: "https://bsky.social")!)
+        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: client))
+        let credentials = SpaceCredentialManager(
+            client: client,
+            resolver: resolver,
+            urlSession: session,
+            delegationTokenProvider: { _ in "mock-delegation-token" }
+        )
+
+        let account = AccountStore.Account(
+            id: accountDID,
+            handle: "user.test",
+            client: client,
+            credentials: credentials,
+            authMode: .cab
+        )
+
+        let didDoc = """
+        {
+          "@context": ["https://www.w3.org/ns/did/v1"],
+          "id": "\(authorityDID)",
+          "verificationMethod": [{ "id": "\(authorityDID)#atproto", "type": "Multikey", "controller": "\(authorityDID)", "publicKeyMultibase": "zQ3shb9WV8D4wR8m2C7q8sT2x6b6Z9p" }],
+          "service": [{ "id": "#atproto_pds", "type": "AtprotoPersonalDataServer", "serviceEndpoint": "https://swan-case2.place" }]
+        }
+        """
+
+        ModelMockURLProtocol.setHandler { request in
+            let urlString = request.url?.absoluteString ?? ""
+            if urlString.contains(authorityDID) || urlString.contains("did:plc") {
+                let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+                return (resp, Data(didDoc.utf8))
+            }
+            if urlString == "https://swan-case2.place/xrpc/com.atproto.space.getSpaceCredential" {
+                let resp = HTTPURLResponse(url: request.url!, statusCode: 403, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+                let body = #"{"error":"UserNotAuthorized","message":"Account is not a member of this space"}"#.data(using: .utf8)!
+                return (resp, body)
+            }
+            let resp = HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
+            return (resp, Data())
+        }
+
+        let spaceItem = try SpaceItem(uriString: spaceURI, accountDID: accountDID)
+        let detailModel = SpaceDetailModel()
+        await detailModel.load(space: spaceItem, account: account)
+
+        guard case .authorizationRefused(let message) = detailModel.errorState else {
+            Issue.record("Expected .authorizationRefused, got \(String(describing: detailModel.errorState))")
+            return
+        }
+        #expect(message.contains("You no longer have access to this space"))
+        #expect(message.contains("swan-case2.place refused authorization"))
+        #expect(detailModel.error == message)
+    }
+
+    @MainActor
+    @Test("Case 4: Production path handles opaque 500 error: shows general error with raw text")
+    func testProductionPathCase4Opaque500() async throws {
+        URLProtocol.registerClass(ModelMockURLProtocol.self)
+        defer {
+            URLProtocol.unregisterClass(ModelMockURLProtocol.self)
+            ModelMockURLProtocol.setHandler(nil)
+        }
+
+        let session = Self.makeMockSession()
+        let accountDID = "did:plc:user4"
+        let authorityDID = "did:plc:case4opaqueauthority"
+        let spaceURI = "at://\(authorityDID)/space/my.bulletin.board/self"
+
+        let client = await ATProtoClient(baseURL: URL(string: "https://bsky.social")!)
+        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: client))
+        let credentials = SpaceCredentialManager(
+            client: client,
+            resolver: resolver,
+            urlSession: session,
+            delegationTokenProvider: { _ in "mock-delegation-token" }
+        )
+
+        let account = AccountStore.Account(
+            id: accountDID,
+            handle: "user.test",
+            client: client,
+            credentials: credentials,
+            authMode: .cab
+        )
+
+        let didDoc = """
+        {
+          "@context": ["https://www.w3.org/ns/did/v1"],
+          "id": "\(authorityDID)",
+          "verificationMethod": [{ "id": "\(authorityDID)#atproto", "type": "Multikey", "controller": "\(authorityDID)", "publicKeyMultibase": "zQ3shb9WV8D4wR8m2C7q8sT2x6b6Z9p" }],
+          "service": [{ "id": "#atproto_pds", "type": "AtprotoPersonalDataServer", "serviceEndpoint": "https://swan-case4.place" }]
+        }
+        """
+
+        ModelMockURLProtocol.setHandler { request in
+            let urlString = request.url?.absoluteString ?? ""
+            if urlString.contains(authorityDID) || urlString.contains("did:plc") {
+                let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+                return (resp, Data(didDoc.utf8))
+            }
+            if urlString == "https://swan-case4.place/xrpc/com.atproto.space.getSpaceCredential" {
+                let resp = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: ["Content-Type": "text/plain"])!
+                let body = "Internal Server Error Occurred".data(using: .utf8)!
+                return (resp, body)
+            }
+            let resp = HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
+            return (resp, Data())
+        }
+
+        let spaceItem = try SpaceItem(uriString: spaceURI, accountDID: accountDID)
+        let detailModel = SpaceDetailModel()
+        await detailModel.load(space: spaceItem, account: account)
+
+        guard case .general(let message) = detailModel.errorState else {
+            Issue.record("Expected .general, got \(String(describing: detailModel.errorState))")
+            return
+        }
+        #expect(message.contains("500"))
+        #expect(message.contains("Internal Server Error Occurred"))
+        #expect(detailModel.error == message)
+    }
+
 }

@@ -204,6 +204,18 @@ public struct RecordTableView: View {
             } description: {
                 Text(message)
             }
+        case .authorizationRefused(let message):
+            ContentUnavailableView {
+                Label("Access Denied", systemImage: "person.crop.circle.badge.xmark")
+            } description: {
+                Text(message)
+            }
+        case .tokenRejected(let message):
+            ContentUnavailableView {
+                Label("Token Rejected", systemImage: "network.badge.shield.half.filled")
+            } description: {
+                Text(message)
+            }
         case .reconsentNeeded(let message):
             ContentUnavailableView {
                 Label("Authorization Required", systemImage: "lock.shield")

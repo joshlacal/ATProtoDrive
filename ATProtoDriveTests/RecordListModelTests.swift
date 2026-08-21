@@ -337,7 +337,7 @@ struct RecordListModelTests {
 
     // MARK: - Error Classification Tests
 
-    @Test("classifyError categorizes RepoNotFound, Tombstone, Reconsent, and General")
+    @Test("classifyError categorizes RepoNotFound, Tombstone, Reconsent, TokenRejected, AuthorizationRefused, and General")
     func testClassifyError() {
         let repoErr = ATProtoXRPCError(error: "RepoNotFound", message: "Not found", statusCode: 404)
         let state1 = RecordListModel.classifyError(repoErr)
@@ -347,9 +347,17 @@ struct RecordListModelTests {
         let state2 = RecordListModel.classifyError(spaceErr)
         #expect(state2 == .tombstone("SpaceNotFound: Deleted"))
 
-        let authErr = ATProtoXRPCError(error: "AuthError", message: "invalid_token or expired auth", statusCode: 401)
+        let tokenErr = ATProtoXRPCError(error: "InvalidDelegationToken", message: "Token rejected", statusCode: 401)
+        let stateToken = RecordListModel.classifyError(tokenErr)
+        #expect(stateToken == .tokenRejected("InvalidDelegationToken: Token rejected"))
+
+        let authRefusedErr = ATProtoXRPCError(error: "UserNotAuthorized", message: "Access denied", statusCode: 403)
+        let stateAuthRefused = RecordListModel.classifyError(authRefusedErr)
+        #expect(stateAuthRefused == .authorizationRefused("UserNotAuthorized: Access denied"))
+
+        let authErr = ATProtoXRPCError(error: "MissingScope", message: "Scope required", statusCode: 403)
         let state3 = RecordListModel.classifyError(authErr)
-        #expect(state3 == .reconsentNeeded("AuthError: invalid_token or expired auth"))
+        #expect(state3 == .reconsentNeeded("MissingScope: Scope required"))
 
         let genericErr = ATProtoXRPCError(error: "Unknown", message: "Internal server error", statusCode: 500)
         let state4 = RecordListModel.classifyError(genericErr)

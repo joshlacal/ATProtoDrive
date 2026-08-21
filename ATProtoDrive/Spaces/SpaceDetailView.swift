@@ -247,6 +247,36 @@ public struct SpaceDetailView: View {
             }
             .padding(.vertical, 24)
 
+        case .authorizationRefused(let message):
+            ContentUnavailableView {
+                Label("Access Denied", systemImage: "person.crop.circle.badge.xmark")
+            } description: {
+                Text("You no longer have access to this space.")
+            } actions: {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.vertical, 24)
+
+        case .tokenRejected(let message):
+            ContentUnavailableView {
+                Label("Token Rejected", systemImage: "network.badge.shield.half.filled")
+            } description: {
+                Text(message)
+            } actions: {
+                if let account {
+                    Button("Retry") {
+                        Task {
+                            await model.load(space: space, account: account)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+            .padding(.vertical, 24)
+
         case .reconsentNeeded(let message):
             ContentUnavailableView {
                 Label("Re-consent Required", systemImage: "lock.trianglebadge.exclamationmark.fill")

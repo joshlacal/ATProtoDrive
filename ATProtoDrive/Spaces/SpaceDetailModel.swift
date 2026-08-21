@@ -79,11 +79,17 @@ public final class SpaceDetailModel {
     public enum ErrorState: Equatable, Sendable {
         case reconsentNeeded(String)
         case tombstone(String)
+        case authorizationRefused(String)
+        case tokenRejected(String)
         case general(String)
 
         public var message: String {
             switch self {
-            case let .reconsentNeeded(msg), let .tombstone(msg), let .general(msg):
+            case let .reconsentNeeded(msg),
+                 let .tombstone(msg),
+                 let .authorizationRefused(msg),
+                 let .tokenRejected(msg),
+                 let .general(msg):
                 return msg
             }
         }
@@ -200,8 +206,24 @@ public final class SpaceDetailModel {
         return false
     }
 
-    /// Classifies an error into specific UI error states (tombstone, reconsent, or general).
+    /// Classifies an error into specific UI error states (tombstone, reconsent, authorizationRefused, tokenRejected, or general).
     nonisolated public static func classifyError(_ error: Error) -> ErrorState {
+        if let credError = error as? SpaceCredentialError {
+            switch credError {
+            case .spaceDeleted(_, let message):
+                let msg = credError.errorDescription ?? message ?? "SpaceDeleted"
+                return .tombstone(msg)
+            case .authorizationRefused:
+                return .authorizationRefused(credError.errorDescription ?? "You no longer have access to this space.")
+            case .tokenRejected:
+                return .tokenRejected(credError.errorDescription ?? "Delegation token rejected by host.")
+            case .missingDelegationToken:
+                return .reconsentNeeded(credError.errorDescription ?? "Missing delegation token")
+            case .exchangeFailed, .invalidToken, .invalidResponse, .invalidKey, .invalidSpaceRef, .insecureURL:
+                break
+            }
+        }
+
         let message: String
         let errorString: String
 
@@ -224,6 +246,30 @@ public final class SpaceDetailModel {
             lowercasedMessage.contains("spacedeleted") ||
             (lowercasedMessage.contains("space") && lowercasedMessage.contains("deleted")) {
             return .tombstone(message)
+        }
+
+        if lowercasedMessage.contains("rejected the delegation token as invalid") ||
+            errorString == "InvalidDelegationToken" ||
+            lowercasedError.contains("invaliddelegationtoken") ||
+            lowercasedMessage.contains("invaliddelegationtoken") {
+            return .tokenRejected(message)
+        }
+
+        if lowercasedMessage.contains("you no longer have access") ||
+            errorString == "UserNotAuthorized" ||
+            errorString == "AppNotAuthorized" ||
+            errorString == "NotAuthorized" ||
+            errorString == "AccessDenied" ||
+            errorString == "Forbidden" ||
+            errorString == "PermissionDenied" ||
+            lowercasedError.contains("usernotauthorized") ||
+            lowercasedError.contains("notauthorized") ||
+            lowercasedError.contains("accessdenied") ||
+            lowercasedMessage.contains("usernotauthorized") ||
+            lowercasedMessage.contains("notauthorized") ||
+            lowercasedMessage.contains("access denied") ||
+            lowercasedMessage.contains("refused authorization") {
+            return .authorizationRefused(message)
         }
 
         if errorString == "MissingScope" ||

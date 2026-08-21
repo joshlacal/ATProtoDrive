@@ -426,14 +426,18 @@ public final class RecordListModel {
         case repoNotFound(String)
         case tombstone(String)
         case reconsentNeeded(String)
+        case authorizationRefused(String)
+        case tokenRejected(String)
         case general(String)
 
         public var message: String {
             switch self {
-            case .repoNotFound(let msg),
-                 .tombstone(let msg),
-                 .reconsentNeeded(let msg),
-                 .general(let msg):
+            case let .repoNotFound(msg),
+                 let .tombstone(msg),
+                 let .reconsentNeeded(msg),
+                 let .authorizationRefused(msg),
+                 let .tokenRejected(msg),
+                 let .general(msg):
                 return msg
             }
         }
@@ -1100,6 +1104,22 @@ public final class RecordListModel {
 
     /// Classifies an error into specific UI error states.
     nonisolated public static func classifyError(_ error: Error) -> ErrorState {
+        if let credError = error as? SpaceCredentialError {
+            switch credError {
+            case .spaceDeleted(_, let message):
+                let msg = credError.errorDescription ?? message ?? "SpaceDeleted"
+                return .tombstone(msg)
+            case .authorizationRefused:
+                return .authorizationRefused(credError.errorDescription ?? "You no longer have access to this space.")
+            case .tokenRejected:
+                return .tokenRejected(credError.errorDescription ?? "Delegation token rejected by host.")
+            case .missingDelegationToken:
+                return .reconsentNeeded(credError.errorDescription ?? "Missing delegation token")
+            case .exchangeFailed, .invalidToken, .invalidResponse, .invalidKey, .invalidSpaceRef, .insecureURL:
+                break
+            }
+        }
+
         let message: String
         let errorString: String
 
@@ -1126,21 +1146,43 @@ public final class RecordListModel {
             lowercasedError.contains("spacenotfound") ||
             lowercasedError.contains("spacedeleted") ||
             lowercasedMessage.contains("spacenotfound") ||
-            lowercasedMessage.contains("spacedeleted") {
+            lowercasedMessage.contains("spacedeleted") ||
+            (lowercasedMessage.contains("space") && lowercasedMessage.contains("deleted")) {
             return .tombstone(message)
+        }
+
+        if lowercasedMessage.contains("rejected the delegation token as invalid") ||
+            errorString == "InvalidDelegationToken" ||
+            lowercasedError.contains("invaliddelegationtoken") ||
+            lowercasedMessage.contains("invaliddelegationtoken") {
+            return .tokenRejected(message)
+        }
+
+        if lowercasedMessage.contains("you no longer have access") ||
+            errorString == "UserNotAuthorized" ||
+            errorString == "AppNotAuthorized" ||
+            errorString == "NotAuthorized" ||
+            errorString == "AccessDenied" ||
+            errorString == "Forbidden" ||
+            errorString == "PermissionDenied" ||
+            lowercasedError.contains("usernotauthorized") ||
+            lowercasedError.contains("notauthorized") ||
+            lowercasedError.contains("accessdenied") ||
+            lowercasedMessage.contains("usernotauthorized") ||
+            lowercasedMessage.contains("notauthorized") ||
+            lowercasedMessage.contains("access denied") ||
+            lowercasedMessage.contains("refused authorization") {
+            return .authorizationRefused(message)
         }
 
         if errorString == "MissingScope" ||
             errorString == "InsufficientScope" ||
             errorString == "InvalidScope" ||
             errorString == "AuthError" ||
-            lowercasedMessage.contains("invalid_token") ||
             lowercasedMessage.contains("missing scope") ||
             lowercasedMessage.contains("insufficient_scope") ||
             lowercasedMessage.contains("re-consent") ||
-            lowercasedMessage.contains("reconsent") ||
-            lowercasedMessage.contains("scope") ||
-            lowercasedMessage.contains("auth") {
+            lowercasedMessage.contains("reconsent") {
             return .reconsentNeeded(message)
         }
 
