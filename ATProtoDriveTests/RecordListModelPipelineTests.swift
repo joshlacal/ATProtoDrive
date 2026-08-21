@@ -149,8 +149,9 @@ struct RecordListModelPipelineTests {
         #expect(credGetCount == 2) // listRecords + getLatestCommit
     }
 
-    @Test("Raw foreign commit non-2xx failure triggers parseGeneric and propagates exact error")
-    func testForeignCommitRawErrorPropagation() async throws {
+    @Test("Model load handles foreign commit non-2xx failure: sets errorState and leaves commit == nil")
+    @MainActor
+    func testForeignCommitRawErrorInModelLoad() async throws {
         let spaceItem = try SpaceItem(
             uriString: "at://did:plc:alice123/space/com.atproto.feed/main",
             accountDID: "did:plc:alice123"
@@ -172,38 +173,32 @@ struct RecordListModelPipelineTests {
         )
         let recordsOutputJSON = try JSONEncoder().encode(ComAtprotoSpaceListRecords.Output(cursor: nil, records: [rec]))
 
-        do {
-            _ = try await RecordListModel.loadRecordsPipeline(
-                space: spaceItem,
-                repo: foreignRepo,
-                accountDID: "did:plc:alice123",
-                clientListRecords: { _ in (200, nil) },
-                clientGetLatestCommit: { (200, nil) },
-                resolveDIDToPDS: { _ in URL(string: "https://bob.pds")! },
-                credentialGet: { url, _ in
-                    if url.path.contains("getLatestCommit") {
-                        return (404, errorJSON)
-                    } else {
-                        return (200, recordsOutputJSON)
-                    }
+        let model = RecordListModel()
+        await model.load(
+            space: spaceItem,
+            repo: foreignRepo,
+            accountDID: "did:plc:alice123",
+            clientListRecords: { _ in (200, nil) },
+            clientGetLatestCommit: { (200, nil) },
+            resolveDIDToPDS: { _ in URL(string: "https://bob.pds")! },
+            credentialGet: { url, _ in
+                if url.path.contains("getLatestCommit") {
+                    return (404, errorJSON)
+                } else {
+                    return (200, recordsOutputJSON)
                 }
-            )
-            Issue.record("Expected loadRecordsPipeline to throw on commit failure")
-        } catch let xrpc as ATProtoXRPCError {
-            #expect(xrpc.error == "RepoNotFound")
-            #expect(xrpc.message == "Member repo does not exist")
-            #expect(xrpc.statusCode == 404)
-            #expect(xrpc.errorDescription == "RepoNotFound: Member repo does not exist")
+            }
+        )
 
-            let classified = RecordListModel.classifyError(xrpc)
-            #expect(classified == .repoNotFound("RepoNotFound: Member repo does not exist"))
-        } catch {
-            Issue.record("Expected ATProtoXRPCError, got \(error)")
-        }
+        #expect(model.commit == nil)
+        #expect(model.rows.isEmpty)
+        #expect(model.error == "RepoNotFound: Member repo does not exist")
+        #expect(model.errorState == .repoNotFound("RepoNotFound: Member repo does not exist"))
     }
 
-    @Test("Raw own repo commit failure propagates exact error")
-    func testOwnCommitRawErrorPropagation() async throws {
+    @Test("Model load handles own repo commit thrown error: sets errorState and leaves commit == nil")
+    @MainActor
+    func testOwnCommitThrownErrorInModelLoad() async throws {
         let spaceItem = try SpaceItem(
             uriString: "at://did:plc:alice123/space/com.atproto.feed/main",
             accountDID: "did:plc:alice123"
@@ -217,29 +212,29 @@ struct RecordListModelPipelineTests {
             value: nil
         )
 
-        do {
-            _ = try await RecordListModel.loadRecordsPipeline(
-                space: spaceItem,
-                repo: ownRepo,
-                accountDID: "did:plc:alice123",
-                clientListRecords: { _ in
-                    (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [rec]))
-                },
-                clientGetLatestCommit: {
-                    (500, nil)
-                },
-                resolveDIDToPDS: { _ in URL(string: "https://foreign.pds")! },
-                credentialGet: { _, _ in (200, Data()) }
-            )
-            Issue.record("Expected loadRecordsPipeline to throw on own commit failure")
-        } catch let xrpc as ATProtoXRPCError {
-            #expect(xrpc.error == "XRPCError_500")
-            #expect(xrpc.statusCode == 500)
-            let classified = RecordListModel.classifyError(xrpc)
-            #expect(classified == .general("XRPCError_500: HTTP 500"))
-        } catch {
-            Issue.record("Expected ATProtoXRPCError, got \(error)")
-        }
+        let model = RecordListModel()
+        await model.load(
+            space: spaceItem,
+            repo: ownRepo,
+            accountDID: "did:plc:alice123",
+            clientListRecords: { _ in
+                (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [rec]))
+            },
+            clientGetLatestCommit: {
+                throw ATProtoXRPCError(
+                    error: "XRPCError_500",
+                    message: "Internal server error during commit fetch",
+                    statusCode: 500
+                )
+            },
+            resolveDIDToPDS: { _ in URL(string: "https://foreign.pds")! },
+            credentialGet: { _, _ in (200, Data()) }
+        )
+
+        #expect(model.commit == nil)
+        #expect(model.rows.isEmpty)
+        #expect(model.error == "XRPCError_500: Internal server error during commit fetch")
+        #expect(model.errorState == .general("XRPCError_500: Internal server error during commit fetch"))
     }
 
     @Test("RecordRow JSON pretty printing produces exact canonical byte-for-byte formatted JSON")

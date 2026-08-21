@@ -499,7 +499,17 @@ public final class RecordListModel {
 
     // MARK: - Load Action
 
-    public func load(space: SpaceItem, repo: RepoEntry, account: AccountStore.Account) async {
+    /// Internal injected load entry point for testing model state transitions and error handling.
+    func load(
+        space: SpaceItem,
+        repo: RepoEntry,
+        accountDID: String,
+        clientListRecords: @Sendable @escaping (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListRecords.Output?),
+        clientGetLatestCommit: @Sendable @escaping () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetLatestCommit.Output?),
+        resolveDIDToPDS: @Sendable @escaping (_ did: String) async throws -> URL,
+        credentialGet: @Sendable @escaping (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data),
+        onInvalidateSpace: (@Sendable (SpaceRef) async -> Void)? = nil
+    ) async {
         isLoading = true
         error = nil
         errorState = nil
@@ -508,38 +518,14 @@ public final class RecordListModel {
         defer { isLoading = false }
 
         do {
-            let repoDIDObj = try DID(didString: repo.did)
-
             let (fetchedRecords, fetchedCommit) = try await Self.loadRecordsPipeline(
                 space: space,
                 repo: repo,
-                accountDID: account.id,
-                clientListRecords: { cursor in
-                    let (responseCode, output) = try await account.client.com.atproto.space.listRecords(
-                        input: ComAtprotoSpaceListRecords.Parameters(
-                            space: space.ref,
-                            repo: repoDIDObj,
-                            cursor: cursor
-                        )
-                    )
-                    return (responseCode, output)
-                },
-                clientGetLatestCommit: {
-                    let (responseCode, output) = try await account.client.com.atproto.space.getLatestCommit(
-                        input: ComAtprotoSpaceGetLatestCommit.Parameters(
-                            space: space.ref,
-                            repo: repoDIDObj
-                        )
-                    )
-                    return (responseCode, output)
-                },
-                resolveDIDToPDS: { did in
-                    try await account.client.resolveDIDToPDSURL(did: did)
-                },
-                credentialGet: { url, spaceRef in
-                    let (data, response) = try await account.credentials.get(url: url, space: spaceRef)
-                    return (responseCode: response.statusCode, data: data)
-                }
+                accountDID: accountDID,
+                clientListRecords: clientListRecords,
+                clientGetLatestCommit: clientGetLatestCommit,
+                resolveDIDToPDS: resolveDIDToPDS,
+                credentialGet: credentialGet
             )
 
             let mappedRows = fetchedRecords.map {
@@ -559,8 +545,49 @@ public final class RecordListModel {
             self.commit = nil
 
             if case .tombstone = classified {
-                await account.credentials.invalidate(space.ref)
+                if let onInvalidateSpace = onInvalidateSpace {
+                    await onInvalidateSpace(space.ref)
+                }
             }
         }
+    }
+
+    public func load(space: SpaceItem, repo: RepoEntry, account: AccountStore.Account) async {
+        await load(
+            space: space,
+            repo: repo,
+            accountDID: account.id,
+            clientListRecords: { cursor in
+                let repoDIDObj = try DID(didString: repo.did)
+                let (responseCode, output) = try await account.client.com.atproto.space.listRecords(
+                    input: ComAtprotoSpaceListRecords.Parameters(
+                        space: space.ref,
+                        repo: repoDIDObj,
+                        cursor: cursor
+                    )
+                )
+                return (responseCode, output)
+            },
+            clientGetLatestCommit: {
+                let repoDIDObj = try DID(didString: repo.did)
+                let (responseCode, output) = try await account.client.com.atproto.space.getLatestCommit(
+                    input: ComAtprotoSpaceGetLatestCommit.Parameters(
+                        space: space.ref,
+                        repo: repoDIDObj
+                    )
+                )
+                return (responseCode, output)
+            },
+            resolveDIDToPDS: { did in
+                try await account.client.resolveDIDToPDSURL(did: did)
+            },
+            credentialGet: { url, spaceRef in
+                let (data, response) = try await account.credentials.get(url: url, space: spaceRef)
+                return (responseCode: response.statusCode, data: data)
+            },
+            onInvalidateSpace: { spaceRef in
+                await account.credentials.invalidate(spaceRef)
+            }
+        )
     }
 }
