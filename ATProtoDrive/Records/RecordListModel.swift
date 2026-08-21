@@ -833,32 +833,42 @@ public final class RecordListModel {
         }
     }
 
-    public func load(space: SpaceItem, repo: RepoEntry, account: AccountStore.Account) async {
+    public func load(
+        space: SpaceItem,
+        repo: RepoEntry,
+        account: AccountStore.Account,
+        clientListRecords: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListRecords.Output?))? = nil,
+        clientGetLatestCommit: (@Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetLatestCommit.Output?))? = nil
+    ) async {
+        let listRecordsClosure: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListRecords.Output?) = clientListRecords ?? { cursor in
+            let repoDIDObj = try DID(didString: repo.did)
+            let (responseCode, output) = try await account.client.com.atproto.space.listRecords(
+                input: ComAtprotoSpaceListRecords.Parameters(
+                    space: space.ref,
+                    repo: repoDIDObj,
+                    cursor: cursor
+                )
+            )
+            return (responseCode, output)
+        }
+
+        let getCommitClosure: @Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetLatestCommit.Output?) = clientGetLatestCommit ?? {
+            let repoDIDObj = try DID(didString: repo.did)
+            let (responseCode, output) = try await account.client.com.atproto.space.getLatestCommit(
+                input: ComAtprotoSpaceGetLatestCommit.Parameters(
+                    space: space.ref,
+                    repo: repoDIDObj
+                )
+            )
+            return (responseCode, output)
+        }
+
         await load(
             space: space,
             repo: repo,
             accountDID: account.id,
-            clientListRecords: { cursor in
-                let repoDIDObj = try DID(didString: repo.did)
-                let (responseCode, output) = try await account.client.com.atproto.space.listRecords(
-                    input: ComAtprotoSpaceListRecords.Parameters(
-                        space: space.ref,
-                        repo: repoDIDObj,
-                        cursor: cursor
-                    )
-                )
-                return (responseCode, output)
-            },
-            clientGetLatestCommit: {
-                let repoDIDObj = try DID(didString: repo.did)
-                let (responseCode, output) = try await account.client.com.atproto.space.getLatestCommit(
-                    input: ComAtprotoSpaceGetLatestCommit.Parameters(
-                        space: space.ref,
-                        repo: repoDIDObj
-                    )
-                )
-                return (responseCode, output)
-            },
+            clientListRecords: listRecordsClosure,
+            clientGetLatestCommit: getCommitClosure,
             resolveDIDToPDS: { did in
                 try await account.client.resolveDIDToPDSURL(did: did)
             },
@@ -895,22 +905,13 @@ public final class RecordListModel {
             account: account,
             transport: transport
         )
-        if let clientListRecords = clientListRecords, let clientGetLatestCommit = clientGetLatestCommit {
-            await load(
-                space: space,
-                repo: repo,
-                accountDID: account.id,
-                clientListRecords: clientListRecords,
-                clientGetLatestCommit: clientGetLatestCommit,
-                resolveDIDToPDS: { did in try await account.client.resolveDIDToPDSURL(did: did) },
-                credentialGet: { url, spaceRef in
-                    let (data, response) = try await account.credentials.get(url: url, space: spaceRef)
-                    return (responseCode: response.statusCode, data: data)
-                }
-            )
-        } else {
-            await load(space: space, repo: repo, account: account)
-        }
+        await load(
+            space: space,
+            repo: repo,
+            account: account,
+            clientListRecords: clientListRecords,
+            clientGetLatestCommit: clientGetLatestCommit
+        )
         return output
     }
 
@@ -935,22 +936,13 @@ public final class RecordListModel {
             account: account,
             transport: transport
         )
-        if let clientListRecords = clientListRecords, let clientGetLatestCommit = clientGetLatestCommit {
-            await load(
-                space: space,
-                repo: repo,
-                accountDID: account.id,
-                clientListRecords: clientListRecords,
-                clientGetLatestCommit: clientGetLatestCommit,
-                resolveDIDToPDS: { did in try await account.client.resolveDIDToPDSURL(did: did) },
-                credentialGet: { url, spaceRef in
-                    let (data, response) = try await account.credentials.get(url: url, space: spaceRef)
-                    return (responseCode: response.statusCode, data: data)
-                }
-            )
-        } else {
-            await load(space: space, repo: repo, account: account)
-        }
+        await load(
+            space: space,
+            repo: repo,
+            account: account,
+            clientListRecords: clientListRecords,
+            clientGetLatestCommit: clientGetLatestCommit
+        )
         return output
     }
 
@@ -973,22 +965,13 @@ public final class RecordListModel {
             account: account,
             transport: transport
         )
-        if let clientListRecords = clientListRecords, let clientGetLatestCommit = clientGetLatestCommit {
-            await load(
-                space: space,
-                repo: repo,
-                accountDID: account.id,
-                clientListRecords: clientListRecords,
-                clientGetLatestCommit: clientGetLatestCommit,
-                resolveDIDToPDS: { did in try await account.client.resolveDIDToPDSURL(did: did) },
-                credentialGet: { url, spaceRef in
-                    let (data, response) = try await account.credentials.get(url: url, space: spaceRef)
-                    return (responseCode: response.statusCode, data: data)
-                }
-            )
-        } else {
-            await load(space: space, repo: repo, account: account)
-        }
+        await load(
+            space: space,
+            repo: repo,
+            account: account,
+            clientListRecords: clientListRecords,
+            clientGetLatestCommit: clientGetLatestCommit
+        )
         return output
     }
 

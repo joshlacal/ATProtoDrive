@@ -114,11 +114,11 @@ public struct SpaceDetailView: View {
         }
         .sheet(isPresented: $showingAddMemberSheet) {
             if let account {
-                MemberEditor(space: space, account: account) {
-                    Task {
-                        await model.load(space: space, account: account)
-                    }
-                }
+                MemberEditor(
+                    space: space,
+                    account: account,
+                    model: model
+                )
             }
         }
         .confirmationDialog(

@@ -31,6 +31,7 @@ public struct RecordEditorSheet: View {
     let space: SpaceItem
     let repo: RepoEntry
     let account: AccountStore.Account
+    let model: RecordListModel?
     let mode: Mode
     var onSaved: (() -> Void)?
 
@@ -43,16 +44,19 @@ public struct RecordEditorSheet: View {
     @State private var showingFileImporter: Bool = false
     @State private var validationError: String?
     @State private var apiError: String?
+
     public init(
         space: SpaceItem,
         repo: RepoEntry,
         account: AccountStore.Account,
+        model: RecordListModel? = nil,
         mode: Mode = .create(),
         onSaved: (() -> Void)? = nil
     ) {
         self.space = space
         self.repo = repo
         self.account = account
+        self.model = model
         self.mode = mode
         self.onSaved = onSaved
 
@@ -315,27 +319,49 @@ public struct RecordEditorSheet: View {
         defer { isSubmitting = false }
 
         do {
-            switch mode {
-            case .create:
-                _ = try await RecordListModel.performCreateRecord(
-                    space: space.ref,
-                    repoDID: account.id,
-                    collection: collection,
-                    rkey: rkey.isEmpty ? nil : rkey,
-                    jsonText: jsonText,
-                    account: account
-                )
-            case .edit:
-                _ = try await RecordListModel.performPutRecord(
-                    space: space.ref,
-                    repoDID: account.id,
-                    collection: collection,
-                    rkey: rkey,
-                    jsonText: jsonText,
-                    account: account
-                )
+            if let model {
+                switch mode {
+                case .create:
+                    _ = try await model.createRecord(
+                        space: space,
+                        repo: repo,
+                        collection: collection,
+                        rkey: rkey.isEmpty ? nil : rkey,
+                        jsonText: jsonText,
+                        account: account
+                    )
+                case .edit:
+                    _ = try await model.putRecord(
+                        space: space,
+                        repo: repo,
+                        collection: collection,
+                        rkey: rkey,
+                        jsonText: jsonText,
+                        account: account
+                    )
+                }
+            } else {
+                switch mode {
+                case .create:
+                    _ = try await RecordListModel.performCreateRecord(
+                        space: space.ref,
+                        repoDID: account.id,
+                        collection: collection,
+                        rkey: rkey.isEmpty ? nil : rkey,
+                        jsonText: jsonText,
+                        account: account
+                    )
+                case .edit:
+                    _ = try await RecordListModel.performPutRecord(
+                        space: space.ref,
+                        repoDID: account.id,
+                        collection: collection,
+                        rkey: rkey,
+                        jsonText: jsonText,
+                        account: account
+                    )
+                }
             }
-
             onSaved?()
             dismiss()
         } catch {

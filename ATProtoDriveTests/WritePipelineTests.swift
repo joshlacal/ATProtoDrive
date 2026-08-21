@@ -818,12 +818,12 @@ struct WritePipelineTests {
                 await addTracker.record(input)
                 return 200
             },
+            fetchRepos: { [] },
             listMembersTransport: { cursor in
                 await listTracker.record(cursor as Any)
                 return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [m1, m2]))
             }
         )
-
         let addCount = await addTracker.callCount
         let listCount = await listTracker.callCount
         #expect(addCount == 1)
@@ -855,14 +855,14 @@ struct WritePipelineTests {
                 await removeTracker.record(input)
                 return 200
             },
+            fetchRepos: { [] },
             listMembersTransport: { cursor in
                 await listTracker.record(cursor as Any)
                 return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [m1]))
             }
         )
-
-        let removeCount = await removeTracker.callCount
         let listCount = await listTracker.callCount
+        let removeCount = await removeTracker.callCount
         #expect(removeCount == 1)
         #expect(listCount == 1)
         #expect(model.members == ["did:plc:alice123"])

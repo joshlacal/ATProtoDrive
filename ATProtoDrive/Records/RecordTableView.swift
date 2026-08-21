@@ -132,12 +132,9 @@ public struct RecordTableView: View {
                     space: space,
                     repo: repo,
                     account: account,
+                    model: model,
                     mode: mode
-                ) {
-                    Task {
-                        await model.load(space: space, repo: repo, account: account)
-                    }
-                }
+                )
             }
         }
         .confirmationDialog(

@@ -76,17 +76,24 @@ public final class SpaceListModel {
     }
 
     public func load(account: AccountStore.Account) async {
+        await load(accountDID: account.id) { cursor in
+            let (responseCode, output) = try await account.client.com.atproto.space.listSpaces(
+                input: ComAtprotoSpaceListSpaces.Parameters(cursor: cursor)
+            )
+            return (responseCode, output)
+        }
+    }
+
+    public func load(
+        accountDID: String,
+        fetchPage: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListSpaces.Output?)
+    ) async {
         isLoading = true
         error = nil
         defer { isLoading = false }
 
         do {
-            let fetchedSpaces = try await Self.fetchAllSpaces(accountDID: account.id) { cursor in
-                let (responseCode, output) = try await account.client.com.atproto.space.listSpaces(
-                    input: ComAtprotoSpaceListSpaces.Parameters(cursor: cursor)
-                )
-                return (responseCode, output)
-            }
+            let fetchedSpaces = try await Self.fetchAllSpaces(accountDID: accountDID, fetchPage: fetchPage)
             self.spaces = fetchedSpaces
             self.error = nil
         } catch {
@@ -105,27 +112,25 @@ public final class SpaceListModel {
         transport: (@Sendable (_ input: ComAtprotoSimplespaceCreateSpace.Input) async throws -> (responseCode: Int, data: ComAtprotoSimplespaceCreateSpace.Output?))? = nil,
         listSpacesTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListSpaces.Output?))? = nil
     ) async throws -> SpaceRef {
-        let ref = try await SpaceDetailModel.performCreateSpace(
-            spaceType: spaceType,
-            skey: skey,
-            policy: policy,
-            account: account,
-            transport: transport
-        )
-        if let listSpacesTransport = listSpacesTransport {
-            isLoading = true
-            error = nil
-            defer { isLoading = false }
-            do {
-                self.spaces = try await Self.fetchAllSpaces(accountDID: account.id, fetchPage: listSpacesTransport)
-                self.error = nil
-            } catch {
-                self.error = error.localizedDescription
-            }
-        } else {
-            await load(account: account)
+        let input = try SpaceDetailModel.makeCreateSpaceInput(spaceType: spaceType, skey: skey, policy: policy)
+        let execute = transport ?? { input in
+            try await account.client.com.atproto.simplespace.createSpace(input: input)
         }
-        return ref
+        let (responseCode, output) = try await execute(input)
+        guard (200...299).contains(responseCode) else {
+            throw ATProtoXRPCError(error: "CreateSpaceFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
+        }
+        guard let output else {
+            throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body from createSpace", statusCode: responseCode)
+        }
+
+        let listTransport = listSpacesTransport ?? { cursor in
+            try await account.client.com.atproto.space.listSpaces(
+                input: ComAtprotoSpaceListSpaces.Parameters(cursor: cursor)
+            )
+        }
+        await load(accountDID: account.id, fetchPage: listTransport)
+        return output.uri
     }
 
     public func deleteSpace(
@@ -134,23 +139,20 @@ public final class SpaceListModel {
         transport: (@Sendable (_ input: ComAtprotoSimplespaceDeleteSpace.Input) async throws -> Int)? = nil,
         listSpacesTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListSpaces.Output?))? = nil
     ) async throws {
-        try await SpaceDetailModel.performDeleteSpace(
-            space: space,
-            account: account,
-            transport: transport
-        )
-        if let listSpacesTransport = listSpacesTransport {
-            isLoading = true
-            error = nil
-            defer { isLoading = false }
-            do {
-                self.spaces = try await Self.fetchAllSpaces(accountDID: account.id, fetchPage: listSpacesTransport)
-                self.error = nil
-            } catch {
-                self.error = error.localizedDescription
-            }
-        } else {
-            await load(account: account)
+        let input = ComAtprotoSimplespaceDeleteSpace.Input(space: space.ref)
+        let execute = transport ?? { input in
+            try await account.client.com.atproto.simplespace.deleteSpace(input: input)
         }
+        let responseCode = try await execute(input)
+        guard (200...299).contains(responseCode) else {
+            throw ATProtoXRPCError(error: "DeleteSpaceFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
+        }
+
+        let listTransport = listSpacesTransport ?? { cursor in
+            try await account.client.com.atproto.space.listSpaces(
+                input: ComAtprotoSpaceListSpaces.Parameters(cursor: cursor)
+            )
+        }
+        await load(accountDID: account.id, fetchPage: listTransport)
     }
 }

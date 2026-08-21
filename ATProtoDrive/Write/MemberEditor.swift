@@ -8,9 +8,9 @@ import Petrel
 
 public struct MemberEditor: View {
     @Environment(\.dismiss) private var dismiss
-
     let space: SpaceItem
     let account: AccountStore.Account
+    let model: SpaceDetailModel
     var onMemberAdded: (() -> Void)?
 
     @State private var identifier: String = ""
@@ -20,10 +20,12 @@ public struct MemberEditor: View {
     public init(
         space: SpaceItem,
         account: AccountStore.Account,
+        model: SpaceDetailModel,
         onMemberAdded: (() -> Void)? = nil
     ) {
         self.space = space
         self.account = account
+        self.model = model
         self.onMemberAdded = onMemberAdded
     }
 
@@ -123,9 +125,9 @@ public struct MemberEditor: View {
         defer { isSubmitting = false }
 
         do {
-            try await SpaceDetailModel.performAddMember(
-                space: space,
+            try await model.addMember(
                 identifier: identifier,
+                space: space,
                 account: account
             )
             onMemberAdded?()

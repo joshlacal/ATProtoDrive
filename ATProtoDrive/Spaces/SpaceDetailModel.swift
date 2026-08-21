@@ -313,7 +313,12 @@ public final class SpaceDetailModel {
 
     // MARK: - Load Action
 
-    public func load(space: SpaceItem, account: AccountStore.Account) async {
+    public func load(
+        space: SpaceItem,
+        account: AccountStore.Account,
+        fetchRepos: (@Sendable () async throws -> [RepoEntry])? = nil,
+        listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?))? = nil
+    ) async {
         isLoading = true
         error = nil
         errorState = nil
@@ -321,30 +326,37 @@ public final class SpaceDetailModel {
         members = nil
         defer { isLoading = false }
 
-        do {
+        let reposFetchClosure: @Sendable () async throws -> [RepoEntry] = fetchRepos ?? {
             let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: account.client))
             let endpoints = try await resolver.resolve(authorityDID: space.authorityDID)
             let spaceHost = endpoints.spaceHost
+            return try await Self.fetchAllRepos { cursor in
+                guard let requestURL = Self.makeListReposURL(spaceHost: spaceHost, space: space.ref, cursor: cursor) else {
+                    throw SpaceHostResolutionError.invalidDID(space.authorityDID)
+                }
+                let (data, response) = try await account.credentials.get(url: requestURL, space: space.ref)
+                return (responseCode: response.statusCode, data: data)
+            }
+        }
 
+        let membersFetchClosure: @Sendable () async throws -> [String] = {
+            if let listMembersTransport = listMembersTransport {
+                return try await Self.fetchAllMembers(fetchPage: listMembersTransport)
+            } else {
+                return try await Self.fetchAllMembers { cursor in
+                    let (responseCode, output) = try await account.client.com.atproto.simplespace.listMembers(
+                        input: ComAtprotoSimplespaceListMembers.Parameters(space: space.ref, cursor: cursor)
+                    )
+                    return (responseCode, output)
+                }
+            }
+        }
+
+        do {
             let (fetchedRepos, fetchedMembers) = try await Self.loadSpaceDetails(
                 space: space,
-                fetchRepos: {
-                    try await Self.fetchAllRepos { cursor in
-                        guard let requestURL = Self.makeListReposURL(spaceHost: spaceHost, space: space.ref, cursor: cursor) else {
-                            throw SpaceHostResolutionError.invalidDID(space.authorityDID)
-                        }
-                        let (data, response) = try await account.credentials.get(url: requestURL, space: space.ref)
-                        return (responseCode: response.statusCode, data: data)
-                    }
-                },
-                fetchMembers: {
-                    try await Self.fetchAllMembers { cursor in
-                        let (responseCode, output) = try await account.client.com.atproto.simplespace.listMembers(
-                            input: ComAtprotoSimplespaceListMembers.Parameters(space: space.ref, cursor: cursor)
-                        )
-                        return (responseCode, output)
-                    }
-                }
+                fetchRepos: reposFetchClosure,
+                fetchMembers: membersFetchClosure
             )
 
             self.repos = fetchedRepos
@@ -489,6 +501,7 @@ public final class SpaceDetailModel {
         account: AccountStore.Account,
         resolveHandle: (@Sendable (_ handle: String) async throws -> String)? = nil,
         transport: (@Sendable (_ input: ComAtprotoSimplespaceAddMember.Input) async throws -> Int)? = nil,
+        fetchRepos: (@Sendable () async throws -> [RepoEntry])? = nil,
         listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?))? = nil
     ) async throws {
         try await Self.performAddMember(
@@ -498,16 +511,12 @@ public final class SpaceDetailModel {
             resolveHandle: resolveHandle,
             transport: transport
         )
-        if let listMembersTransport = listMembersTransport {
-            do {
-                self.members = try await Self.fetchAllMembers(fetchPage: listMembersTransport)
-                self.error = nil
-            } catch {
-                self.error = error.localizedDescription
-            }
-        } else {
-            await load(space: space, account: account)
-        }
+        await load(
+            space: space,
+            account: account,
+            fetchRepos: fetchRepos,
+            listMembersTransport: listMembersTransport
+        )
     }
 
     /// Performs `removeMember` with injected transport.
@@ -534,6 +543,7 @@ public final class SpaceDetailModel {
         space: SpaceItem,
         account: AccountStore.Account,
         transport: (@Sendable (_ input: ComAtprotoSimplespaceRemoveMember.Input) async throws -> Int)? = nil,
+        fetchRepos: (@Sendable () async throws -> [RepoEntry])? = nil,
         listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?))? = nil
     ) async throws {
         try await Self.performRemoveMember(
@@ -542,16 +552,12 @@ public final class SpaceDetailModel {
             account: account,
             transport: transport
         )
-        if let listMembersTransport = listMembersTransport {
-            do {
-                self.members = try await Self.fetchAllMembers(fetchPage: listMembersTransport)
-                self.error = nil
-            } catch {
-                self.error = error.localizedDescription
-            }
-        } else {
-            await load(space: space, account: account)
-        }
+        await load(
+            space: space,
+            account: account,
+            fetchRepos: fetchRepos,
+            listMembersTransport: listMembersTransport
+        )
     }
 
     /// Deletes the space.
