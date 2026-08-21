@@ -31,7 +31,7 @@ struct ATProtoDriveApp: App {
                 }
             } content: {
                 if let space = selectedSpace {
-                    let owningAccount = accountStore.account(for: space.accountDID)
+                    let owningAccount = AccountStore.resolveDetailAccount(for: space, in: accountStore.accounts)
                     SpaceDetailView(
                         space: space,
                         account: owningAccount

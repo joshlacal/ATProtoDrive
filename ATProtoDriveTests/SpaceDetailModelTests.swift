@@ -338,12 +338,19 @@ struct SpaceDetailModelTests {
         )
         #expect(SpaceDetailModel.isMemberListNotReadableError(notFound) == false)
 
-        let invalidRequest = ATProtoXRPCError(
+        let invalidRequest404 = ATProtoXRPCError(
+            error: "InvalidRequest",
+            message: "Could not find space record",
+            statusCode: 404
+        )
+        #expect(SpaceDetailModel.isMemberListNotReadableError(invalidRequest404) == false)
+
+        let invalidRequest400 = ATProtoXRPCError(
             error: "InvalidRequest",
             message: "Invalid space parameter",
             statusCode: 400
         )
-        #expect(SpaceDetailModel.isMemberListNotReadableError(invalidRequest) == false)
+        #expect(SpaceDetailModel.isMemberListNotReadableError(invalidRequest400) == false)
 
         let authError = ATProtoXRPCError(
             error: "AuthError",
@@ -441,7 +448,7 @@ struct SpaceDetailModelTests {
         #expect(result.members == nil)
     }
 
-    @Test("loadSpaceDetails suppresses unimplemented member list but throws genuine XRPC errors")
+    @Test("loadSpaceDetails suppresses unimplemented member list but throws genuine XRPC errors with raw description")
     func testLoadSpaceDetailsErrorBehavior() async throws {
         let accountDID = "did:plc:alice"
         let space = SpaceItem(
@@ -459,15 +466,50 @@ struct SpaceDetailModelTests {
         )
         #expect(suppressedResult.members == nil)
 
-        // Not suppressed: genuine NotFound throws
-        await #expect(throws: ATProtoXRPCError.self) {
+        // Not suppressed: genuine 404 InvalidRequest throws and preserves exact raw error text
+        do {
             _ = try await SpaceDetailModel.loadSpaceDetails(
                 space: space,
                 fetchRepos: { [] },
                 fetchMembers: {
-                    throw ATProtoXRPCError(error: "NotFound", message: "Record not found", statusCode: 404)
+                    throw ATProtoXRPCError(
+                        error: "InvalidRequest",
+                        message: "Could not find space record",
+                        statusCode: 404
+                    )
                 }
             )
+            Issue.record("Expected 404 InvalidRequest to throw but succeeded")
+        } catch let xrpc as ATProtoXRPCError {
+            #expect(xrpc.error == "InvalidRequest")
+            #expect(xrpc.statusCode == 404)
+            #expect(xrpc.message == "Could not find space record")
+            #expect(xrpc.errorDescription == "InvalidRequest: Could not find space record")
+        } catch {
+            Issue.record("Unexpected error type: \(error)")
+        }
+
+        // Not suppressed: genuine 404 NotFound throws and preserves exact raw error text
+        do {
+            _ = try await SpaceDetailModel.loadSpaceDetails(
+                space: space,
+                fetchRepos: { [] },
+                fetchMembers: {
+                    throw ATProtoXRPCError(
+                        error: "NotFound",
+                        message: "Record not found",
+                        statusCode: 404
+                    )
+                }
+            )
+            Issue.record("Expected 404 NotFound to throw but succeeded")
+        } catch let xrpc as ATProtoXRPCError {
+            #expect(xrpc.error == "NotFound")
+            #expect(xrpc.statusCode == 404)
+            #expect(xrpc.message == "Record not found")
+            #expect(xrpc.errorDescription == "NotFound: Record not found")
+        } catch {
+            Issue.record("Unexpected error type: \(error)")
         }
     }
 

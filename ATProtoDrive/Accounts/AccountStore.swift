@@ -91,6 +91,12 @@ public final class AccountStore {
     public func account(for did: String) -> Account? {
         accounts.first(where: { $0.id == did })
     }
+    /// Resolves the specific owning account for a given space item.
+    /// If the owning account is not present in `accounts`, returns `nil` (never falls back to another account).
+    nonisolated public static func resolveDetailAccount(for space: SpaceItem, in accounts: [Account]) -> Account? {
+        accounts.first(where: { $0.id == space.accountDID })
+    }
+
 
     public var activeAccount: Account? {
         if let activeAccountID, let account = accounts.first(where: { $0.id == activeAccountID }) {

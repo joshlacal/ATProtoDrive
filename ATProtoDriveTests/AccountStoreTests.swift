@@ -56,6 +56,44 @@ struct AccountStoreTests {
         #expect(store.account(for: "did:plc:bob")?.handle == "bob.bsky.social")
         #expect(store.account(for: "did:plc:nonexistent") == nil)
     }
+    @Test("resolveDetailAccount returns owning account when present, nil (never fallback) when absent")
+    func testResolveDetailAccount() async throws {
+        let dummyClient = await ATProtoClient(baseURL: URL(string: "https://bsky.social")!)
+        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: dummyClient))
+        let creds = SpaceCredentialManager(client: dummyClient, resolver: resolver)
+
+        let accountAlice = AccountStore.Account(id: "did:plc:alice", handle: "alice.bsky.social", client: dummyClient, credentials: creds, authMode: .cab)
+        let accountBob = AccountStore.Account(id: "did:plc:bob", handle: "bob.bsky.social", client: dummyClient, credentials: creds, authMode: .cab)
+        let accounts = [accountAlice, accountBob]
+
+        let spaceAlice = SpaceItem(
+            ref: try SpaceRef(uriString: "at://did:plc:alice/space/com.atproto.simplespace/my-space"),
+            accountDID: "did:plc:alice"
+        )
+        let spaceBob = SpaceItem(
+            ref: try SpaceRef(uriString: "at://did:plc:bob/space/com.atproto.simplespace/shared-space"),
+            accountDID: "did:plc:bob"
+        )
+        let spaceCharlie = SpaceItem(
+            ref: try SpaceRef(uriString: "at://did:plc:charlie/space/com.atproto.simplespace/orphaned-space"),
+            accountDID: "did:plc:charlie"
+        )
+
+        // Owning account present -> returns matching account
+        let resolvedAlice = AccountStore.resolveDetailAccount(for: spaceAlice, in: accounts)
+        #expect(resolvedAlice?.id == "did:plc:alice")
+
+        let resolvedBob = AccountStore.resolveDetailAccount(for: spaceBob, in: accounts)
+        #expect(resolvedBob?.id == "did:plc:bob")
+
+        // Owning account absent -> returns nil (NEVER falls back to first/active account)
+        let resolvedCharlie = AccountStore.resolveDetailAccount(for: spaceCharlie, in: accounts)
+        #expect(resolvedCharlie == nil)
+
+        let resolvedEmpty = AccountStore.resolveDetailAccount(for: spaceAlice, in: [])
+        #expect(resolvedEmpty == nil)
+    }
+
 
 
     @MainActor
