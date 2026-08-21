@@ -31,6 +31,9 @@ public struct RecordTableView: View {
         return model.rows.first(where: { $0.id == selectedRecordID })
     }
 
+    private var isOwnRepo: Bool {
+        repo.did == account?.id
+    }
     public var body: some View {
         HSplitView {
             // Main Records Table
@@ -109,7 +112,8 @@ public struct RecordTableView: View {
                 } label: {
                     Label("Edit Record", systemImage: "pencil")
                 }
-                .disabled(selectedRecord == nil || account == nil)
+                .disabled(selectedRecord == nil || account == nil || !isOwnRepo)
+                .help(isOwnRepo ? "Edit selected record" : "Cannot edit records authored by other accounts")
 
                 Button(role: .destructive) {
                     if let selectedRecord {
@@ -118,7 +122,8 @@ public struct RecordTableView: View {
                 } label: {
                     Label("Delete Record", systemImage: "trash")
                 }
-                .disabled(selectedRecord == nil || account == nil)
+                .disabled(selectedRecord == nil || account == nil || !isOwnRepo)
+                .help(isOwnRepo ? "Delete selected record" : "Cannot delete records authored by other accounts")
             }
         }
         .sheet(item: $editorMode) { mode in

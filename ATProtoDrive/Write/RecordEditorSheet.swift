@@ -37,12 +37,12 @@ public struct RecordEditorSheet: View {
     @State private var collection: String
     @State private var rkey: String
     @State private var jsonText: String
+    @State private var textSelection: TextSelection?
     @State private var isSubmitting: Bool = false
     @State private var isUploadingBlob: Bool = false
     @State private var showingFileImporter: Bool = false
     @State private var validationError: String?
     @State private var apiError: String?
-
     public init(
         space: SpaceItem,
         repo: RepoEntry,
@@ -147,7 +147,7 @@ public struct RecordEditorSheet: View {
                 }
 
                 // JSON Text Editor
-                TextEditor(text: $jsonText)
+                TextEditor(text: $jsonText, selection: $textSelection)
                     .font(.system(.body, design: .monospaced))
                     .scrollContentBackground(.hidden)
                     .padding(8)
@@ -265,8 +265,17 @@ public struct RecordEditorSheet: View {
                 account: account
             )
 
-            // Insert blob ref JSON into existing editor text
-            jsonText = RecordListModel.insertBlobRef(into: jsonText, blob: blob)
+            // Splice blob ref JSON into existing editor text at cursor/selection
+            var replacementRange: Range<String.Index>? = nil
+            if let indices = textSelection?.indices {
+                switch indices {
+                case .selection(let range):
+                    replacementRange = range
+                default:
+                    break
+                }
+            }
+            jsonText = RecordListModel.spliceBlobRef(into: jsonText, blob: blob, replacementRange: replacementRange)
         } catch {
             if let xrpc = error as? ATProtoXRPCError {
                 apiError = "Blob upload error: \(xrpc.errorDescription ?? xrpc.error)"
@@ -296,7 +305,7 @@ public struct RecordEditorSheet: View {
             case .create:
                 _ = try await RecordListModel.performCreateRecord(
                     space: space.ref,
-                    repoDID: repo.did,
+                    repoDID: account.id,
                     collection: collection,
                     rkey: rkey.isEmpty ? nil : rkey,
                     jsonText: jsonText,
@@ -305,7 +314,7 @@ public struct RecordEditorSheet: View {
             case .edit:
                 _ = try await RecordListModel.performPutRecord(
                     space: space.ref,
-                    repoDID: repo.did,
+                    repoDID: account.id,
                     collection: collection,
                     rkey: rkey,
                     jsonText: jsonText,

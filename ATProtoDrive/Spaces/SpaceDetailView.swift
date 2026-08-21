@@ -10,15 +10,25 @@ public struct SpaceDetailView: View {
     let space: SpaceItem
     let account: AccountStore.Account?
     @Binding var selectedRepo: RepoEntry?
+    var onDelete: (() -> Void)?
+
     @State private var model = SpaceDetailModel()
     @State private var showingAddMemberSheet = false
+    @State private var showingCreateRecordSheet = false
     @State private var memberToRemove: String?
     @State private var showingDeleteSpaceConfirmation = false
     @State private var actionError: String?
-    public init(space: SpaceItem, account: AccountStore.Account?, selectedRepo: Binding<RepoEntry?> = .constant(nil)) {
+
+    public init(
+        space: SpaceItem,
+        account: AccountStore.Account?,
+        selectedRepo: Binding<RepoEntry?> = .constant(nil),
+        onDelete: (() -> Void)? = nil
+    ) {
         self.space = space
         self.account = account
         self._selectedRepo = selectedRepo
+        self.onDelete = onDelete
     }
     public var body: some View {
         ScrollView {
@@ -69,6 +79,37 @@ public struct SpaceDetailView: View {
                 await model.load(space: space, account: account)
             }
         }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if account != nil {
+                    Button {
+                        showingCreateRecordSheet = true
+                    } label: {
+                        Label("New Record", systemImage: "plus")
+                    }
+                    .help("Create Record in Space")
+                }
+            }
+        }
+        .sheet(isPresented: $showingCreateRecordSheet) {
+            if let account {
+                RecordEditorSheet(
+                    space: space,
+                    repo: RepoEntry(did: account.id, rev: "", hash: ""),
+                    account: account,
+                    mode: .create()
+                ) {
+                    Task {
+                        await model.load(space: space, account: account)
+                        if let myRepo = model.repos.first(where: { $0.did == account.id }) {
+                            selectedRepo = myRepo
+                        } else {
+                            selectedRepo = RepoEntry(did: account.id, rev: "", hash: "")
+                        }
+                    }
+                }
+            }
+        }
         .sheet(isPresented: $showingAddMemberSheet) {
             if let account {
                 MemberEditor(space: space, account: account) {
@@ -110,7 +151,8 @@ public struct SpaceDetailView: View {
                     Task {
                         do {
                             try await model.deleteSpace(space: space, account: account)
-                            await model.load(space: space, account: account)
+                            selectedRepo = nil
+                            onDelete?()
                         } catch {
                             actionError = error.localizedDescription
                         }
@@ -242,10 +284,21 @@ public struct SpaceDetailView: View {
             }
 
             if model.repos.isEmpty {
-                Text("No repos have written to this space yet.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 8)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("No repos have written to this space yet.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    if account != nil {
+                        Button {
+                            showingCreateRecordSheet = true
+                        } label: {
+                            Label("Create First Record", systemImage: "plus.circle")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+                .padding(.vertical, 8)
             } else {
                 VStack(spacing: 8) {
                     ForEach(model.repos) { repo in

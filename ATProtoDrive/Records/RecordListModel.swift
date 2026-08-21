@@ -347,40 +347,29 @@ public final class RecordListModel {
         """
     }
 
-    /// Inserts a blob reference JSON into existing JSON text.
-    nonisolated public static func insertBlobRef(into jsonText: String, blob: Blob) -> String {
-        let trimmed = jsonText.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Splices a formatted blob descriptor JSON into the JSON text at the given range (cursor / selection)
+    /// without reparsing or modifying the rest of the document structure.
+    nonisolated public static func spliceBlobRef(
+        into jsonText: String,
+        blob: Blob,
+        replacementRange: Range<String.Index>? = nil
+    ) -> String {
         let blobJSON = formatBlobRefJSON(blob: blob)
-
+        if let range = replacementRange {
+            var text = jsonText
+            text.replaceSubrange(range, with: blobJSON)
+            return text
+        }
+        let trimmed = jsonText.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty || trimmed == "{}" {
-            return """
-            {
-              "blob": \(blobJSON.replacingOccurrences(of: "\n", with: "\n  "))
-            }
-            """
+            return "{\n  \"blob\": \(blobJSON.replacingOccurrences(of: "\n", with: "\n  "))\n}"
         }
+        return jsonText + "\n" + blobJSON
+    }
 
-        guard let data = trimmed.data(using: .utf8),
-              var jsonObject = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let blobData = blobJSON.data(using: .utf8),
-              let blobObject = try? JSONSerialization.jsonObject(with: blobData) else {
-            // Fallback: append or replace
-            return jsonText + "\n\n// Inserted Blob:\n" + blobJSON
-        }
-
-        // If "blob" already exists, use "blob_<timestamp>" or keep key
-        var key = "blob"
-        if jsonObject[key] != nil {
-            key = "blob_\(Int(Date().timeIntervalSince1970))"
-        }
-        jsonObject[key] = blobObject
-
-        if let updatedData = try? JSONSerialization.data(withJSONObject: jsonObject, options: [.prettyPrinted, .sortedKeys]),
-           let updatedString = String(data: updatedData, encoding: .utf8) {
-            return updatedString
-        }
-
-        return jsonText
+    /// Convenience helper for inserting blob ref into JSON text.
+    nonisolated public static func insertBlobRef(into jsonText: String, blob: Blob) -> String {
+        spliceBlobRef(into: jsonText, blob: blob, replacementRange: nil)
     }
 
 

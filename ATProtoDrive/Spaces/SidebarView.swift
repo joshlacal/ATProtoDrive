@@ -113,12 +113,6 @@ struct AccountSpacesSection: View {
                 }
             }
             .contextMenu {
-                Button {
-                    showingCreateSpace = true
-                } label: {
-                    Label("New Space…", systemImage: "plus")
-                }
-                Divider()
                 Button(role: .destructive) {
                     Task {
                         await accountStore.remove(account.id)

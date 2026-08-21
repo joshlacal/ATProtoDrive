@@ -35,7 +35,11 @@ struct ATProtoDriveApp: App {
                     SpaceDetailView(
                         space: space,
                         account: owningAccount,
-                        selectedRepo: $selectedRepo
+                        selectedRepo: $selectedRepo,
+                        onDelete: {
+                            selectedSpace = nil
+                            selectedRepo = nil
+                        }
                     )
                     .id(space.id)
                 } else {
