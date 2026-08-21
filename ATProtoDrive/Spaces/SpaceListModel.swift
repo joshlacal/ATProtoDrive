@@ -123,20 +123,34 @@ public final class SpaceListModel {
         error = nil
         defer { isLoading = false }
 
+        let customURIs = Self.loadCustomSpaceURIs(for: accountDID)
+        let persistedItems = customURIs.compactMap { uri -> SpaceItem? in
+            guard let ref = try? SpaceRef(uriString: uri) else { return nil }
+            return SpaceItem(ref: ref, accountDID: accountDID)
+        }
+
         do {
             let fetchedSpaces = try await Self.fetchAllSpaces(accountDID: accountDID, fetchPage: fetchPage)
-            let customURIs = Self.loadCustomSpaceURIs(for: accountDID)
             var merged = fetchedSpaces
             var existingURIs = Set(fetchedSpaces.map { $0.ref.uriString() })
-            for uri in customURIs {
-                if let ref = try? SpaceRef(uriString: uri), !existingURIs.contains(ref.uriString()) {
-                    merged.append(SpaceItem(ref: ref, accountDID: accountDID))
-                    existingURIs.insert(ref.uriString())
+            for item in persistedItems {
+                if !existingURIs.contains(item.ref.uriString()) {
+                    merged.append(item)
+                    existingURIs.insert(item.ref.uriString())
                 }
             }
             self.spaces = merged
             self.error = nil
         } catch {
+            var merged = self.spaces
+            var existingURIs = Set(merged.map { $0.ref.uriString() })
+            for item in persistedItems {
+                if !existingURIs.contains(item.ref.uriString()) {
+                    merged.append(item)
+                    existingURIs.insert(item.ref.uriString())
+                }
+            }
+            self.spaces = merged.isEmpty ? persistedItems : merged
             self.error = error.localizedDescription
         }
     }

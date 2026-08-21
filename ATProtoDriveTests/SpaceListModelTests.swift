@@ -293,6 +293,89 @@ struct SpaceListModelTests {
         #expect(model.spaces.count == 1)
         #expect(model.spaces.first?.ref.uriString() == sharedURI)
     }
+
+    @MainActor
+    @Test("load restores persisted custom space references even when listSpaces fails with network/XRPC error")
+    func testOpenSpacePersistedRefsRestoredOnFetchFailure() async throws {
+        let accountDID = "did:plc:eve_fetch_error"
+        let uri1 = "at://did:plc:auth1/space/space.swan.drive/s1"
+        let uri2 = "at://did:plc:auth2/space/space.swan.drive/s2"
+
+        SpaceListModel.saveCustomSpaceURIs([uri1, uri2], for: accountDID)
+        defer {
+            UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: accountDID))
+        }
+
+        let model = SpaceListModel()
+        await model.load(accountDID: accountDID) { _ in
+            // Network / XRPC failure during listSpaces
+            throw ATProtoXRPCError(error: "ServerUnavailable", message: "503 Service Unavailable", statusCode: 503)
+        }
+
+        // Persisted local custom spaces are restored independently
+        #expect(model.spaces.count == 2)
+        #expect(model.spaces.map { $0.ref.uriString() }.contains(uri1))
+        #expect(model.spaces.map { $0.ref.uriString() }.contains(uri2))
+        #expect(model.spaces.allSatisfy { $0.accountDID == accountDID })
+        // Error is preserved alongside the restored items
+        #expect(model.error != nil)
+    }
+
+    // MARK: - WindowSelectionModel Tests
+
+    @MainActor
+    @Test("WindowSelectionModel manages selection state and resets repo on space switch")
+    func testWindowSelectionModelBehavior() throws {
+        let space1 = try SpaceItem(uriString: "at://did:plc:auth1/space/space.swan.drive/s1", accountDID: "did:plc:user1")
+        let space2 = try SpaceItem(uriString: "at://did:plc:auth2/space/space.swan.drive/s2", accountDID: "did:plc:user1")
+        let repo = RepoEntry(did: "did:plc:auth1", rev: "rev1", hash: "hash1")
+
+        let model = WindowSelectionModel()
+        #expect(model.selectedSpace == nil)
+        #expect(model.selectedRepo == nil)
+        #expect(model.showingAddAccount == false)
+
+        // Select space and repo
+        model.selectSpace(space1)
+        #expect(model.selectedSpace == space1)
+        model.selectRepo(repo)
+        #expect(model.selectedRepo == repo)
+
+        // Switching space resets selectedRepo
+        model.selectSpace(space2)
+        #expect(model.selectedSpace == space2)
+        #expect(model.selectedRepo == nil)
+
+        // Clear selection resets both
+        model.selectRepo(repo)
+        model.clearSelection()
+        #expect(model.selectedSpace == nil)
+        #expect(model.selectedRepo == nil)
+    }
+
+    @MainActor
+    @Test("WindowSelectionModel instances are isolated per window without crosstalk")
+    func testWindowSelectionModelIsolation() throws {
+        let spaceA = try SpaceItem(uriString: "at://did:plc:authA/space/space.swan.drive/sA", accountDID: "did:plc:userA")
+        let spaceB = try SpaceItem(uriString: "at://did:plc:authB/space/space.swan.drive/sB", accountDID: "did:plc:userB")
+        let repoA = RepoEntry(did: "did:plc:authA", rev: "revA", hash: "hashA")
+        let repoB = RepoEntry(did: "did:plc:authB", rev: "revB", hash: "hashB")
+
+        // Window 1 selection
+        let window1 = WindowSelectionModel(selectedSpace: spaceA, selectedRepo: repoA)
+        // Window 2 selection
+        let window2 = WindowSelectionModel(selectedSpace: spaceB, selectedRepo: repoB)
+
+        #expect(window1.selectedSpace?.id != window2.selectedSpace?.id)
+        #expect(window1.selectedRepo?.did != window2.selectedRepo?.did)
+
+        // Mutating Window 2 does not affect Window 1
+        window2.clearSelection()
+        #expect(window1.selectedSpace == spaceA)
+        #expect(window1.selectedRepo == repoA)
+        #expect(window2.selectedSpace == nil)
+        #expect(window2.selectedRepo == nil)
+    }
 }
 
 actor OpenSpaceTestTracker {
