@@ -12,7 +12,7 @@ struct ATProtoDriveApp: App {
     @State private var accountStore = AccountStore()
     @State private var showingAddAccount = false
     @State private var selectedSpace: SpaceItem?
-
+    @State private var selectedRepo: RepoEntry?
     var body: some Scene {
         WindowGroup {
             NavigationSplitView {
@@ -34,7 +34,8 @@ struct ATProtoDriveApp: App {
                     let owningAccount = AccountStore.resolveDetailAccount(for: space, in: accountStore.accounts)
                     SpaceDetailView(
                         space: space,
-                        account: owningAccount
+                        account: owningAccount,
+                        selectedRepo: $selectedRepo
                     )
                     .id(space.id)
                 } else {
@@ -45,7 +46,27 @@ struct ATProtoDriveApp: App {
                     )
                 }
             } detail: {
-                Text("Records")
+                if let space = selectedSpace, let repo = selectedRepo {
+                    let owningAccount = AccountStore.resolveDetailAccount(for: space, in: accountStore.accounts)
+                    RecordTableView(
+                        space: space,
+                        repo: repo,
+                        account: owningAccount
+                    )
+                    .id("\(space.id)-\(repo.did)")
+                } else if selectedSpace != nil {
+                    ContentUnavailableView(
+                        "No Repository Selected",
+                        systemImage: "tablecells",
+                        description: Text("Select a writer repo from the space details to browse its records.")
+                    )
+                } else {
+                    ContentUnavailableView(
+                        "No Space Selected",
+                        systemImage: "square.stack.3d.up",
+                        description: Text("Select a space from the sidebar.")
+                    )
+                }
             }
             .environment(accountStore)
             .sheet(isPresented: $showingAddAccount) {

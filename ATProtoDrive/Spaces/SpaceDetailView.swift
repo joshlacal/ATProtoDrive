@@ -9,13 +9,14 @@ import Petrel
 public struct SpaceDetailView: View {
     let space: SpaceItem
     let account: AccountStore.Account?
+    @Binding var selectedRepo: RepoEntry?
     @State private var model = SpaceDetailModel()
 
-    public init(space: SpaceItem, account: AccountStore.Account?) {
+    public init(space: SpaceItem, account: AccountStore.Account?, selectedRepo: Binding<RepoEntry?> = .constant(nil)) {
         self.space = space
         self.account = account
+        self._selectedRepo = selectedRepo
     }
-
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -172,26 +173,39 @@ public struct SpaceDetailView: View {
             } else {
                 VStack(spacing: 8) {
                     ForEach(model.repos) { repo in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(repo.did)
-                                .font(.system(.body, design: .monospaced))
+                        Button {
+                            selectedRepo = repo
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(repo.did)
+                                        .font(.system(.body, design: .monospaced))
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    if selectedRepo?.did == repo.did {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundStyle(Color.accentColor)
+                                    }
+                                }
 
-                            HStack(spacing: 12) {
-                                Label(repo.rev, systemImage: "clock.arrow.circlepath")
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 12) {
+                                    Label(repo.rev, systemImage: "clock.arrow.circlepath")
+                                        .font(.system(.caption, design: .monospaced))
+                                        .foregroundStyle(.secondary)
 
-                                Label(repo.hash, systemImage: "number")
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
+                                    Label(repo.hash, systemImage: "number")
+                                        .font(.system(.caption, design: .monospaced))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                            .background(selectedRepo?.did == repo.did ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
-                        .background(Color.secondary.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .buttonStyle(.plain)
                     }
                 }
             }

@@ -17,6 +17,11 @@
 		A10000000000000000000047 /* SpaceDetailModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000029 /* SpaceDetailModel.swift */; };
 		A10000000000000000000048 /* SpaceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* SpaceDetailView.swift */; };
 		A10000000000000000000049 /* SpaceDetailModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002B /* SpaceDetailModelTests.swift */; };
+		A1000000000000000000004A /* RecordListModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002C /* RecordListModel.swift */; };
+		A1000000000000000000004B /* RecordTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002D /* RecordTableView.swift */; };
+		A1000000000000000000004C /* RecordInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002E /* RecordInspectorView.swift */; };
+		A1000000000000000000004D /* RecordListModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002F /* RecordListModelTests.swift */; };
+		A1000000000000000000004E /* RecordListModelPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003E /* RecordListModelPipelineTests.swift */; };
 		A10000000000000000000070 /* Petrel in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000060 /* Petrel */; };
 		A10000000000000000000071 /* SwanSpaces in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000061 /* SwanSpaces */; };
 /* End PBXBuildFile section */
@@ -46,6 +51,11 @@
 		A10000000000000000000029 /* SpaceDetailModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceDetailModel.swift; sourceTree = "<group>"; };
 		A1000000000000000000002A /* SpaceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceDetailView.swift; sourceTree = "<group>"; };
 		A1000000000000000000002B /* SpaceDetailModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceDetailModelTests.swift; sourceTree = "<group>"; };
+		A1000000000000000000002C /* RecordListModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordListModel.swift; sourceTree = "<group>"; };
+		A1000000000000000000002D /* RecordTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordTableView.swift; sourceTree = "<group>"; };
+		A1000000000000000000002E /* RecordInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordInspectorView.swift; sourceTree = "<group>"; };
+		A1000000000000000000002F /* RecordListModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordListModelTests.swift; sourceTree = "<group>"; };
+		A1000000000000000000003E /* RecordListModelPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordListModelPipelineTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -83,11 +93,22 @@
 			children = (
 				A10000000000000000000006 /* Accounts */,
 				A10000000000000000000008 /* Spaces */,
+				A10000000000000000000009 /* Records */,
 				A10000000000000000000020 /* ATProtoDriveApp.swift */,
 				A10000000000000000000021 /* Info.plist */,
 				A10000000000000000000022 /* ATProtoDrive.entitlements */,
 			);
 			path = ATProtoDrive;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000009 /* Records */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000002C /* RecordListModel.swift */,
+				A1000000000000000000002D /* RecordTableView.swift */,
+				A1000000000000000000002E /* RecordInspectorView.swift */,
+			);
+			path = Records;
 			sourceTree = "<group>";
 		};
 		A10000000000000000000006 /* Accounts */ = {
@@ -116,6 +137,8 @@
 				A10000000000000000000025 /* AccountStoreTests.swift */,
 				A10000000000000000000028 /* SpaceListModelTests.swift */,
 				A1000000000000000000002B /* SpaceDetailModelTests.swift */,
+				A1000000000000000000002F /* RecordListModelTests.swift */,
+				A1000000000000000000003E /* RecordListModelPipelineTests.swift */,
 			);
 			path = ATProtoDriveTests;
 			sourceTree = "<group>";
@@ -247,6 +270,9 @@
 				A10000000000000000000045 /* SidebarView.swift in Sources */,
 				A10000000000000000000047 /* SpaceDetailModel.swift in Sources */,
 				A10000000000000000000048 /* SpaceDetailView.swift in Sources */,
+				A1000000000000000000004A /* RecordListModel.swift in Sources */,
+				A1000000000000000000004B /* RecordTableView.swift in Sources */,
+				A1000000000000000000004C /* RecordInspectorView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -257,6 +283,8 @@
 				A10000000000000000000043 /* AccountStoreTests.swift in Sources */,
 				A10000000000000000000046 /* SpaceListModelTests.swift in Sources */,
 				A10000000000000000000049 /* SpaceDetailModelTests.swift in Sources */,
+				A1000000000000000000004D /* RecordListModelTests.swift in Sources */,
+				A1000000000000000000004E /* RecordListModelPipelineTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
