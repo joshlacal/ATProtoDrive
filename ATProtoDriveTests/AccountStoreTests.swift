@@ -21,12 +21,24 @@ struct AccountStoreTests {
     }
 
     @Test("OAuth constants match protocol requirements")
-    func testOAuthConstants() {
+    func testOAuthConstants() throws {
         #expect(AccountStore.cabClientId == "https://cab.swan.place/oauth-client-metadata.json")
         #expect(AccountStore.publicClientId == "https://cab.swan.place/public-client-metadata.json")
         #expect(AccountStore.cabBackendURL == URL(string: "https://cab.swan.place")!)
-        #expect(AccountStore.redirectUri == "blue.catbird.atprotodrive:/callback")
+        #expect(AccountStore.redirectUri == "place.swan.cab:/callback")
         #expect(AccountStore.scope == "atproto space:*?authority=*&collection=*&manage=create&manage=update&manage=delete")
+
+        // Private-use URI scheme redirect URI for discoverable client metadata must be the FQDN reversed
+        let cabHost = try #require(URL(string: AccountStore.cabClientId)?.host)
+        let publicHost = try #require(URL(string: AccountStore.publicClientId)?.host)
+        let expectedScheme = cabHost.split(separator: ".").reversed().joined(separator: ".")
+        let publicExpectedScheme = publicHost.split(separator: ".").reversed().joined(separator: ".")
+
+        let redirectURL = try #require(URL(string: AccountStore.redirectUri))
+        let redirectScheme = try #require(redirectURL.scheme)
+
+        #expect(redirectScheme == expectedScheme)
+        #expect(redirectScheme == publicExpectedScheme)
     }
 
     @MainActor
@@ -125,7 +137,7 @@ struct AccountStoreTests {
         #expect(store.hasPendingLogin(for: legitimateState))
 
         // Act & Assert 1: Missing state parameter in callback
-        let noStateURL = URL(string: "blue.catbird.atprotodrive:/callback?code=testcode")!
+        let noStateURL = URL(string: "place.swan.cab:/callback?code=testcode")!
         await #expect(throws: Error.self) {
             try await store.handleCallback(noStateURL)
         }
@@ -133,14 +145,28 @@ struct AccountStoreTests {
         #expect(store.pendingLoginCount == 1)
 
         // Act & Assert 2: Unknown / mismatched state parameter in callback
-        let unknownStateURL = URL(string: "blue.catbird.atprotodrive:/callback?code=testcode&state=unknown_unrelated_state")!
+        let unknownStateURL = URL(string: "place.swan.cab:/callback?code=testcode&state=unknown_unrelated_state")!
         await #expect(throws: Error.self) {
             try await store.handleCallback(unknownStateURL)
         }
+
         #expect(store.hasPendingLogin(for: legitimateState))
         #expect(store.pendingLoginCount == 1)
 
         #expect(store.accounts.isEmpty)
+    }
+
+    @MainActor
+    @Test("beginLogin with josh.spaces-alpha.bsky.network mints consent URL successfully")
+    func testLiveLoginSpacesAlpha() async throws {
+        let store = AccountStore()
+        let authURL = try await store.beginLogin(handle: "josh.spaces-alpha.bsky.network")
+        print("MINTED_AUTH_URL: \(authURL.absoluteString)")
+        #expect(authURL.host?.contains("bsky") == true || authURL.host?.contains("spaces-alpha") == true || authURL.host?.contains("swan") == true)
+        let components = URLComponents(url: authURL, resolvingAgainstBaseURL: false)
+        let clientIdItem = components?.queryItems?.first(where: { $0.name == "client_id" })
+        print("MINTED_CLIENT_ID: \(String(describing: clientIdItem?.value))")
+        #expect(clientIdItem?.value == AccountStore.publicClientId || clientIdItem?.value == AccountStore.cabClientId)
     }
 
     @MainActor

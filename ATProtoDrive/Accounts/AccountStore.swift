@@ -80,7 +80,7 @@ public final class AccountStore {
     nonisolated public static let cabClientId = "https://cab.swan.place/oauth-client-metadata.json"
     nonisolated public static let publicClientId = "https://cab.swan.place/public-client-metadata.json"
     nonisolated public static let cabBackendURL = URL(string: "https://cab.swan.place")!
-    nonisolated public static let redirectUri = "blue.catbird.atprotodrive:/callback"
+    nonisolated public static let redirectUri = "place.swan.cab:/callback"
     nonisolated public static let scope = "atproto space:*?authority=*&collection=*&manage=create&manage=update&manage=delete"
 
     private static let userDefaultsKey = "blue.catbird.atprotodrive.accounts"

@@ -37,7 +37,7 @@ This checklist provides a manual, step-by-step verification script for human exe
 7. Inspect the browser consent UI:
    - **Assertion:** Consent page displays requested scope `atproto space:*?authority=*&collection=*&manage=create&manage=update&manage=delete` (wildcard authority warning).
 8. Authorize the application.
-9. Browser redirects to `blue.catbird.atprotodrive:/callback?...`.
+9. Browser redirects to `place.swan.cab:/callback?...`.
 10. Observe ATProtoDrive dismisses the sheet and displays Account A under the "Spaces" sidebar section.
 - **Result:** Pass [ ] / Fail [ ]
 
@@ -50,7 +50,7 @@ This checklist provides a manual, step-by-step verification script for human exe
 5. Inspect the browser consent UI:
    - **Assertion:** Consent page displays requested scope `atproto space:*?authority=*&collection=*&manage=create&manage=update&manage=delete`.
 6. Complete authorization in browser.
-7. Browser redirects to `blue.catbird.atprotodrive:/callback?...`.
+7. Browser redirects to `place.swan.cab:/callback?...`.
 8. Observe ATProtoDrive matches OAuth state and displays Account B in the sidebar.
 - **Result:** Pass [ ] / Fail [ ]
 
