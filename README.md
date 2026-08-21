@@ -2,14 +2,14 @@
 
 ATProtoDrive is a native macOS file-browser-style explorer for ATProto permissioned data spaces (`com.atproto.space.*` and `com.atproto.simplespace.*`), announced in the [ATProto Spaces Alpha](https://atproto.com/blog/atproto-spaces-alpha).
 
-Built with SwiftUI on top of [Petrel](https://github.com/bluesky-social/Petrel) (Swift ATProto SDK) and [SwanSpaces](https://github.com/moreSwift/swan) (Swift PDS & Space CAR verifier), ATProtoDrive allows multi-account browsing, space management, record CRUD, blob inspection, and repository cryptographic verification.
+Built with SwiftUI on top of [Petrel](https://github.com/joshlacal/Petrel) (Swift ATProto SDK) and SwanSpaces (Swift PDS & Space CAR verifier), ATProtoDrive allows multi-account browsing, space management, record CRUD, blob inspection, and repository cryptographic verification.
 
 ---
 
 ## Features
 
 - **Multi-Account Sidebar:** Sign in to multiple ATProto accounts simultaneously (e.g. `swan.place` and Bluesky alpha PDS) with side-by-side space browsing.
-- **Space Management:** Create spaces with member-list or public write policies; inspect space authorities, types, and keys (`at://authority/space/type/skey`).
+- **Space Management:** Create spaces with member-list or public write policies; open spaces by URI reference (`at://authority/space/type/skey`).
 - **Member Management:** Add and remove authorized writer members on owned spaces.
 - **Record Table & Inspector:** Browse writer repos and records; inspect canonical `at://` URIs, CIDs, pretty-printed JSON records, and blob attachments.
 - **Record CRUD & Blob Upload:** Create, edit, and delete space records; upload blobs directly into records with automatic JSON reference insertion.
@@ -70,14 +70,17 @@ The Bluesky permissioned data spaces alpha is under active development. The host
 
 If upstream lexicons change on the `permissioned-data` branch of `bluesky-social/atproto`:
 ```bash
-# 1. Vendor updated space lexicons into Petrel
-cd Petrel
-./Scripts/vendor-space-lexicons.sh <GIT_SHA_OR_BRANCH>
+# 1. Resolve the latest commit SHA from the permissioned-data branch of bluesky-social/atproto
+# (Vendoring requires an explicit commit SHA to maintain reproducibility; never pass a branch name)
 
-# 2. Regenerate Swift lexicon types
+# 2. Vendor updated space lexicons into Petrel using the resolved commit SHA
+cd Petrel
+./Scripts/vendor-space-lexicons.sh <GIT_COMMIT_SHA>
+
+# 3. Regenerate Swift lexicon types
 ./Scripts/regenerate-generated.sh
 
-# 3. Verify ATProtoDrive build & test suite
+# 4. Verify ATProtoDrive build & test suite
 cd ../ATProtoDrive
 xcodebuild test -project ATProtoDrive.xcodeproj -scheme ATProtoDrive -destination 'platform=macOS' -only-testing:ATProtoDriveTests
 ```
@@ -89,4 +92,4 @@ xcodebuild test -project ATProtoDrive.xcodeproj -scheme ATProtoDrive -destinatio
 - **Architecture & Design Specification:** `docs/superpowers/specs/2026-08-20-atprotodrive-design.md`
 - **Implementation Plan:** `docs/superpowers/plans/2026-08-20-atprotodrive.md`
 - **Manual E2E Smoke Checklist:** `ATProtoDrive/Scripts/e2e-smoke.md`
-- **ATProto Proposal 0016:** [Permissioned Data Spaces](https://github.com/bluesky-social/proposals/blob/main/proposals/0016-permissioned-data.md)
+- **ATProto Proposal 0016:** [Permissioned Data Spaces](https://github.com/bluesky-social/proposals/tree/main/proposals/0016-permissioned-data)

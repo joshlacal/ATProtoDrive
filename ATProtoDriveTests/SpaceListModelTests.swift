@@ -167,4 +167,144 @@ struct SpaceListModelTests {
             }
         }
     }
+
+    // MARK: - Open Space by Reference Tests
+
+    @MainActor
+    @Test("openSpace validates and adds valid space ref for the right account")
+    func testOpenSpaceValidRefAppearsForRightAccount() async throws {
+        let accountDID = "did:plc:bob_account"
+        UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: accountDID))
+        defer {
+            UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: accountDID))
+        }
+
+        let model = SpaceListModel()
+        let validURI = "at://did:plc:authority123/space/space.swan.drive/shared-s1"
+        let tracker = OpenSpaceTestTracker()
+
+        let item = try await model.openSpace(
+            uriString: validURI,
+            accountDID: accountDID,
+            credentialTransport: { ref in
+                await tracker.record(ref: ref)
+            }
+        )
+
+        let recordedRef = await tracker.recordedRef
+        #expect(recordedRef?.uriString() == validURI)
+        #expect(item.ref.uriString() == validURI)
+        #expect(item.accountDID == accountDID)
+        #expect(item.authorityDID == "did:plc:authority123")
+        #expect(item.isOwnAuthority == false)
+        #expect(model.spaces.contains(where: { $0.id == item.id }))
+
+        let persisted = SpaceListModel.loadCustomSpaceURIs(for: accountDID)
+        #expect(persisted.contains(validURI))
+    }
+
+    @MainActor
+    @Test("openSpace rejects malformed ref without invoking any network transport")
+    func testOpenSpaceMalformedRefRejectedWithoutNetworkCall() async {
+        let accountDID = "did:plc:alice_reject"
+        let model = SpaceListModel()
+        let credTracker = OpenSpaceTestTracker()
+        let listTracker = OpenSpaceTestTracker()
+
+        // 1. Empty string
+        await #expect(throws: OpenSpaceError.emptyURI) {
+            try await model.openSpace(
+                uriString: "   ",
+                accountDID: accountDID,
+                credentialTransport: { _ in await credTracker.increment() },
+                listSpacesTransport: { _ in
+                    await listTracker.increment()
+                    return (200, nil)
+                }
+            )
+        }
+
+        // 2. Malformed URI
+        await #expect(throws: OpenSpaceError.self) {
+            try await model.openSpace(
+                uriString: "not-a-valid-at-uri",
+                accountDID: accountDID,
+                credentialTransport: { _ in await credTracker.increment() },
+                listSpacesTransport: { _ in
+                    await listTracker.increment()
+                    return (200, nil)
+                }
+            )
+        }
+
+        let credCount = await credTracker.callCount
+        let listCount = await listTracker.callCount
+        #expect(credCount == 0)
+        #expect(listCount == 0)
+    }
+
+    @MainActor
+    @Test("load restores persisted custom space references across launches")
+    func testOpenSpacePersistedRefsRestoredOnLoad() async throws {
+        let accountDID = "did:plc:carol_restore"
+        let uri1 = "at://did:plc:auth1/space/space.swan.drive/s1"
+        let uri2 = "at://did:plc:auth2/space/space.swan.drive/s2"
+
+        SpaceListModel.saveCustomSpaceURIs([uri1, uri2], for: accountDID)
+        defer {
+            UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: accountDID))
+        }
+
+        let model = SpaceListModel()
+        await model.load(accountDID: accountDID) { _ in
+            // Server reports 0 spaces in listSpaces
+            let emptyOutput = ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: [])
+            return (200, emptyOutput)
+        }
+
+        #expect(model.spaces.count == 2)
+        #expect(model.spaces.map { $0.ref.uriString() }.contains(uri1))
+        #expect(model.spaces.map { $0.ref.uriString() }.contains(uri2))
+        #expect(model.spaces.allSatisfy { $0.accountDID == accountDID })
+    }
+
+    @MainActor
+    @Test("load does not duplicate custom space ref when listSpaces later reports same ref")
+    func testOpenSpaceNoDuplicateWhenListSpacesLaterReportsSameRef() async throws {
+        let accountDID = "did:plc:dave_dedup"
+        let sharedURI = "at://did:plc:auth1/space/space.swan.drive/shared"
+        let sharedRef = try SpaceRef(uriString: sharedURI)
+
+        SpaceListModel.saveCustomSpaceURIs([sharedURI], for: accountDID)
+        defer {
+            UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: accountDID))
+        }
+
+        let model = SpaceListModel()
+        await model.load(accountDID: accountDID) { _ in
+            // Server now reports the shared space in listSpaces
+            let output = ComAtprotoSpaceListSpaces.Output(
+                cursor: nil,
+                spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: sharedRef)]
+            )
+            return (200, output)
+        }
+
+        #expect(model.spaces.count == 1)
+        #expect(model.spaces.first?.ref.uriString() == sharedURI)
+    }
+}
+
+actor OpenSpaceTestTracker {
+    private(set) var callCount: Int = 0
+    private(set) var recordedRef: SpaceRef? = nil
+
+    func record(ref: SpaceRef) {
+        callCount += 1
+        recordedRef = ref
+    }
+
+    func increment() {
+        callCount += 1
+    }
 }

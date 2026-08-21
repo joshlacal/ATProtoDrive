@@ -29,6 +29,23 @@ public struct SpaceItem: Identifiable, Hashable, Sendable {
         self.init(ref: ref, accountDID: accountDID)
     }
 }
+public enum OpenSpaceError: LocalizedError, Equatable, Sendable {
+    case emptyURI
+    case invalidURI(String)
+    case credentialFailed(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .emptyURI:
+            return "Space URI cannot be empty."
+        case .invalidURI(let msg):
+            return "Invalid space URI: \(msg)"
+        case .credentialFailed(let msg):
+            return "Failed to obtain credential for space: \(msg)"
+        }
+    }
+}
+
 
 @MainActor
 @Observable
@@ -41,6 +58,20 @@ public final class SpaceListModel {
         self.spaces = spaces
         self.error = error
     }
+    // MARK: - Custom Space Persistence Helpers
+
+    nonisolated public static func customSpacesKey(for accountDID: String) -> String {
+        "blue.catbird.atprotodrive.customSpaces.\(accountDID)"
+    }
+
+    nonisolated public static func loadCustomSpaceURIs(for accountDID: String, userDefaults: UserDefaults = .standard) -> [String] {
+        userDefaults.stringArray(forKey: customSpacesKey(for: accountDID)) ?? []
+    }
+
+    nonisolated public static func saveCustomSpaceURIs(_ uris: [String], for accountDID: String, userDefaults: UserDefaults = .standard) {
+        userDefaults.set(uris, forKey: customSpacesKey(for: accountDID))
+    }
+
 
     /// Pure pagination helper: repeatedly invokes `fetchPage` following `output.cursor` until nil,
     /// accumulating all `SpaceItem` instances across pages and protecting against duplicate-cursor loops.
@@ -94,7 +125,16 @@ public final class SpaceListModel {
 
         do {
             let fetchedSpaces = try await Self.fetchAllSpaces(accountDID: accountDID, fetchPage: fetchPage)
-            self.spaces = fetchedSpaces
+            let customURIs = Self.loadCustomSpaceURIs(for: accountDID)
+            var merged = fetchedSpaces
+            var existingURIs = Set(fetchedSpaces.map { $0.ref.uriString() })
+            for uri in customURIs {
+                if let ref = try? SpaceRef(uriString: uri), !existingURIs.contains(ref.uriString()) {
+                    merged.append(SpaceItem(ref: ref, accountDID: accountDID))
+                    existingURIs.insert(ref.uriString())
+                }
+            }
+            self.spaces = merged
             self.error = nil
         } catch {
             self.error = error.localizedDescription
@@ -148,6 +188,12 @@ public final class SpaceListModel {
         guard (200...299).contains(responseCode) else {
             throw ATProtoXRPCError(error: "DeleteSpaceFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
         }
+        var customURIs = Self.loadCustomSpaceURIs(for: account.id)
+        if customURIs.contains(space.ref.uriString()) {
+            customURIs.removeAll { $0 == space.ref.uriString() }
+            Self.saveCustomSpaceURIs(customURIs, for: account.id)
+        }
+
 
         let listTransport = listSpacesTransport ?? { cursor in
             let (responseCode, data) = try await account.client.com.atproto.space.listSpaces(
@@ -156,5 +202,83 @@ public final class SpaceListModel {
             return (responseCode: responseCode, output: data)
         }
         await load(accountDID: account.id, fetchPage: listTransport)
+    }
+
+    // MARK: - Open Space by Reference
+
+    @discardableResult
+    public func openSpace(
+        uriString: String,
+        account: AccountStore.Account,
+        credentialTransport: (@Sendable (SpaceRef) async throws -> Void)? = nil,
+        listSpacesTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListSpaces.Output?))? = nil
+    ) async throws -> SpaceItem {
+        try await openSpace(
+            uriString: uriString,
+            accountDID: account.id,
+            credentialTransport: credentialTransport ?? { ref in
+                _ = try await account.credentials.credential(for: ref)
+            },
+            listSpacesTransport: listSpacesTransport ?? { cursor in
+                let (responseCode, data) = try await account.client.com.atproto.space.listSpaces(
+                    input: ComAtprotoSpaceListSpaces.Parameters(cursor: cursor)
+                )
+                return (responseCode: responseCode, output: data)
+            }
+        )
+    }
+
+    @discardableResult
+    public func openSpace(
+        uriString: String,
+        accountDID: String,
+        credentialTransport: (@Sendable (SpaceRef) async throws -> Void)? = nil,
+        listSpacesTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListSpaces.Output?))? = nil
+    ) async throws -> SpaceItem {
+        let trimmed = uriString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw OpenSpaceError.emptyURI
+        }
+
+        // Step 1: Validate space URI locally before any network call
+        let spaceRef: SpaceRef
+        do {
+            spaceRef = try SpaceRef(uriString: trimmed)
+        } catch {
+            throw OpenSpaceError.invalidURI(error.localizedDescription)
+        }
+
+        // Step 2: Validate/obtain space credential
+        if let credentialTransport {
+            do {
+                try await credentialTransport(spaceRef)
+            } catch {
+                throw OpenSpaceError.credentialFailed(error.localizedDescription)
+            }
+        }
+
+        // Step 3: Persist URI across launches for this account
+        var customURIs = Self.loadCustomSpaceURIs(for: accountDID)
+        if !customURIs.contains(spaceRef.uriString()) {
+            customURIs.append(spaceRef.uriString())
+            Self.saveCustomSpaceURIs(customURIs, for: accountDID)
+        }
+
+        // Step 4: Reload space list or update state
+        if let listSpacesTransport {
+            await load(accountDID: accountDID, fetchPage: listSpacesTransport)
+        } else {
+            if !spaces.contains(where: { $0.ref.uriString() == spaceRef.uriString() }) {
+                let newItem = SpaceItem(ref: spaceRef, accountDID: accountDID)
+                spaces.append(newItem)
+            }
+        }
+
+        guard let found = spaces.first(where: { $0.ref.uriString() == spaceRef.uriString() }) else {
+            let item = SpaceItem(ref: spaceRef, accountDID: accountDID)
+            spaces.append(item)
+            return item
+        }
+        return found
     }
 }

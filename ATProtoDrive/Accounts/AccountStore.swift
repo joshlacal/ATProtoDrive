@@ -291,6 +291,7 @@ public final class AccountStore {
         if activeAccountID == id {
             activeAccountID = accounts.first?.id
         }
+        UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: id))
         savePersistedAccounts()
     }
 

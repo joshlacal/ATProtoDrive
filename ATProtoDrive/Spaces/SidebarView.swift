@@ -53,6 +53,8 @@ struct AccountSpacesSection: View {
         accountStore.spaceModel(for: account.id)
     }
     @State private var showingCreateSpace = false
+    @State private var showingOpenSpace = false
+
 
     var body: some View {
         Section {
@@ -103,21 +105,40 @@ struct AccountSpacesSection: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button {
-                    showingCreateSpace = true
+                Menu {
+                    Button {
+                        showingCreateSpace = true
+                    } label: {
+                        Label("New Space…", systemImage: "plus")
+                    }
+                    Button {
+                        showingOpenSpace = true
+                    } label: {
+                        Label("Open Space by Reference…", systemImage: "link")
+                    }
                 } label: {
                     Image(systemName: "plus")
                         .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
-                .help("New Space")
-
+                .menuStyle(.borderlessButton)
+                .help("Add or Open Space")
                 if model.isLoading {
                     ProgressView()
                         .controlSize(.mini)
                 }
             }
             .contextMenu {
+                Button {
+                    showingCreateSpace = true
+                } label: {
+                    Label("New Space…", systemImage: "plus")
+                }
+                Button {
+                    showingOpenSpace = true
+                } label: {
+                    Label("Open Space by Reference…", systemImage: "link")
+                }
+                Divider()
                 Button(role: .destructive) {
                     Task {
                         await accountStore.remove(account.id)
@@ -138,6 +159,11 @@ struct AccountSpacesSection: View {
                 Task {
                     await model.load(account: account)
                 }
+            }
+        }
+        .sheet(isPresented: $showingOpenSpace) {
+            OpenSpaceSheet(account: account) { openedItem in
+                selectedSpace = openedItem
             }
         }
     }
