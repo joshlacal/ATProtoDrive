@@ -7,6 +7,8 @@ import SwiftUI
 import Petrel
 
 public struct SpaceDetailView: View {
+    @Environment(AccountStore.self) private var accountStore
+
     let space: SpaceItem
     let account: AccountStore.Account?
     @Binding var selectedRepo: RepoEntry?
@@ -150,7 +152,8 @@ public struct SpaceDetailView: View {
                 if let account {
                     Task {
                         do {
-                            try await model.deleteSpace(space: space, account: account)
+                            let spaceListModel = accountStore.spaceModel(for: account.id)
+                            try await spaceListModel.deleteSpace(space: space, account: account)
                             selectedRepo = nil
                             onDelete?()
                         } catch {

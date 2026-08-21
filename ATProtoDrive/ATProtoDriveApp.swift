@@ -57,8 +57,7 @@ struct ATProtoDriveApp: App {
                         repo: repo,
                         account: owningAccount
                     )
-                    .id("\(space.id)-\(repo.did)")
-                } else if selectedSpace != nil {
+                    .id("\(space.id)-\(repo.did)-\(repo.rev)-\(repo.hash)")
                     ContentUnavailableView(
                         "No Repository Selected",
                         systemImage: "tablecells",

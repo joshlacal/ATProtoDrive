@@ -86,6 +86,17 @@ public final class AccountStore {
     private static let userDefaultsKey = "blue.catbird.atprotodrive.accounts"
 
     public private(set) var accounts: [Account] = []
+    public private(set) var spaceModels: [String: SpaceListModel] = [:]
+
+    public func spaceModel(for accountID: String) -> SpaceListModel {
+        if let existing = spaceModels[accountID] {
+            return existing
+        }
+        let model = SpaceListModel()
+        spaceModels[accountID] = model
+        return model
+    }
+
     public var activeAccountID: String?
 
     public func account(for did: String) -> Account? {
@@ -276,6 +287,7 @@ public final class AccountStore {
             try? await account.client.logout()
         }
         accounts.removeAll { $0.id == id }
+        spaceModels.removeValue(forKey: id)
         if activeAccountID == id {
             activeAccountID = accounts.first?.id
         }

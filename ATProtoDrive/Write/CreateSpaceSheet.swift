@@ -8,6 +8,7 @@ import Petrel
 
 public struct CreateSpaceSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AccountStore.self) private var accountStore
 
     let account: AccountStore.Account
     var onCreated: ((SpaceRef) -> Void)?
@@ -142,7 +143,8 @@ public struct CreateSpaceSheet: View {
         defer { isSubmitting = false }
 
         do {
-            let ref = try await SpaceDetailModel.performCreateSpace(
+            let spaceListModel = accountStore.spaceModel(for: account.id)
+            let ref = try await spaceListModel.createSpace(
                 spaceType: spaceType,
                 skey: skey.isEmpty ? nil : skey,
                 policy: policy,

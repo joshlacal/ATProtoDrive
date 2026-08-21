@@ -49,7 +49,9 @@ struct AccountSpacesSection: View {
     @Environment(AccountStore.self) private var accountStore
     let account: AccountStore.Account
     @Binding var selectedSpace: SpaceItem?
-    @State private var model = SpaceListModel()
+    private var model: SpaceListModel {
+        accountStore.spaceModel(for: account.id)
+    }
     @State private var showingCreateSpace = false
 
     var body: some View {

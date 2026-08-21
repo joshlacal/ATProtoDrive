@@ -86,7 +86,7 @@ public struct RecordTableView: View {
             .frame(minWidth: 260, idealWidth: 320, maxWidth: 500, maxHeight: .infinity)
         }
         .navigationTitle("\(space.skey) / \(repo.did)")
-        .task(id: "\(space.id)-\(repo.did)-\(account?.id ?? "")") {
+        .task(id: "\(space.id)-\(repo.did)-\(repo.rev)-\(repo.hash)-\(account?.id ?? "")") {
             if let account = account {
                 await model.load(space: space, repo: repo, account: account)
             }

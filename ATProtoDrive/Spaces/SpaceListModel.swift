@@ -93,4 +93,54 @@ public final class SpaceListModel {
             self.error = error.localizedDescription
         }
     }
+
+    // MARK: - Mutation & Reload Actions
+
+    @discardableResult
+    public func createSpace(
+        spaceType: String,
+        skey: String?,
+        policy: SpacePolicyOption,
+        account: AccountStore.Account,
+        transport: (@Sendable (_ input: ComAtprotoSimplespaceCreateSpace.Input) async throws -> (responseCode: Int, data: ComAtprotoSimplespaceCreateSpace.Output?))? = nil,
+        reload: (@Sendable () async -> Void)? = nil
+    ) async throws -> SpaceRef {
+        let ref = try await SpaceDetailModel.performCreateSpace(
+            spaceType: spaceType,
+            skey: skey,
+            policy: policy,
+            account: account,
+            transport: transport
+        )
+        if let reload = reload {
+            await reload()
+        } else {
+            await load(account: account)
+        }
+        return ref
+    }
+
+    public func deleteSpace(
+        space: SpaceItem,
+        account: AccountStore.Account,
+        transport: (@Sendable (_ input: ComAtprotoSimplespaceDeleteSpace.Input) async throws -> Int)? = nil,
+        reload: (@Sendable () async -> Void)? = nil
+    ) async throws {
+        try await SpaceDetailModel.performDeleteSpace(
+            space: space,
+            account: account,
+            transport: transport
+        )
+        if let reload = reload {
+            await reload()
+        } else {
+            await load(account: account)
+        }
+    }
+
+#if DEBUG
+    public func setSpacesForTesting(_ spaces: [SpaceItem]) {
+        self.spaces = spaces
+    }
+#endif
 }

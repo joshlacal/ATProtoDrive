@@ -488,7 +488,8 @@ public final class SpaceDetailModel {
         space: SpaceItem,
         account: AccountStore.Account,
         resolveHandle: (@Sendable (_ handle: String) async throws -> String)? = nil,
-        transport: (@Sendable (_ input: ComAtprotoSimplespaceAddMember.Input) async throws -> Int)? = nil
+        transport: (@Sendable (_ input: ComAtprotoSimplespaceAddMember.Input) async throws -> Int)? = nil,
+        reload: (@Sendable () async -> Void)? = nil
     ) async throws {
         try await Self.performAddMember(
             space: space,
@@ -497,7 +498,11 @@ public final class SpaceDetailModel {
             resolveHandle: resolveHandle,
             transport: transport
         )
-        await load(space: space, account: account)
+        if let reload = reload {
+            await reload()
+        } else {
+            await load(space: space, account: account)
+        }
     }
 
     /// Performs `removeMember` with injected transport.
@@ -523,7 +528,8 @@ public final class SpaceDetailModel {
         did: String,
         space: SpaceItem,
         account: AccountStore.Account,
-        transport: (@Sendable (_ input: ComAtprotoSimplespaceRemoveMember.Input) async throws -> Int)? = nil
+        transport: (@Sendable (_ input: ComAtprotoSimplespaceRemoveMember.Input) async throws -> Int)? = nil,
+        reload: (@Sendable () async -> Void)? = nil
     ) async throws {
         try await Self.performRemoveMember(
             space: space,
@@ -531,7 +537,11 @@ public final class SpaceDetailModel {
             account: account,
             transport: transport
         )
-        await load(space: space, account: account)
+        if let reload = reload {
+            await reload()
+        } else {
+            await load(space: space, account: account)
+        }
     }
 
     /// Deletes the space.
@@ -546,4 +556,10 @@ public final class SpaceDetailModel {
             transport: transport
         )
     }
+
+#if DEBUG
+    public func setMembersForTesting(_ members: [String]?) {
+        self.members = members
+    }
+#endif
 }

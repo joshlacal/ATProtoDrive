@@ -347,31 +347,33 @@ public final class RecordListModel {
         """
     }
 
+    public enum SpliceBlobError: LocalizedError, Equatable, Sendable {
+        case noSelection
+
+        public var errorDescription: String? {
+            switch self {
+            case .noSelection:
+                return "Place cursor in the JSON editor where the blob reference should be inserted."
+            }
+        }
+    }
+
     /// Splices a formatted blob descriptor JSON into the JSON text at the given range (cursor / selection)
     /// without reparsing or modifying the rest of the document structure.
+    /// Throws if no replacement range is provided.
     nonisolated public static func spliceBlobRef(
         into jsonText: String,
         blob: Blob,
-        replacementRange: Range<String.Index>? = nil
-    ) -> String {
+        replacementRange: Range<String.Index>?
+    ) throws -> String {
+        guard let range = replacementRange else {
+            throw SpliceBlobError.noSelection
+        }
         let blobJSON = formatBlobRefJSON(blob: blob)
-        if let range = replacementRange {
-            var text = jsonText
-            text.replaceSubrange(range, with: blobJSON)
-            return text
-        }
-        let trimmed = jsonText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty || trimmed == "{}" {
-            return "{\n  \"blob\": \(blobJSON.replacingOccurrences(of: "\n", with: "\n  "))\n}"
-        }
-        return jsonText + "\n" + blobJSON
+        var text = jsonText
+        text.replaceSubrange(range, with: blobJSON)
+        return text
     }
-
-    /// Convenience helper for inserting blob ref into JSON text.
-    nonisolated public static func insertBlobRef(into jsonText: String, blob: Blob) -> String {
-        spliceBlobRef(into: jsonText, blob: blob, replacementRange: nil)
-    }
-
 
     // MARK: - Pure Static Helpers
 
@@ -880,18 +882,23 @@ public final class RecordListModel {
         rkey: String?,
         jsonText: String,
         account: AccountStore.Account,
-        transport: (@Sendable (_ input: ComAtprotoSpaceCreateRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpaceCreateRecord.Output?))? = nil
+        transport: (@Sendable (_ input: ComAtprotoSpaceCreateRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpaceCreateRecord.Output?))? = nil,
+        reload: (@Sendable () async -> Void)? = nil
     ) async throws -> ComAtprotoSpaceCreateRecord.Output {
         let output = try await Self.performCreateRecord(
             space: space.ref,
-            repoDID: repo.did,
+            repoDID: account.id,
             collection: collection,
             rkey: rkey,
             jsonText: jsonText,
             account: account,
             transport: transport
         )
-        await load(space: space, repo: repo, account: account)
+        if let reload = reload {
+            await reload()
+        } else {
+            await load(space: space, repo: repo, account: account)
+        }
         return output
     }
 
@@ -903,18 +910,23 @@ public final class RecordListModel {
         rkey: String,
         jsonText: String,
         account: AccountStore.Account,
-        transport: (@Sendable (_ input: ComAtprotoSpacePutRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpacePutRecord.Output?))? = nil
+        transport: (@Sendable (_ input: ComAtprotoSpacePutRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpacePutRecord.Output?))? = nil,
+        reload: (@Sendable () async -> Void)? = nil
     ) async throws -> ComAtprotoSpacePutRecord.Output {
         let output = try await Self.performPutRecord(
             space: space.ref,
-            repoDID: repo.did,
+            repoDID: account.id,
             collection: collection,
             rkey: rkey,
             jsonText: jsonText,
             account: account,
             transport: transport
         )
-        await load(space: space, repo: repo, account: account)
+        if let reload = reload {
+            await reload()
+        } else {
+            await load(space: space, repo: repo, account: account)
+        }
         return output
     }
 
@@ -925,7 +937,8 @@ public final class RecordListModel {
         collection: String,
         rkey: String,
         account: AccountStore.Account,
-        transport: (@Sendable (_ input: ComAtprotoSpaceDeleteRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpaceDeleteRecord.Output?))? = nil
+        transport: (@Sendable (_ input: ComAtprotoSpaceDeleteRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpaceDeleteRecord.Output?))? = nil,
+        reload: (@Sendable () async -> Void)? = nil
     ) async throws -> ComAtprotoSpaceDeleteRecord.Output {
         let output = try await Self.performDeleteRecord(
             space: space.ref,
@@ -935,7 +948,11 @@ public final class RecordListModel {
             account: account,
             transport: transport
         )
-        await load(space: space, repo: repo, account: account)
+        if let reload = reload {
+            await reload()
+        } else {
+            await load(space: space, repo: repo, account: account)
+        }
         return output
     }
 
@@ -952,4 +969,10 @@ public final class RecordListModel {
             transport: transport
         )
     }
+
+#if DEBUG
+    public func setRowsForTesting(_ rows: [RecordRow]) {
+        self.rows = rows
+    }
+#endif
 }

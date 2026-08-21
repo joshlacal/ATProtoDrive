@@ -244,8 +244,24 @@ public struct RecordEditorSheet: View {
     }
 
     private func handleBlobUpload(from fileURL: URL) async {
-        isUploadingBlob = true
         apiError = nil
+
+        var replacementRange: Range<String.Index>? = nil
+        if let indices = textSelection?.indices {
+            switch indices {
+            case .selection(let range):
+                replacementRange = range
+            default:
+                break
+            }
+        }
+
+        guard let replacementRange else {
+            apiError = "Please place the cursor in the JSON editor where the blob reference should be inserted."
+            return
+        }
+
+        isUploadingBlob = true
         defer { isUploadingBlob = false }
 
         let accessing = fileURL.startAccessingSecurityScopedResource()
@@ -265,17 +281,7 @@ public struct RecordEditorSheet: View {
                 account: account
             )
 
-            // Splice blob ref JSON into existing editor text at cursor/selection
-            var replacementRange: Range<String.Index>? = nil
-            if let indices = textSelection?.indices {
-                switch indices {
-                case .selection(let range):
-                    replacementRange = range
-                default:
-                    break
-                }
-            }
-            jsonText = RecordListModel.spliceBlobRef(into: jsonText, blob: blob, replacementRange: replacementRange)
+            jsonText = try RecordListModel.spliceBlobRef(into: jsonText, blob: blob, replacementRange: replacementRange)
         } catch {
             if let xrpc = error as? ATProtoXRPCError {
                 apiError = "Blob upload error: \(xrpc.errorDescription ?? xrpc.error)"

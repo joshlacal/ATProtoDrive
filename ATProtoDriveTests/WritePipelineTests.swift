@@ -489,41 +489,14 @@ struct WritePipelineTests {
         #expect(json.contains("4096"))
     }
 
-    @Test("insertBlobRef inserts blob into empty JSON")
-    func testInsertBlobRefIntoEmptyJSON() throws {
+    @Test("spliceBlobRef throws noSelection error when no replacement range is provided")
+    func testSpliceBlobRefRequiresExplicitSelection() throws {
         let link = try ATProtoLink(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
         let blob = Blob(type: "blob", ref: link, mimeType: "image/png", size: 1024)
 
-        let result = RecordListModel.insertBlobRef(into: "{}", blob: blob)
-        #expect(result.contains("blob"))
-        #expect(result.contains("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"))
-
-        // Validate resulting JSON is well-formed
-        let container = try RecordListModel.validateRecordJSON(result)
-        let extractedBlobs = RecordListModel.extractBlobRefs(from: container)
-        #expect(extractedBlobs.contains("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"))
-    }
-    @Test("spliceBlobRef splices blob into existing JSON preserving fields and parsing cleanly")
-    func testSpliceBlobRefIntoExistingJSON() throws {
-        let initialJSON = """
-        {
-          "text": "Check out this image",
-          "image": null
+        #expect(throws: RecordListModel.SpliceBlobError.noSelection) {
+            try RecordListModel.spliceBlobRef(into: "{}", blob: blob, replacementRange: nil)
         }
-        """
-        let link = try ATProtoLink(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
-        let blob = Blob(type: "blob", ref: link, mimeType: "image/png", size: 2048)
-
-        let nullRange = try #require(initialJSON.range(of: "null"))
-        let result = RecordListModel.spliceBlobRef(into: initialJSON, blob: blob, replacementRange: nullRange)
-
-        // Validate text & image are preserved and blob is cleanly inserted
-        #expect(result.contains("Check out this image"))
-        #expect(result.contains("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"))
-
-        let container = try RecordListModel.validateRecordJSON(result)
-        let extractedBlobs = RecordListModel.extractBlobRefs(from: container)
-        #expect(extractedBlobs.contains("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"))
     }
 
     @Test("spliceBlobRef inserts at explicit cursor range without modifying other text")
@@ -532,15 +505,13 @@ struct WritePipelineTests {
         let link = try ATProtoLink(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
         let blob = Blob(type: "blob", ref: link, mimeType: "image/png", size: 1024)
 
-        // Splice over "null"
         let nullRange = try #require(initialJSON.range(of: "null"))
-        let spliced = RecordListModel.spliceBlobRef(into: initialJSON, blob: blob, replacementRange: nullRange)
+        let spliced = try RecordListModel.spliceBlobRef(into: initialJSON, blob: blob, replacementRange: nullRange)
 
         #expect(spliced.contains("\"text\": \"Hello\""))
         #expect(spliced.contains("\"image\": {"))
         #expect(!spliced.contains("null"))
 
-        // Ensure valid JSON parse
         let container = try RecordListModel.validateRecordJSON(spliced)
         let blobs = RecordListModel.extractBlobRefs(from: container)
         #expect(blobs.contains("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"))
@@ -549,7 +520,79 @@ struct WritePipelineTests {
     // MARK: - 6. Model Refresh & Callback Invariant Tests
 
     @MainActor
-    @Test("RecordListModel createRecord executes transport and reloads model state")
+    @Test("SpaceListModel createSpace executes transport and reloads model state from empty to populated")
+    func testSpaceListModelCreateSpaceReloads() async throws {
+        let dummyAccount = await makeTestAccount()
+        let model = SpaceListModel(spaces: [])
+        #expect(model.spaces.isEmpty)
+
+        let createdRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+        let createdItem = SpaceItem(ref: createdRef, accountDID: "did:plc:alice123")
+
+        let createTracker = WriteTestCallTracker()
+        let reloadTracker = WriteTestCallTracker()
+
+        let ref = try await model.createSpace(
+            spaceType: "space.swan.drive",
+            skey: "self",
+            policy: .memberList,
+            account: dummyAccount,
+            transport: { input in
+                await createTracker.record(input)
+                return (200, ComAtprotoSimplespaceCreateSpace.Output(uri: createdRef))
+            },
+            reload: {
+                await reloadTracker.record()
+                await MainActor.run {
+                    model.setSpacesForTesting([createdItem])
+                }
+            }
+        )
+        #expect(ref.uriString() == createdRef.uriString())
+        let createCount = await createTracker.callCount
+        let reloadCount = await reloadTracker.callCount
+        #expect(createCount == 1)
+        #expect(reloadCount == 1)
+        #expect(model.spaces.count == 1)
+        #expect(model.spaces.first?.skey == "self")
+    }
+
+    @MainActor
+    @Test("SpaceListModel deleteSpace executes transport and reloads model state to empty")
+    func testSpaceListModelDeleteSpaceReloads() async throws {
+        let dummyAccount = await makeTestAccount()
+        let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+        let spaceItem = SpaceItem(ref: spaceRef, accountDID: "did:plc:alice123")
+
+        let model = SpaceListModel(spaces: [spaceItem])
+        #expect(model.spaces.count == 1)
+
+        let deleteTracker = WriteTestCallTracker()
+        let reloadTracker = WriteTestCallTracker()
+
+        try await model.deleteSpace(
+            space: spaceItem,
+            account: dummyAccount,
+            transport: { input in
+                await deleteTracker.record(input)
+                return 200
+            },
+            reload: {
+                await reloadTracker.record()
+                await MainActor.run {
+                    model.setSpacesForTesting([])
+                }
+            }
+        )
+        let deleteCount = await deleteTracker.callCount
+        let reloadCount = await reloadTracker.callCount
+        #expect(deleteCount == 1)
+        #expect(reloadCount == 1)
+        #expect(model.spaces.isEmpty)
+    }
+
+    @MainActor
+    @Test("RecordListModel createRecord executes transport and reloads model state from empty to populated")
     func testRecordListModelCreateRecordReloads() async throws {
         let spaceItem = try SpaceItem(
             uriString: "at://did:plc:alice123/space/space.swan.drive/self",
@@ -558,11 +601,21 @@ struct WritePipelineTests {
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
 
-        let model = RecordListModel()
+        let model = RecordListModel(rows: [])
+        #expect(model.rows.isEmpty)
+
         let expectedURI = try ATProtocolURI(uriString: "at://did:plc:alice123/app.bsky.feed.post/post1")
         let expectedCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+        let newRow = RecordRow(
+            uri: "at://did:plc:alice123/space/space.swan.drive/self/did:plc:alice123/app.bsky.feed.post/post1",
+            collection: "app.bsky.feed.post",
+            rkey: "post1",
+            cid: expectedCID.description,
+            json: "{\"text\": \"New Post\"}"
+        )
 
         let createTracker = WriteTestCallTracker()
+        let reloadTracker = WriteTestCallTracker()
 
         let output = try await model.createRecord(
             space: spaceItem,
@@ -574,16 +627,26 @@ struct WritePipelineTests {
             transport: { input in
                 await createTracker.record(input)
                 return (200, ComAtprotoSpaceCreateRecord.Output(uri: expectedURI, cid: expectedCID))
+            },
+            reload: {
+                await reloadTracker.record()
+                await MainActor.run {
+                    model.setRowsForTesting([newRow])
+                }
             }
         )
 
         #expect(output.uri == expectedURI)
         let createCount = await createTracker.callCount
+        let reloadCount = await reloadTracker.callCount
         #expect(createCount == 1)
+        #expect(reloadCount == 1)
+        #expect(model.rows.count == 1)
+        #expect(model.rows.first?.rkey == "post1")
     }
 
     @MainActor
-    @Test("RecordListModel putRecord executes transport and reloads model state")
+    @Test("RecordListModel putRecord executes transport and reloads model state with updated content")
     func testRecordListModelPutRecordReloads() async throws {
         let spaceItem = try SpaceItem(
             uriString: "at://did:plc:alice123/space/space.swan.drive/self",
@@ -592,11 +655,27 @@ struct WritePipelineTests {
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
 
-        let model = RecordListModel()
+        let oldRow = RecordRow(
+            uri: "at://did:plc:alice123/space/space.swan.drive/self/did:plc:alice123/app.bsky.feed.post/post1",
+            collection: "app.bsky.feed.post",
+            rkey: "post1",
+            cid: "oldcid",
+            json: "{\"text\": \"Old Post\"}"
+        )
+        let model = RecordListModel(rows: [oldRow])
+
         let expectedURI = try ATProtocolURI(uriString: "at://did:plc:alice123/app.bsky.feed.post/post1")
         let expectedCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+        let updatedRow = RecordRow(
+            uri: "at://did:plc:alice123/space/space.swan.drive/self/did:plc:alice123/app.bsky.feed.post/post1",
+            collection: "app.bsky.feed.post",
+            rkey: "post1",
+            cid: expectedCID.description,
+            json: "{\"text\": \"Updated Post\"}"
+        )
 
         let putTracker = WriteTestCallTracker()
+        let reloadTracker = WriteTestCallTracker()
 
         let output = try await model.putRecord(
             space: spaceItem,
@@ -608,16 +687,26 @@ struct WritePipelineTests {
             transport: { input in
                 await putTracker.record(input)
                 return (200, ComAtprotoSpacePutRecord.Output(uri: expectedURI, cid: expectedCID))
+            },
+            reload: {
+                await reloadTracker.record()
+                await MainActor.run {
+                    model.setRowsForTesting([updatedRow])
+                }
             }
         )
 
         #expect(output.uri == expectedURI)
         let putCount = await putTracker.callCount
+        let reloadCount = await reloadTracker.callCount
         #expect(putCount == 1)
+        #expect(reloadCount == 1)
+        #expect(model.rows.count == 1)
+        #expect(model.rows.first?.json.contains("Updated Post") == true)
     }
 
     @MainActor
-    @Test("RecordListModel deleteRecord executes transport and reloads model state")
+    @Test("RecordListModel deleteRecord executes transport and reloads model state to empty")
     func testRecordListModelDeleteRecordReloads() async throws {
         let spaceItem = try SpaceItem(
             uriString: "at://did:plc:alice123/space/space.swan.drive/self",
@@ -626,8 +715,18 @@ struct WritePipelineTests {
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
 
-        let model = RecordListModel()
+        let existingRow = RecordRow(
+            uri: "at://did:plc:alice123/space/space.swan.drive/self/did:plc:alice123/app.bsky.feed.post/post1",
+            collection: "app.bsky.feed.post",
+            rkey: "post1",
+            cid: "cid1",
+            json: "{\"text\": \"Post\"}"
+        )
+        let model = RecordListModel(rows: [existingRow])
+        #expect(model.rows.count == 1)
+
         let deleteTracker = WriteTestCallTracker()
+        let reloadTracker = WriteTestCallTracker()
 
         _ = try await model.deleteRecord(
             space: spaceItem,
@@ -638,24 +737,35 @@ struct WritePipelineTests {
             transport: { input in
                 await deleteTracker.record(input)
                 return (200, ComAtprotoSpaceDeleteRecord.Output())
+            },
+            reload: {
+                await reloadTracker.record()
+                await MainActor.run {
+                    model.setRowsForTesting([])
+                }
             }
         )
-
         let deleteCount = await deleteTracker.callCount
+        let reloadCount = await reloadTracker.callCount
         #expect(deleteCount == 1)
+        #expect(reloadCount == 1)
+        #expect(model.rows.isEmpty)
     }
 
     @MainActor
-    @Test("SpaceDetailModel addMember and removeMember execute transports and reload model")
-    func testSpaceDetailModelMemberMutationsReload() async throws {
+    @Test("SpaceDetailModel addMember executes transport and reloads model state with new member")
+    func testSpaceDetailModelAddMemberReloads() async throws {
         let spaceItem = try SpaceItem(
             uriString: "at://did:plc:alice123/space/space.swan.drive/self",
             accountDID: "did:plc:alice123"
         )
         let dummyAccount = await makeTestAccount()
-        let model = SpaceDetailModel()
+        let model = SpaceDetailModel(members: [])
+        #expect(model.members?.isEmpty == true)
 
         let addTracker = WriteTestCallTracker()
+        let reloadTracker = WriteTestCallTracker()
+
         try await model.addMember(
             identifier: "did:plc:bob456",
             space: spaceItem,
@@ -664,13 +774,35 @@ struct WritePipelineTests {
             transport: { input in
                 await addTracker.record(input)
                 return 200
+            },
+            reload: {
+                await reloadTracker.record()
+                await MainActor.run {
+                    model.setMembersForTesting(["did:plc:alice123", "did:plc:bob456"])
+                }
             }
         )
-
         let addCount = await addTracker.callCount
+        let reloadCount = await reloadTracker.callCount
         #expect(addCount == 1)
+        #expect(reloadCount == 1)
+        #expect(model.members == ["did:plc:alice123", "did:plc:bob456"])
+    }
+
+    @MainActor
+    @Test("SpaceDetailModel removeMember executes transport and reloads model state removing member")
+    func testSpaceDetailModelRemoveMemberReloads() async throws {
+        let spaceItem = try SpaceItem(
+            uriString: "at://did:plc:alice123/space/space.swan.drive/self",
+            accountDID: "did:plc:alice123"
+        )
+        let dummyAccount = await makeTestAccount()
+        let model = SpaceDetailModel(members: ["did:plc:alice123", "did:plc:bob456"])
+        #expect(model.members?.count == 2)
 
         let removeTracker = WriteTestCallTracker()
+        let reloadTracker = WriteTestCallTracker()
+
         try await model.removeMember(
             did: "did:plc:bob456",
             space: spaceItem,
@@ -678,10 +810,18 @@ struct WritePipelineTests {
             transport: { input in
                 await removeTracker.record(input)
                 return 200
+            },
+            reload: {
+                await reloadTracker.record()
+                await MainActor.run {
+                    model.setMembersForTesting(["did:plc:alice123"])
+                }
             }
         )
-
         let removeCount = await removeTracker.callCount
+        let reloadCount = await reloadTracker.callCount
         #expect(removeCount == 1)
+        #expect(reloadCount == 1)
+        #expect(model.members == ["did:plc:alice123"])
     }
 }
