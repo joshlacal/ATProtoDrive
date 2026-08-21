@@ -6,6 +6,7 @@
 import CryptoKit
 import Foundation
 import Petrel
+import secp256k1
 import SwanCore
 import SwanSpaces
 
@@ -52,62 +53,116 @@ public enum RepoVerifierError: LocalizedError, Equatable, Sendable {
     public var errorDescription: String? {
         switch self {
         case .invalidAuthorSigningKey:
-            return "Author signing key could not be parsed as a valid P-256 public key."
+            return "Author signing key could not be parsed as a valid P-256 or secp256k1 public key."
         case .invalidSpaceRef:
             return "Invalid space reference."
         case .missingVerificationMethod(let did):
-            return "No suitable verification method found in DID document for \(did)."
+            return "No suitable #atproto_space or #atproto verification method found in DID document for \(did)."
         case .invalidMultikey(let key):
             return "Invalid multikey format: \(key)"
         }
     }
 }
+public enum AuthorSigningKey: Sendable, Equatable {
+    case p256(P256.Signing.PublicKey)
+    case secp256k1PublicKey(Data)
+
+    public static func == (lhs: AuthorSigningKey, rhs: AuthorSigningKey) -> Bool {
+        switch (lhs, rhs) {
+        case let (.p256(l), .p256(r)):
+            return l.rawRepresentation == r.rawRepresentation
+        case let (.secp256k1PublicKey(l), .secp256k1PublicKey(r)):
+            return l == r
+        default:
+            return false
+        }
+    }
+    public func verify(signature: Data, context: SpaceCommitContext) -> Bool {
+        guard let signingInput = try? SpaceCommitCodec.contextSigningBytes(context) else {
+            return false
+        }
+        switch self {
+        case .p256(let publicKey):
+            guard let canonicalSignature = try? P256WireSignature.decodeCanonical(signature) else {
+                return false
+            }
+            return publicKey.isValidSignature(canonicalSignature, for: signingInput)
+        case .secp256k1PublicKey(let keyBytes):
+            do {
+                let format: secp256k1.Format = (keyBytes.count == 33) ? .compressed : .uncompressed
+                let publicKey = try secp256k1.Signing.PublicKey(dataRepresentation: keyBytes, format: format)
+                let compact = try secp256k1.Signing.ECDSASignature(compactRepresentation: signature)
+                return publicKey.isValidSignature(compact, for: signingInput)
+            } catch {
+                return false
+            }
+        }
+    }
+}
 
 public enum RepoVerifier {
-    /// Parses public key data in any standard P-256 encoding:
-    /// - 33-byte compressed SEC1 (0x02/0x03 prefix)
-    /// - 65-byte uncompressed X9.63 (0x04 prefix)
-    /// - 64-byte raw (x || y)
-    /// - 35-byte multicodec P-256 (0x80, 0x24 prefix + 33-byte compressed)
-    /// - DER encoded
-    public static func parseP256PublicKey(from data: Data) throws -> P256.Signing.PublicKey {
-        if data.count == 33, let key = try? P256.Signing.PublicKey(compressedRepresentation: data) {
-            return key
+    /// Parses public key data in standard P-256 (ES256) or secp256k1 (ES256K) multicodec formats:
+    /// - P-256: multicodec prefix `0x80 0x24` (35 bytes), compressed (33 bytes), uncompressed (65 bytes), raw (64 bytes), or DER
+    /// - secp256k1: multicodec prefix `0xe7 0x01` (35 bytes), compressed (33 bytes), uncompressed (65 bytes)
+    public static func parseSigningKey(from data: Data) throws -> AuthorSigningKey {
+        // Multicodec P-256: prefix [0x80, 0x24] + 33 bytes
+        if data.count == 35 && data.prefix(2) == Data([0x80, 0x24]) {
+            if let key = try? P256.Signing.PublicKey(compressedRepresentation: data.dropFirst(2)) {
+                return .p256(key)
+            }
         }
-        if data.count == 65, let key = try? P256.Signing.PublicKey(x963Representation: data) {
-            return key
+        // Multicodec secp256k1: prefix [0xe7, 0x01] + 33 bytes
+        if data.count == 35 && data.prefix(2) == Data([0xe7, 0x01]) {
+            let point = Data(data.dropFirst(2))
+            if (try? secp256k1.Signing.PublicKey(dataRepresentation: point, format: .compressed)) != nil {
+                return .secp256k1PublicKey(point)
+            }
         }
+        // 33-byte compressed key
+        if data.count == 33 {
+            if let key = try? P256.Signing.PublicKey(compressedRepresentation: data) {
+                return .p256(key)
+            }
+            if (try? secp256k1.Signing.PublicKey(dataRepresentation: data, format: .compressed)) != nil {
+                return .secp256k1PublicKey(data)
+            }
+        }
+        // 65-byte uncompressed key (0x04 prefix)
+        if data.count == 65 {
+            if let key = try? P256.Signing.PublicKey(x963Representation: data) {
+                return .p256(key)
+            }
+            if (try? secp256k1.Signing.PublicKey(dataRepresentation: data, format: .uncompressed)) != nil {
+                return .secp256k1PublicKey(data)
+            }
+        }
+        // 64-byte raw P-256 key
         if data.count == 64, let key = try? P256.Signing.PublicKey(rawRepresentation: data) {
-            return key
+            return .p256(key)
         }
-        if data.count == 35 && data.prefix(2) == Data([0x80, 0x24]),
-           let key = try? P256.Signing.PublicKey(compressedRepresentation: data.dropFirst(2)) {
-            return key
-        }
+        // DER representation P-256
         if let key = try? P256.Signing.PublicKey(derRepresentation: data) {
-            return key
+            return .p256(key)
         }
-        if let key = try? P256.Signing.PublicKey(x963Representation: data) {
-            return key
-        }
+
         throw RepoVerifierError.invalidAuthorSigningKey
     }
 
-    /// Verifies a permissioned repository CAR file using SwanSpaces.
+    /// Verifies a permissioned repository CAR file using SwanSpaces' streaming verification API.
     ///
-    /// Reuses SwanSpaces recovery verification:
-    /// 1. Verifies the signed commit envelope and its DPoP/IKM content binding.
-    /// 2. Verifies the context signature using the author's P-256 public signing key.
-    /// 3. Validates the DRISL index DAG-CBOR map and canonical order.
-    /// 4. Validates every record block (canonical DAG-CBOR and content-addressed CID).
-    /// 5. Verifies that the computed LtHash commitment across all indexed records matches the commit commitment.
+    /// Delegates strictly to `SpaceCARCodec.verifyStreamingRecovery`:
+    /// 1. Bounded memory recovery streaming via `SpaceCARRecoveryByteSource`.
+    /// 2. Bounded in-memory index staging via `SpaceCARRecoveryIndex`.
+    /// 3. Validates commit context signature with ES256 (P-256) or ES256K (secp256k1).
+    /// 4. Validates DPoP/IKM content binding, DRISL canonical index ordering, and record DAG-CBOR CIDs.
+    /// 5. Validates LtHash homomorphic set commitment match.
     public static func verify(
         carData: Data,
         authorDID: String,
         space: SpaceRef,
         authorSigningKey: Data
-    ) throws -> VerificationReport {
-        let publicKey = try parseP256PublicKey(from: authorSigningKey)
+    ) async throws -> VerificationReport {
+        let signingKey = try parseSigningKey(from: authorSigningKey)
         let spaceURI: SpaceURI
         do {
             spaceURI = try SpaceURI(authority: space.spaceDID, spaceType: space.spaceType, skey: space.skey)
@@ -115,166 +170,91 @@ public enum RepoVerifier {
             throw RepoVerifierError.invalidSpaceRef
         }
 
-        // Parse CAR reader to inspect header & commit envelope
-        let reader: CARReader
+        // Bounded pull source
+        let byteSource = MemoryCARByteSource(data: carData)
+        let recoveryIndex = InMemorySpaceRecoveryIndex()
+
         do {
-            reader = try CARReader(data: carData)
-        } catch {
-            return VerificationReport(outcome: .malformedCAR(error.localizedDescription), rev: "")
-        }
-
-        guard reader.roots.count == 2 else {
-            return VerificationReport(
-                outcome: .malformedCAR("Permissioned CAR must declare exactly two roots"),
-                rev: ""
-            )
-        }
-
-        let commitCID = reader.roots[0]
-        let indexCID = reader.roots[1]
-
-        guard let commitBlock = try? reader.rawBlockData(for: CARReader.cidHex(from: commitCID)) else {
-            return VerificationReport(outcome: .malformedCAR("Missing commit block in CAR"), rev: "")
-        }
-        let envelope: SpaceCommitEnvelope
-        do {
-            envelope = try SpaceCARCodec.structurallyValidateRecoveryCommit(commitBlock, space: spaceURI, author: authorDID)
-        } catch {
-            return VerificationReport(
-                outcome: .malformedCAR("Invalid commit envelope: \(error.localizedDescription)"),
-                rev: ""
-            )
-        }
-
-        let rev = envelope.context.rev
-        let expectedCommitmentHex = Hex.encode(envelope.commitment)
-
-        // Verify Context Signature and Content Binding
-        guard let sigValid = try? SpaceCommitCodec.verifyContextSignature(envelope, publicKey: publicKey),
-              sigValid,
-              SpaceCommitCodec.verifyContentBinding(envelope) else {
-            return VerificationReport(outcome: .signatureInvalid, rev: rev)
-        }
-
-        // Try direct high-level verification from SwanSpaces
-        do {
-            let recovery = try SpaceCARCodec.verifyRecovery(
-                carData,
+            let result = try await SpaceCARCodec.verifyStreamingRecovery(
+                from: byteSource,
                 space: spaceURI,
                 author: authorDID,
-                publicKey: publicKey
+                contextSignatureVerifier: { envelope in
+                    signingKey.verify(signature: envelope.contextSignature, context: envelope.context)
+                },
+                index: recoveryIndex
             )
-            return VerificationReport(outcome: .verified(recordCount: recovery.records.count), rev: rev)
+            return VerificationReport(
+                outcome: .verified(recordCount: result.recordCount),
+                rev: result.wireRevision.toString()
+            )
+        } catch let streamingError as SpaceCARStreamingError {
+            switch streamingError {
+            case .commitDidNotVerify:
+                let rev = extractRevision(from: carData, space: spaceURI, author: authorDID) ?? ""
+                return VerificationReport(outcome: .signatureInvalid, rev: rev)
+            case .commitmentMismatch, .blockCIDMismatch, .invalidRecordOrder:
+                let (rev, expectedCommitment) = extractCommitInfo(from: carData, space: spaceURI, author: authorDID)
+                return VerificationReport(
+                    outcome: .hashMismatch(
+                        expected: expectedCommitment ?? "expected",
+                        computed: "mismatch"
+                    ),
+                    rev: rev ?? ""
+                )
+            default:
+                let rev = extractRevision(from: carData, space: spaceURI, author: authorDID) ?? ""
+                return VerificationReport(
+                    outcome: .malformedCAR(String(describing: streamingError)),
+                    rev: rev
+                )
+            }
         } catch let swanError as SwanError {
+            let rev = extractRevision(from: carData, space: spaceURI, author: authorDID) ?? ""
             switch swanError {
             case .unauthorized:
                 return VerificationReport(outcome: .signatureInvalid, rev: rev)
             case .malformed(let reason):
-                if reason.contains("does not match commit") || reason.contains("block CID does not match body") || reason.contains("block order is invalid") || reason.contains("missing") {
-                    let computed = computeLtHash(reader: reader, indexCID: indexCID)
-                    return VerificationReport(
-                        outcome: .hashMismatch(
-                            expected: expectedCommitmentHex,
-                            computed: computed.map { Hex.encode($0) } ?? "mismatch"
-                        ),
-                        rev: rev
-                    )
-                }
                 return VerificationReport(outcome: .malformedCAR(reason), rev: rev)
             default:
                 return VerificationReport(outcome: .malformedCAR(swanError.localizedDescription), rev: rev)
             }
         } catch {
-            // Check if computing LtHash gives a mismatch
-            if let computed = computeLtHash(reader: reader, indexCID: indexCID) {
-                if !constantTimeEqual(envelope.commitment, computed) {
-                    return VerificationReport(
-                        outcome: .hashMismatch(
-                            expected: expectedCommitmentHex,
-                            computed: Hex.encode(computed)
-                        ),
-                        rev: rev
-                    )
-                }
-            }
+            let rev = extractRevision(from: carData, space: spaceURI, author: authorDID) ?? ""
             return VerificationReport(outcome: .malformedCAR(error.localizedDescription), rev: rev)
         }
     }
 
-    /// Computes LtHash over the indexed records in the CAR if index and record blocks are present.
-    private static func computeLtHash(reader: CARReader, indexCID: CID) -> Data? {
-        guard let indexBlock = try? reader.rawBlockData(for: CARReader.cidHex(from: indexCID)) else {
-            return nil
+    /// Pure helper to extract commit revision from commit block for reporting on failed downstream checks.
+    private static func extractCommitInfo(from carData: Data, space: SpaceURI, author: String) -> (rev: String?, commitment: String?) {
+        guard let reader = try? CARReader(data: carData), reader.roots.count >= 1 else {
+            return (nil, nil)
         }
-        guard let map = (try? decodeDAGCBORMap(indexBlock)) else {
-            return nil
+        guard let commitBlock = try? reader.rawBlockData(for: CARReader.cidHex(from: reader.roots[0])) else {
+            return (nil, nil)
         }
-        var setHash = LtHash()
-        let sortedEntries = map.keys.sorted { $0.utf8.lexicographicallyPrecedes($1.utf8) }
-        for path in sortedEntries {
-            guard let cidVal = map[path] as? CID else { return nil }
-            if let blockData = try? reader.rawBlockData(for: CARReader.cidHex(from: cidVal)) {
-                let actualCID = CID.fromDAGCBOR(blockData)
-                setHash.add(element: "\(path)/\(actualCID.string)")
-            } else {
-                // If block is not present under expected CID, check if there's any block whose actual data matches or differs
-                setHash.add(element: "\(path)/\(cidVal.string)")
-            }
+        guard let envelope = try? SpaceCARCodec.structurallyValidateRecoveryCommit(commitBlock, space: space, author: author) else {
+            return (nil, nil)
         }
-        return setHash.commitment
-    }
-    private static func decodeDAGCBORMap(_ data: Data) throws -> [String: Any]? {
-        let cid = CID.fromDAGCBOR(data)
-        let header = OrderedCBORMap(entries: [
-            (key: "roots", value: [ATProtoLink(cid: cid)]),
-            (key: "version", value: 1),
-        ])
-        let headerData = try DAGCBOR.encodeValue(header)
-        var singleBlockCAR = Data()
-        appendVarint(headerData.count, to: &singleBlockCAR)
-        singleBlockCAR.append(headerData)
-        appendBlock(cid: cid, data: data, to: &singleBlockCAR)
-        let reader = try CARReader(data: singleBlockCAR)
-        return try reader.decodeBlock(for: CARReader.cidHex(from: cid)) as? [String: Any]
+        return (envelope.context.rev, Hex.encode(envelope.commitment))
     }
 
-    private static func appendBlock(cid: CID, data: Data, to output: inout Data) {
-        appendVarint(cid.bytes.count + data.count, to: &output)
-        output.append(cid.bytes)
-        output.append(data)
-    }
-
-    private static func appendVarint(_ value: Int, to output: inout Data) {
-        precondition(value >= 0)
-        var remaining = UInt64(value)
-        repeat {
-            var byte = UInt8(remaining & 0x7f)
-            remaining >>= 7
-            if remaining != 0 { byte |= 0x80 }
-            output.append(byte)
-        } while remaining != 0
-    }
-
-    private static func constantTimeEqual(_ a: Data, _ b: Data) -> Bool {
-        guard a.count == b.count else { return false }
-        var result: UInt8 = 0
-        for (x, y) in zip(a, b) {
-            result |= x ^ y
-        }
-        return result == 0
+    private static func extractRevision(from carData: Data, space: SpaceURI, author: String) -> String? {
+        extractCommitInfo(from: carData, space: space, author: author).rev
     }
 }
 
-// MARK: - DID Document Key Extraction
+// MARK: - Strict DID Document Key Extraction
 
 extension RepoVerifier {
-    /// Extracts the P-256 public signing key bytes from a DIDDocument.
+    /// Extracts the public signing key bytes from a DIDDocument.
+    /// Requires an exact `#atproto_space` or `#atproto` method belonging to `doc.id`; no other fallback.
     public static func extractSigningKey(from doc: DIDDocument) throws -> Data {
         let method = doc.verificationMethod.first {
-            $0.id == "#atproto_space" || $0.id.hasSuffix("#atproto_space")
+            $0.id == "#atproto_space" || $0.id == "\(doc.id)#atproto_space"
         } ?? doc.verificationMethod.first {
-            $0.id == "#atproto" || $0.id.hasSuffix("#atproto")
-        } ?? doc.verificationMethod.first
+            $0.id == "#atproto" || $0.id == "\(doc.id)#atproto"
+        }
 
         guard let method = method else {
             throw RepoVerifierError.missingVerificationMethod(doc.id)
@@ -283,20 +263,70 @@ extension RepoVerifier {
         return try decodePublicKeyMultibase(method.publicKeyMultibase)
     }
 
-    /// Decodes a multibase public key string (e.g. `zQ3sh...` or `zDna...`).
+    /// Decodes a multibase public key string (e.g. `did:key:z...` or `z...`).
     public static func decodePublicKeyMultibase(_ multibase: String) throws -> Data {
-        guard multibase.hasPrefix("z") else {
+        let clean = multibase.hasPrefix("did:key:") ? String(multibase.dropFirst("did:key:".count)) : multibase
+        guard clean.hasPrefix("z") else {
             throw RepoVerifierError.invalidMultikey(multibase)
         }
-        let encoded = String(multibase.dropFirst())
+        let encoded = String(clean.dropFirst())
         let decoded = try Base58BTC.decode(encoded)
         guard Base58BTC.encode(decoded) == encoded else {
             throw RepoVerifierError.invalidMultikey(multibase)
         }
-        if decoded.count == 35 && decoded.prefix(2) == Data([0x80, 0x24]) {
-            return Data(decoded.dropFirst(2))
-        }
         return decoded
+    }
+}
+
+// MARK: - Streaming Recovery Byte Source & Index
+
+/// Bounded in-memory pull source conforming to SwanSpaces' `SpaceCARRecoveryByteSource`.
+private actor MemoryCARByteSource: SpaceCARRecoveryByteSource {
+    private let data: Data
+    private var offset: Int = 0
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    func read(maximumBytes: Int) async throws -> Data? {
+        guard offset < data.count else { return nil }
+        let count = min(maximumBytes, data.count - offset)
+        let chunk = data.subdata(in: offset ..< (offset + count))
+        offset += count
+        return chunk
+    }
+}
+
+/// Scratch in-memory DRISL index conforming to SwanSpaces' `SpaceCARRecoveryIndex`.
+private actor InMemorySpaceRecoveryIndex: SpaceCARRecoveryIndex {
+    private var entries: [SpaceCARRecoveryIndexEntry] = []
+    private var consumedPaths = Set<String>()
+
+    func insert(_ entry: SpaceCARRecoveryIndexEntry) throws {
+        guard !entries.contains(where: { $0.path == entry.path }) else {
+            throw SpaceCARStreamingError.duplicateIndexEntry
+        }
+        entries.append(entry)
+    }
+
+    func nextUnconsumedLexicographicEntry() -> SpaceCARRecoveryIndexEntry? {
+        entries
+            .filter { !consumedPaths.contains($0.path) }
+            .min { $0.path.utf8.lexicographicallyPrecedes($1.path.utf8) }
+    }
+
+    func consumeEntries(forCID cid: CID) throws -> Int {
+        let matching = entries.filter {
+            $0.cid == cid && !consumedPaths.contains($0.path)
+        }
+        guard !matching.isEmpty else {
+            throw SpaceCARStreamingError.invalidRecordOrder
+        }
+        for entry in matching {
+            consumedPaths.insert(entry.path)
+        }
+        return matching.count
     }
 }
 

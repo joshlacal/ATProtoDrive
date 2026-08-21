@@ -383,7 +383,7 @@ public struct SpaceDetailView: View {
             .padding(.vertical, 2)
             .background(Color.secondary.opacity(0.1))
             .clipShape(Capsule())
-        } else if let report = model.verificationReports[repo.did] {
+        } else if let report = model.verificationReport(for: repo) {
             switch report.outcome {
             case .verified(let count):
                 HStack(spacing: 4) {

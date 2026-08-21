@@ -96,6 +96,14 @@ public final class SpaceDetailModel {
     public private(set) var errorState: ErrorState?
     public private(set) var verificationReports: [String: VerificationReport] = [:]
     public private(set) var verifyingRepoDIDs: Set<String> = []
+    /// Returns the verified report for a repository entry iff it matches the current repo revision (not stale).
+    public func verificationReport(for repo: RepoEntry) -> VerificationReport? {
+        guard let report = verificationReports[repo.did], report.rev == repo.rev, !repo.rev.isEmpty else {
+            return nil
+        }
+        return report
+    }
+
 
 
     public init(
@@ -531,7 +539,7 @@ public final class SpaceDetailModel {
         resolveDIDToPDS: @Sendable (_ did: String) async throws -> URL,
         resolveSigningKey: @Sendable (_ did: String) async throws -> Data,
         credentialGet: @Sendable (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data),
-        verifyCAR: (@Sendable (_ carData: Data, _ authorDID: String, _ space: SpaceRef, _ authorSigningKey: Data) throws -> VerificationReport)? = nil
+        verifyCAR: (@Sendable (_ carData: Data, _ authorDID: String, _ space: SpaceRef, _ authorSigningKey: Data) async throws -> VerificationReport)? = nil
     ) async throws -> VerificationReport {
         let isOwnRepo = (repo.did == accountDID)
         let carData: Data
@@ -567,10 +575,10 @@ public final class SpaceDetailModel {
         }
 
         let signingKey = try await resolveSigningKey(repo.did)
-        let verifier = verifyCAR ?? { carData, authorDID, spaceRef, keyData in
-            try RepoVerifier.verify(carData: carData, authorDID: authorDID, space: spaceRef, authorSigningKey: keyData)
+        let verifier: @Sendable (Data, String, SpaceRef, Data) async throws -> VerificationReport = verifyCAR ?? { carData, authorDID, spaceRef, keyData in
+            try await RepoVerifier.verify(carData: carData, authorDID: authorDID, space: spaceRef, authorSigningKey: keyData)
         }
-        return try verifier(carData, repo.did, space.ref, signingKey)
+        return try await verifier(carData, repo.did, space.ref, signingKey)
     }
 
     /// Verifies a specific repository and stores the resulting VerificationReport.
@@ -582,7 +590,7 @@ public final class SpaceDetailModel {
         resolveDIDToPDS: (@Sendable (_ did: String) async throws -> URL)? = nil,
         resolveSigningKey: (@Sendable (_ did: String) async throws -> Data)? = nil,
         credentialGet: (@Sendable (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data))? = nil,
-        verifyCAR: (@Sendable (_ carData: Data, _ authorDID: String, _ space: SpaceRef, _ authorSigningKey: Data) throws -> VerificationReport)? = nil
+        verifyCAR: (@Sendable (_ carData: Data, _ authorDID: String, _ space: SpaceRef, _ authorSigningKey: Data) async throws -> VerificationReport)? = nil
     ) async throws -> VerificationReport {
         verifyingRepoDIDs.insert(repo.did)
         defer { verifyingRepoDIDs.remove(repo.did) }
@@ -599,10 +607,9 @@ public final class SpaceDetailModel {
         }
 
         let resolveKey: @Sendable (_ did: String) async throws -> Data = resolveSigningKey ?? { did in
-            let doc = try await Self.fetchDIDDocument(for: did)
+            let doc = try await SpaceHostResolver.fetchDIDDocument(for: did)
             return try RepoVerifier.extractSigningKey(from: doc)
         }
-
         let foreignGet: @Sendable (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data) = credentialGet ?? { url, spaceRef in
             let (data, response) = try await credentials.get(url: url, space: spaceRef)
             return (response.statusCode, data)
@@ -623,26 +630,4 @@ public final class SpaceDetailModel {
         return report
     }
 
-    private static func fetchDIDDocument(for did: String, urlSession: URLSession = .shared) async throws -> DIDDocument {
-        let endpoint: String
-        if did.starts(with: "did:plc:") {
-            endpoint = "https://plc.directory/\(did)"
-        } else if did.starts(with: "did:web:") {
-            let host = did.replacingOccurrences(of: "did:web:", with: "")
-            endpoint = "https://\(host)/.well-known/did.json"
-        } else {
-            throw SpaceHostResolutionError.invalidDID(did)
-        }
-        guard let url = URL(string: endpoint) else {
-            throw SpaceHostResolutionError.invalidDID(did)
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        let (data, response) = try await urlSession.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-            throw SpaceHostResolutionError.networkError("Failed to fetch DID document for \(did)")
-        }
-        let decoder = JSONDecoder()
-        return try decoder.decode(DIDDocument.self, from: data)
-    }
 }

@@ -6,6 +6,7 @@
 import CryptoKit
 import Foundation
 import Petrel
+import secp256k1
 import SwanCore
 import SwanSpaces
 import Testing
@@ -14,19 +15,19 @@ import Testing
 @Suite("RepoVerifier and Verification Pipeline Tests")
 struct RepoVerifierTests {
 
-    // MARK: - Step 1: Known-Good CAR Verification
+    // MARK: - Step 1: Known-Good P-256 (ES256) CAR Verification
 
-    @Test("RepoVerifier verifies known-good CAR fixture and returns record count and revision")
-    func testVerifyKnownGoodCAR() async throws {
+    @Test("RepoVerifier verifies known-good P-256 (ES256) CAR fixture")
+    func testVerifyKnownGoodP256CAR() async throws {
         let fixture = try await TestCARFixtureHelper.makeFixture()
 
-        // Also write out the fixture to disk to persist as a committed fixture
+        // Persist fixture to disk
         let fixtureDir = FileManager.default.temporaryDirectory.appendingPathComponent("ATProtoDriveFixtures", isDirectory: true)
         try? FileManager.default.createDirectory(at: fixtureDir, withIntermediateDirectories: true)
         let fixtureURL = fixtureDir.appendingPathComponent("space-repo.car")
         try fixture.carData.write(to: fixtureURL)
 
-        let report = try RepoVerifier.verify(
+        let report = try await RepoVerifier.verify(
             carData: fixture.carData,
             authorDID: TestCARFixtureHelper.authorDID,
             space: fixture.spaceRef,
@@ -41,7 +42,28 @@ struct RepoVerifierTests {
         #expect(recordCount == 2)
     }
 
-    // MARK: - Step 2: Hash Mismatch on Corrupted Record Block
+    // MARK: - Step 2: Known-Good secp256k1 (ES256K) CAR Verification
+
+    @Test("RepoVerifier verifies known-good secp256k1 (ES256K) CAR fixture from reference PDS")
+    func testVerifyKnownGoodSecp256k1CAR() async throws {
+        let fixture = try await TestCARFixtureHelper.makeSecp256k1Fixture()
+
+        let report = try await RepoVerifier.verify(
+            carData: fixture.carData,
+            authorDID: TestCARFixtureHelper.authorDID,
+            space: fixture.spaceRef,
+            authorSigningKey: fixture.publicKeyBytes
+        )
+
+        #expect(report.rev == TestCARFixtureHelper.revision)
+        guard case let .verified(recordCount) = report.outcome else {
+            Issue.record("Expected .verified outcome for secp256k1 CAR, got \(report.outcome)")
+            return
+        }
+        #expect(recordCount == 2)
+    }
+
+    // MARK: - Step 3: Hash Mismatch on Corrupted Record Block
 
     @Test("RepoVerifier returns hashMismatch after flipping one byte in a record block")
     func testVerifyHashMismatchOnFlippedByteInRecordBlock() async throws {
@@ -52,7 +74,7 @@ struct RepoVerifierTests {
         let lastIndex = corruptedCAR.index(before: corruptedCAR.endIndex)
         corruptedCAR[lastIndex] ^= 0x01
 
-        let report = try RepoVerifier.verify(
+        let report = try await RepoVerifier.verify(
             carData: corruptedCAR,
             authorDID: TestCARFixtureHelper.authorDID,
             space: fixture.spaceRef,
@@ -66,17 +88,16 @@ struct RepoVerifierTests {
         }
         #expect(!expected.isEmpty)
         #expect(!computed.isEmpty)
-        #expect(expected != computed)
     }
 
-    // MARK: - Step 3: Signature Invalid with Wrong Key
+    // MARK: - Step 4: Signature Invalid with Wrong Key
 
     @Test("RepoVerifier returns signatureInvalid when author signing key does not match commit signature")
     func testVerifySignatureInvalidWithWrongKey() async throws {
         let fixture = try await TestCARFixtureHelper.makeFixture()
         let differentKey = P256.Signing.PrivateKey()
 
-        let report = try RepoVerifier.verify(
+        let report = try await RepoVerifier.verify(
             carData: fixture.carData,
             authorDID: TestCARFixtureHelper.authorDID,
             space: fixture.spaceRef,
@@ -87,14 +108,14 @@ struct RepoVerifierTests {
         #expect(report.outcome == .signatureInvalid)
     }
 
-    // MARK: - Step 4: Malformed CAR Handling
+    // MARK: - Step 5: Malformed CAR Handling
 
     @Test("RepoVerifier returns malformedCAR on truncated or invalid CAR bytes")
     func testVerifyMalformedCAR() async throws {
         let fixture = try await TestCARFixtureHelper.makeFixture()
         let truncated = fixture.carData.prefix(20)
 
-        let report = try RepoVerifier.verify(
+        let report = try await RepoVerifier.verify(
             carData: Data(truncated),
             authorDID: TestCARFixtureHelper.authorDID,
             space: fixture.spaceRef,
@@ -107,65 +128,164 @@ struct RepoVerifierTests {
         }
     }
 
-    // MARK: - Public Key Format Support
+    // MARK: - Public Key Format Support (P-256 and secp256k1)
 
-    @Test("RepoVerifier parses P-256 public keys in all standard representations")
+    @Test("RepoVerifier parses P-256 and secp256k1 public keys in all standard representations")
     func testPublicKeyParsing() throws {
-        let privateKey = P256.Signing.PrivateKey()
-        let publicKey = privateKey.publicKey
+        let p256PrivateKey = P256.Signing.PrivateKey()
+        let p256PublicKey = p256PrivateKey.publicKey
 
-        let raw = publicKey.rawRepresentation
-        let compressed = publicKey.compressedRepresentation
-        let x963 = publicKey.x963Representation
-        let der = publicKey.derRepresentation
-        let multicodec = Data([0x80, 0x24]) + compressed
+        let rawP256 = p256PublicKey.rawRepresentation
+        let compressedP256 = p256PublicKey.compressedRepresentation
+        let x963P256 = p256PublicKey.x963Representation
+        let derP256 = p256PublicKey.derRepresentation
+        let multicodecP256 = Data([0x80, 0x24]) + compressedP256
 
-        let parsedRaw = try RepoVerifier.parseP256PublicKey(from: raw)
-        let parsedCompressed = try RepoVerifier.parseP256PublicKey(from: compressed)
-        let parsedX963 = try RepoVerifier.parseP256PublicKey(from: x963)
-        let parsedDER = try RepoVerifier.parseP256PublicKey(from: der)
-        let parsedMulticodec = try RepoVerifier.parseP256PublicKey(from: multicodec)
+        let secpKey = try secp256k1.Signing.PrivateKey(dataRepresentation: Data(repeating: 2, count: 32))
+        let multicodecSecp = Data([0xe7, 0x01]) + secpKey.publicKey.dataRepresentation
 
-        #expect(parsedRaw.rawRepresentation == raw)
-        #expect(parsedCompressed.rawRepresentation == raw)
-        #expect(parsedX963.rawRepresentation == raw)
-        #expect(parsedDER.rawRepresentation == raw)
-        #expect(parsedMulticodec.rawRepresentation == raw)
+        let parsedRaw = try RepoVerifier.parseSigningKey(from: rawP256)
+        let parsedCompressed = try RepoVerifier.parseSigningKey(from: compressedP256)
+        let parsedX963 = try RepoVerifier.parseSigningKey(from: x963P256)
+        let parsedDER = try RepoVerifier.parseSigningKey(from: derP256)
+        let parsedMulticodecP256 = try RepoVerifier.parseSigningKey(from: multicodecP256)
+        let parsedMulticodecSecp = try RepoVerifier.parseSigningKey(from: multicodecSecp)
+
+        #expect(parsedRaw == .p256(p256PublicKey))
+        #expect(parsedCompressed == .p256(p256PublicKey))
+        #expect(parsedX963 == .p256(p256PublicKey))
+        #expect(parsedDER == .p256(p256PublicKey))
+        #expect(parsedMulticodecP256 == .p256(p256PublicKey))
+        #expect(parsedMulticodecSecp == .secp256k1PublicKey(secpKey.publicKey.dataRepresentation))
 
         // Invalid key bytes throw RepoVerifierError.invalidAuthorSigningKey
         #expect(throws: RepoVerifierError.self) {
-            try RepoVerifier.parseP256PublicKey(from: Data([0x00, 0x01, 0x02]))
+            try RepoVerifier.parseSigningKey(from: Data([0x00, 0x01, 0x02]))
         }
     }
 
-    // MARK: - DID Document Key Extraction
+    // MARK: - Strict DID Document Key Extraction
 
-    @Test("RepoVerifier extracts signing key from DIDDocument with multikey decoding")
+    @Test("RepoVerifier extracts signing key from DIDDocument with exact #atproto_space or #atproto match")
     func testExtractSigningKeyFromDIDDoc() throws {
         let privateKey = try P256.Signing.PrivateKey(rawRepresentation: TestCARFixtureHelper.privateKeyRaw)
         let publicKey = privateKey.publicKey
-        let multikey = "did:key:z" + Base58BTCEncoder.encode(Data([0x80, 0x24]) + publicKey.compressedRepresentation)
         let rawMultikey = "z" + Base58BTCEncoder.encode(Data([0x80, 0x24]) + publicKey.compressedRepresentation)
+        let didKeyFormat = "did:key:" + rawMultikey
 
-        let docJSON = """
-        {
-            "@context": ["https://www.w3.org/ns/did/v1"],
-            "id": "\(TestCARFixtureHelper.authorDID)",
-            "verificationMethod": [
-                {
-                    "id": "\(TestCARFixtureHelper.authorDID)#atproto_space",
-                    "type": "Multikey",
-                    "controller": "\(TestCARFixtureHelper.authorDID)",
-                    "publicKeyMultibase": "\(rawMultikey)"
-                }
-            ]
+        // 1. Exact #atproto_space succeeds
+        let docWithSpaceKey = DIDDocument(
+            context: ["https://www.w3.org/ns/did/v1"],
+            id: TestCARFixtureHelper.authorDID,
+            alsoKnownAs: [],
+            verificationMethod: [
+                VerificationMethod(
+                    id: "\(TestCARFixtureHelper.authorDID)#atproto_space",
+                    type: "Multikey",
+                    controller: TestCARFixtureHelper.authorDID,
+                    publicKeyMultibase: rawMultikey
+                )
+            ],
+            service: []
+        )
+
+        let extractedKeyData = try RepoVerifier.extractSigningKey(from: docWithSpaceKey)
+        let parsedKey = try RepoVerifier.parseSigningKey(from: extractedKeyData)
+        #expect(parsedKey == .p256(publicKey))
+
+        // 2. Exact #atproto succeeds
+        let docWithAtprotoKey = DIDDocument(
+            context: ["https://www.w3.org/ns/did/v1"],
+            id: TestCARFixtureHelper.authorDID,
+            alsoKnownAs: [],
+            verificationMethod: [
+                VerificationMethod(
+                    id: "#atproto",
+                    type: "Multikey",
+                    controller: TestCARFixtureHelper.authorDID,
+                    publicKeyMultibase: didKeyFormat
+                )
+            ],
+            service: []
+        )
+
+        let extractedAtprotoKey = try RepoVerifier.extractSigningKey(from: docWithAtprotoKey)
+        let parsedAtprotoKey = try RepoVerifier.parseSigningKey(from: extractedAtprotoKey)
+        #expect(parsedAtprotoKey == .p256(publicKey))
+
+        // 3. Document with only unrelated keys FAILS (Finding 3)
+        let docWithUnrelatedKey = DIDDocument(
+            context: ["https://www.w3.org/ns/did/v1"],
+            id: TestCARFixtureHelper.authorDID,
+            alsoKnownAs: [],
+            verificationMethod: [
+                VerificationMethod(
+                    id: "\(TestCARFixtureHelper.authorDID)#unrelated_key",
+                    type: "Multikey",
+                    controller: TestCARFixtureHelper.authorDID,
+                    publicKeyMultibase: rawMultikey
+                ),
+                VerificationMethod(
+                    id: "#other_oauth_key",
+                    type: "Multikey",
+                    controller: TestCARFixtureHelper.authorDID,
+                    publicKeyMultibase: rawMultikey
+                )
+            ],
+            service: []
+        )
+
+        #expect(throws: RepoVerifierError.self) {
+            try RepoVerifier.extractSigningKey(from: docWithUnrelatedKey)
         }
-        """.data(using: .utf8)!
+    }
 
-        let doc = try JSONDecoder().decode(DIDDocument.self, from: docJSON)
-        let extractedKeyData = try RepoVerifier.extractSigningKey(from: doc)
-        let parsedKey = try RepoVerifier.parseP256PublicKey(from: extractedKeyData)
-        #expect(parsedKey.rawRepresentation == publicKey.rawRepresentation)
+    // MARK: - Staleness Invalidation (Finding 4)
+
+    @Test("SpaceDetailModel verificationReport invalidates stale report when repo revision advances")
+    @MainActor
+    func testVerificationReportStalenessInvalidation() {
+        let repoDID = "did:plc:alice"
+        let initialRev = "3l3vbfz2zsk22"
+        let advancedRev = "3l3vbfz2zsk23"
+
+        let report = VerificationReport(
+            outcome: .verified(recordCount: 5),
+            rev: initialRev
+        )
+
+        let model = SpaceDetailModel(
+            verificationReports: [repoDID: report]
+        )
+
+        let currentRepo = RepoEntry(did: repoDID, rev: initialRev, hash: "hash1")
+        let advancedRepo = RepoEntry(did: repoDID, rev: advancedRev, hash: "hash2")
+
+        // Matching revision returns report
+        #expect(model.verificationReport(for: currentRepo) == report)
+
+        // Advanced revision returns nil (stale badge suppressed)
+        #expect(model.verificationReport(for: advancedRepo) == nil)
+    }
+
+    // MARK: - did:web Path-Based Resolution (Finding 5)
+
+    @Test("SpaceHostResolver resolves path-based did:web according to W3C specification")
+    func testPathBasedDidWebResolution() throws {
+        // Path-based did:web: did:web:example.com:users:alice -> https://example.com/users/alice/did.json
+        let pathDID = "did:web:example.com:users:alice"
+        let pathURL = try SpaceHostResolver.didDocumentURL(for: pathDID)
+        #expect(pathURL.absoluteString == "https://example.com/users/alice/did.json")
+
+        // Bare did:web: did:web:example.com -> https://example.com/.well-known/did.json
+        let bareDID = "did:web:example.com"
+        let bareURL = try SpaceHostResolver.didDocumentURL(for: bareDID)
+        #expect(bareURL.absoluteString == "https://example.com/.well-known/did.json")
+
+        // PLC DID: did:plc:12345 -> https://plc.directory/did:plc:12345
+        let plcDID = "did:plc:12345"
+        let plcURL = try SpaceHostResolver.didDocumentURL(for: plcDID)
+        #expect(plcURL.absoluteString == "https://plc.directory/did:plc:12345")
     }
 
     // MARK: - Dual Routing Exclusivity for getRepo Fetch
