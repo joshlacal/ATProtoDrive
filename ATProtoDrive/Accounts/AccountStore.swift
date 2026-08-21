@@ -291,6 +291,10 @@ public final class AccountStore {
         pendingLogins.count
     }
 
+    var firstPendingStateToken: String? {
+        pendingLogins.keys.first
+    }
+
     func hasPendingLogin(for state: String) -> Bool {
         pendingLogins[state] != nil
     }
