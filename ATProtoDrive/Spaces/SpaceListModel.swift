@@ -41,24 +41,52 @@ public final class SpaceListModel {
         self.error = error
     }
 
+    /// Pure pagination helper: repeatedly invokes `fetchPage` following `output.cursor` until nil,
+    /// accumulating all `SpaceItem` instances across pages and protecting against duplicate-cursor loops.
+    public static func fetchAllSpaces(
+        accountDID: String,
+        fetchPage: (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListSpaces.Output?)
+    ) async throws -> [SpaceItem] {
+        var accumulated: [SpaceItem] = []
+        var currentCursor: String? = nil
+        var seenCursors = Set<String>()
+
+        repeat {
+            let (responseCode, output) = try await fetchPage(currentCursor)
+            guard (200...299).contains(responseCode) else {
+                throw ATProtoXRPCError(error: "HTTP \(responseCode)", message: nil, statusCode: responseCode)
+            }
+            guard let output else {
+                throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body (HTTP \(responseCode))", statusCode: responseCode)
+            }
+
+            let pageItems = output.spaces.map { SpaceItem(ref: $0.uri, accountDID: accountDID) }
+            accumulated.append(contentsOf: pageItems)
+
+            if let nextCursor = output.cursor, !nextCursor.isEmpty, !seenCursors.contains(nextCursor) {
+                seenCursors.insert(nextCursor)
+                currentCursor = nextCursor
+            } else {
+                currentCursor = nil
+            }
+        } while currentCursor != nil
+
+        return accumulated
+    }
+
     public func load(account: AccountStore.Account) async {
         isLoading = true
         error = nil
         defer { isLoading = false }
 
         do {
-            let (responseCode, output) = try await account.client.com.atproto.space.listSpaces(
-                input: ComAtprotoSpaceListSpaces.Parameters()
-            )
-            guard (200...299).contains(responseCode) else {
-                self.error = "XRPC error (HTTP \(responseCode))"
-                return
+            let fetchedSpaces = try await Self.fetchAllSpaces(accountDID: account.id) { cursor in
+                let (responseCode, output) = try await account.client.com.atproto.space.listSpaces(
+                    input: ComAtprotoSpaceListSpaces.Parameters(cursor: cursor)
+                )
+                return (responseCode, output)
             }
-            guard let output else {
-                self.error = "XRPC error: empty response body (HTTP \(responseCode))"
-                return
-            }
-            self.spaces = output.spaces.map { SpaceItem(ref: $0.uri, accountDID: account.id) }
+            self.spaces = fetchedSpaces
             self.error = nil
         } catch {
             self.error = error.localizedDescription

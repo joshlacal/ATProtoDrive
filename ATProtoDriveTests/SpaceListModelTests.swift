@@ -101,4 +101,68 @@ struct SpaceListModelTests {
         #expect(modelWithError.spaces.isEmpty)
         #expect(modelWithError.error == "Test error message")
     }
+
+    @Test("fetchAllSpaces accumulates across multiple pages using cursor")
+    func testFetchAllSpacesPagination() async throws {
+        let ref1 = try SpaceRef(uriString: "at://did:plc:alice/space/com.example.type/space1")
+        let ref2 = try SpaceRef(uriString: "at://did:plc:alice/space/com.example.type/space2")
+        let ref3 = try SpaceRef(uriString: "at://did:plc:alice/space/com.example.type/space3")
+
+        let page1 = ComAtprotoSpaceListSpaces.Output(
+            cursor: "cursor_page_2",
+            spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: ref1), ComAtprotoSpaceListSpaces.SpaceView(uri: ref2)]
+        )
+        let page2 = ComAtprotoSpaceListSpaces.Output(
+            cursor: nil,
+            spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: ref3)]
+        )
+
+        var requestedCursors: [String?] = []
+
+        let result = try await SpaceListModel.fetchAllSpaces(accountDID: "did:plc:alice") { cursor in
+            requestedCursors.append(cursor)
+            if cursor == nil {
+                return (200, page1)
+            } else if cursor == "cursor_page_2" {
+                return (200, page2)
+            } else {
+                return (404, nil)
+            }
+        }
+
+        #expect(requestedCursors == [nil, "cursor_page_2"])
+        #expect(result.count == 3)
+        #expect(result[0].skey == "space1")
+        #expect(result[1].skey == "space2")
+        #expect(result[2].skey == "space3")
+        #expect(result[0].isOwnAuthority == true)
+    }
+
+    @Test("fetchAllSpaces protects against duplicate cursor cycle loops")
+    func testFetchAllSpacesCycleProtection() async throws {
+        let ref = try SpaceRef(uriString: "at://did:plc:alice/space/com.example.type/space1")
+        let loopingPage = ComAtprotoSpaceListSpaces.Output(
+            cursor: "loop_cursor",
+            spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: ref)]
+        )
+
+        var requestCount = 0
+        let result = try await SpaceListModel.fetchAllSpaces(accountDID: "did:plc:alice") { _ in
+            requestCount += 1
+            return (200, loopingPage)
+        }
+
+        // Second time "loop_cursor" is seen, it stops rather than infinite looping
+        #expect(requestCount == 2)
+        #expect(result.count == 2)
+    }
+
+    @Test("fetchAllSpaces propagates non-200 and XRPC errors")
+    func testFetchAllSpacesErrorPropagation() async {
+        await #expect(throws: Error.self) {
+            try await SpaceListModel.fetchAllSpaces(accountDID: "did:plc:alice") { _ in
+                throw ATProtoXRPCError(error: "SpaceNotFound", message: "The requested space does not exist", statusCode: 404)
+            }
+        }
+    }
 }
