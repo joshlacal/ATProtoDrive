@@ -90,17 +90,27 @@ public final class SpaceDetailModel {
         }
     }
 
-    /// Distinguishes an unreadable member list (e.g. endpoint not supported on this space type / PDS)
-    /// from a genuine XRPC error (auth/permission/server failure).
+    /// Determines whether members should be fetched for a space.
+    /// Members are listed whenever the space authority is owned by the current account,
+    /// regardless of the specific space type NSID.
+    nonisolated public static func shouldFetchMembers(space: SpaceItem) -> Bool {
+        space.isOwnAuthority
+    }
+
+    /// Distinguishes an unreadable member list (e.g. endpoint/method not implemented or supported on this server)
+    /// from a genuine XRPC error (auth, permission, space not found, invalid request, server error).
     nonisolated public static func isMemberListNotReadableError(_ error: Error) -> Bool {
         if let xrpc = error as? ATProtoXRPCError {
-            if xrpc.error == "MethodNotFound" || xrpc.error == "NotFound" {
+            if xrpc.error == "MethodNotImplemented" ||
+                xrpc.error == "MethodNotFound" ||
+                xrpc.error == "XRPCNotSupported" {
                 return true
             }
-            if let msg = xrpc.message?.lowercased(), msg.contains("method not found") || msg.contains("not implemented") {
-                return true
-            }
-            if xrpc.statusCode == 404 && xrpc.error == "InvalidRequest" {
+            if let msg = xrpc.message?.lowercased(),
+               msg.contains("method not implemented") ||
+               msg.contains("not implemented") ||
+               msg.contains("method not found") ||
+               msg.contains("xrpc not supported") {
                 return true
             }
         }
@@ -221,6 +231,33 @@ public final class SpaceDetailModel {
         return accumulated
     }
 
+    // MARK: - Loading Pipeline
+
+    /// Pipeline helper that executes repos and conditional members fetching with injected closures,
+    /// allowing full deterministic testing of the loading flow and members gating.
+    nonisolated public static func loadSpaceDetails(
+        space: SpaceItem,
+        fetchRepos: @Sendable () async throws -> [RepoEntry],
+        fetchMembers: @Sendable () async throws -> [String]
+    ) async throws -> (repos: [RepoEntry], members: [String]?) {
+        let repos = try await fetchRepos()
+        let members: [String]?
+        if shouldFetchMembers(space: space) {
+            do {
+                members = try await fetchMembers()
+            } catch {
+                if isMemberListNotReadableError(error) {
+                    members = nil
+                } else {
+                    throw error
+                }
+            }
+        } else {
+            members = nil
+        }
+        return (repos, members)
+    }
+
     // MARK: - Load Action
 
     public func load(space: SpaceItem, account: AccountStore.Account) async {
@@ -236,37 +273,29 @@ public final class SpaceDetailModel {
             let endpoints = try await resolver.resolve(authorityDID: space.authorityDID)
             let spaceHost = endpoints.spaceHost
 
-            let fetchedRepos = try await Self.fetchAllRepos { cursor in
-                guard let requestURL = Self.makeListReposURL(spaceHost: spaceHost, space: space.ref, cursor: cursor) else {
-                    throw SpaceHostResolutionError.invalidDID(space.authorityDID)
-                }
-                let (data, response) = try await account.credentials.get(url: requestURL, space: space.ref)
-                return (response.statusCode, data)
-            }
-
-            self.repos = fetchedRepos
-
-            // Fetch members if own authority (any space type)
-            if space.isOwnAuthority {
-                do {
-                    let fetchedMembers = try await Self.fetchAllMembers { cursor in
+            let (fetchedRepos, fetchedMembers) = try await Self.loadSpaceDetails(
+                space: space,
+                fetchRepos: {
+                    try await Self.fetchAllRepos { cursor in
+                        guard let requestURL = Self.makeListReposURL(spaceHost: spaceHost, space: space.ref, cursor: cursor) else {
+                            throw SpaceHostResolutionError.invalidDID(space.authorityDID)
+                        }
+                        let (data, response) = try await account.credentials.get(url: requestURL, space: space.ref)
+                        return (responseCode: response.statusCode, data: data)
+                    }
+                },
+                fetchMembers: {
+                    try await Self.fetchAllMembers { cursor in
                         let (responseCode, output) = try await account.client.com.atproto.simplespace.listMembers(
                             input: ComAtprotoSimplespaceListMembers.Parameters(space: space.ref, cursor: cursor)
                         )
                         return (responseCode, output)
                     }
-                    self.members = fetchedMembers
-                } catch {
-                    if Self.isMemberListNotReadableError(error) {
-                        self.members = nil
-                    } else {
-                        throw error
-                    }
                 }
-            } else {
-                self.members = nil
-            }
+            )
 
+            self.repos = fetchedRepos
+            self.members = fetchedMembers
             self.error = nil
             self.errorState = nil
         } catch {

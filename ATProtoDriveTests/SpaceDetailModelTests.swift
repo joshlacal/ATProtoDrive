@@ -298,8 +298,17 @@ struct SpaceDetailModelTests {
         #expect(callCount == 2)
         #expect(result.count == 2)
     }
+    // MARK: - isMemberListNotReadableError Tests
+
     @Test("isMemberListNotReadableError correctly identifies unreadable member list vs genuine XRPC error")
     func testIsMemberListNotReadableError() {
+        let methodNotImplemented = ATProtoXRPCError(
+            error: "MethodNotImplemented",
+            message: "Method com.atproto.simplespace.listMembers not implemented",
+            statusCode: 501
+        )
+        #expect(SpaceDetailModel.isMemberListNotReadableError(methodNotImplemented) == true)
+
         let methodNotFound = ATProtoXRPCError(
             error: "MethodNotFound",
             message: "Method com.atproto.simplespace.listMembers not found",
@@ -307,12 +316,34 @@ struct SpaceDetailModelTests {
         )
         #expect(SpaceDetailModel.isMemberListNotReadableError(methodNotFound) == true)
 
-        let notImplemented = ATProtoXRPCError(
-            error: "InvalidRequest",
-            message: "Member list not implemented for this space",
+        let xrpcNotSupported = ATProtoXRPCError(
+            error: "XRPCNotSupported",
+            message: "XRPC endpoint not supported",
             statusCode: 400
         )
-        #expect(SpaceDetailModel.isMemberListNotReadableError(notImplemented) == true)
+        #expect(SpaceDetailModel.isMemberListNotReadableError(xrpcNotSupported) == true)
+
+        let messageContainsNotImplemented = ATProtoXRPCError(
+            error: "CustomError",
+            message: "This server has not implemented member listing",
+            statusCode: 400
+        )
+        #expect(SpaceDetailModel.isMemberListNotReadableError(messageContainsNotImplemented) == true)
+
+        // Genuine XRPC errors that MUST NOT be suppressed:
+        let notFound = ATProtoXRPCError(
+            error: "NotFound",
+            message: "Space not found",
+            statusCode: 404
+        )
+        #expect(SpaceDetailModel.isMemberListNotReadableError(notFound) == false)
+
+        let invalidRequest = ATProtoXRPCError(
+            error: "InvalidRequest",
+            message: "Invalid space parameter",
+            statusCode: 400
+        )
+        #expect(SpaceDetailModel.isMemberListNotReadableError(invalidRequest) == false)
 
         let authError = ATProtoXRPCError(
             error: "AuthError",
@@ -329,20 +360,116 @@ struct SpaceDetailModelTests {
         #expect(SpaceDetailModel.isMemberListNotReadableError(missingScope) == false)
     }
 
-    @Test("SpaceItem correctly flags own authority for arbitrary space types")
-    func testOwnAuthorityWithArbitrarySpaceType() throws {
+    // MARK: - Members Gate & Pipeline Tests
+
+    @Test("shouldFetchMembers gates on isOwnAuthority regardless of spaceType NSID")
+    func testShouldFetchMembersGate() throws {
         let accountDID = "did:plc:alice"
-        let customTypeRef = try SpaceRef(uriString: "at://did:plc:alice/space/com.example.customtype/drive1")
-        let sharedTypeRef = try SpaceRef(uriString: "at://did:plc:bob/space/com.example.customtype/drive1")
 
-        let ownItem = SpaceItem(ref: customTypeRef, accountDID: accountDID)
-        let sharedItem = SpaceItem(ref: sharedTypeRef, accountDID: accountDID)
+        let ownSimplespace = SpaceItem(
+            ref: try SpaceRef(uriString: "at://did:plc:alice/space/com.atproto.simplespace/my-space"),
+            accountDID: accountDID
+        )
+        let ownArbitraryType = SpaceItem(
+            ref: try SpaceRef(uriString: "at://did:plc:alice/space/com.example.customdrive/work-drive"),
+            accountDID: accountDID
+        )
+        let foreignSimplespace = SpaceItem(
+            ref: try SpaceRef(uriString: "at://did:plc:bob/space/com.atproto.simplespace/shared-space"),
+            accountDID: accountDID
+        )
+        let foreignArbitraryType = SpaceItem(
+            ref: try SpaceRef(uriString: "at://did:plc:bob/space/com.example.customdrive/shared-drive"),
+            accountDID: accountDID
+        )
 
-        #expect(ownItem.isOwnAuthority == true)
-        #expect(ownItem.spaceType == "com.example.customtype")
-        #expect(sharedItem.isOwnAuthority == false)
+        #expect(SpaceDetailModel.shouldFetchMembers(space: ownSimplespace) == true)
+        #expect(SpaceDetailModel.shouldFetchMembers(space: ownArbitraryType) == true)
+        #expect(SpaceDetailModel.shouldFetchMembers(space: foreignSimplespace) == false)
+        #expect(SpaceDetailModel.shouldFetchMembers(space: foreignArbitraryType) == false)
     }
 
+    @Test("loadSpaceDetails invokes fetchMembers for owned space with arbitrary type NSID")
+    func testLoadSpaceDetailsInvokesMembersForOwnedArbitraryType() async throws {
+        let accountDID = "did:plc:alice"
+        let space = SpaceItem(
+            ref: try SpaceRef(uriString: "at://did:plc:alice/space/org.custom.workspace/project1"),
+            accountDID: accountDID
+        )
+
+        let membersTracker = TestCallTracker()
+        let expectedRepo = RepoEntry(did: "did:plc:alice", rev: "3l3vbfz2zsk22", hash: "hash123")
+
+        let result = try await SpaceDetailModel.loadSpaceDetails(
+            space: space,
+            fetchRepos: { [expectedRepo] },
+            fetchMembers: {
+                await membersTracker.record(cursor: nil)
+                return ["did:plc:alice", "did:plc:bob"]
+            }
+        )
+
+        let memberFetchCount = await membersTracker.count
+        #expect(memberFetchCount == 1)
+        #expect(result.repos == [expectedRepo])
+        #expect(result.members == ["did:plc:alice", "did:plc:bob"])
+    }
+
+    @Test("loadSpaceDetails does not invoke fetchMembers for foreign space with arbitrary type NSID")
+    func testLoadSpaceDetailsSkipsMembersForForeignArbitraryType() async throws {
+        let accountDID = "did:plc:alice"
+        let space = SpaceItem(
+            ref: try SpaceRef(uriString: "at://did:plc:bob/space/org.custom.workspace/project1"),
+            accountDID: accountDID
+        )
+
+        let membersTracker = TestCallTracker()
+        let expectedRepo = RepoEntry(did: "did:plc:bob", rev: "3l3vbfz2zsk22", hash: "hash123")
+
+        let result = try await SpaceDetailModel.loadSpaceDetails(
+            space: space,
+            fetchRepos: { [expectedRepo] },
+            fetchMembers: {
+                await membersTracker.record(cursor: nil)
+                return ["did:plc:bob"]
+            }
+        )
+
+        let memberFetchCount = await membersTracker.count
+        #expect(memberFetchCount == 0)
+        #expect(result.repos == [expectedRepo])
+        #expect(result.members == nil)
+    }
+
+    @Test("loadSpaceDetails suppresses unimplemented member list but throws genuine XRPC errors")
+    func testLoadSpaceDetailsErrorBehavior() async throws {
+        let accountDID = "did:plc:alice"
+        let space = SpaceItem(
+            ref: try SpaceRef(uriString: "at://did:plc:alice/space/com.example.drive/main"),
+            accountDID: accountDID
+        )
+
+        // Suppressed: MethodNotImplemented returns members = nil without error
+        let suppressedResult = try await SpaceDetailModel.loadSpaceDetails(
+            space: space,
+            fetchRepos: { [] },
+            fetchMembers: {
+                throw ATProtoXRPCError(error: "MethodNotImplemented", message: "Not implemented", statusCode: 501)
+            }
+        )
+        #expect(suppressedResult.members == nil)
+
+        // Not suppressed: genuine NotFound throws
+        await #expect(throws: ATProtoXRPCError.self) {
+            _ = try await SpaceDetailModel.loadSpaceDetails(
+                space: space,
+                fetchRepos: { [] },
+                fetchMembers: {
+                    throw ATProtoXRPCError(error: "NotFound", message: "Record not found", statusCode: 404)
+                }
+            )
+        }
+    }
 
     // MARK: - SpaceDetailModel State Tests
 

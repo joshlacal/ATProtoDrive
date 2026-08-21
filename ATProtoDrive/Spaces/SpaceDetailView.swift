@@ -25,9 +25,9 @@ public struct SpaceDetailView: View {
 
                 if account == nil {
                     ContentUnavailableView(
-                        "No Active Account",
+                        "Account Unavailable",
                         systemImage: "person.crop.circle.badge.exclamationmark",
-                        description: Text("Sign in with an active account to load space details.")
+                        description: Text("The owning account for this space is no longer available. Please sign in again.")
                     )
                     .padding(.top, 24)
                 } else if model.isLoading && model.repos.isEmpty && model.errorState == nil {
