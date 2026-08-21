@@ -74,6 +74,40 @@ public struct RecordTableView: View {
                         }
                         .width(min: 180, ideal: 260)
                     }
+                    .contextMenu(forSelectionType: RecordRow.ID.self) { selectedIDs in
+                        if let targetID = selectedIDs.first, let row = model.rows.first(where: { $0.id == targetID }) {
+                            Button {
+                                PasteboardHelper.copyString(row.uri)
+                            } label: {
+                                Label("Copy at:// URI", systemImage: "link")
+                            }
+
+                            Button {
+                                PasteboardHelper.copyString(row.cid)
+                            } label: {
+                                Label("Copy CID", systemImage: "doc.on.doc")
+                            }
+
+                            Button {
+                                PasteboardHelper.copyString(row.json)
+                            } label: {
+                                Label("Copy JSON", systemImage: "curlybraces")
+                            }
+
+                            Divider()
+
+                            Button(role: .destructive) {
+                                recordToDelete = row
+                            } label: {
+                                Label("Delete Record", systemImage: "trash")
+                            }
+                            .disabled(!isOwnRepo || account == nil)
+                        }
+                    } primaryAction: { selectedIDs in
+                        if let targetID = selectedIDs.first {
+                            selectedRecordID = targetID
+                        }
+                    }
                 }
             }
             .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
@@ -81,7 +115,11 @@ public struct RecordTableView: View {
             // Right Inspector Panel
             RecordInspectorView(
                 record: selectedRecord,
-                commit: model.commit
+                commit: model.commit,
+                space: space,
+                repo: repo,
+                account: account,
+                model: model
             )
             .frame(minWidth: 260, idealWidth: 320, maxWidth: 500, maxHeight: .infinity)
         }

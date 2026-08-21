@@ -3,16 +3,40 @@
 //  ATProtoDrive
 //
 
+import AppKit
+import Foundation
+import QuickLook
 import SwiftUI
 import Petrel
+import UniformTypeIdentifiers
 
 public struct RecordInspectorView: View {
     let record: RecordRow?
     let commit: (rev: String, hash: String)?
+    let space: SpaceItem?
+    let repo: RepoEntry?
+    let account: AccountStore.Account?
+    let model: RecordListModel?
 
-    public init(record: RecordRow?, commit: (rev: String, hash: String)? = nil) {
+    @State private var quickLookURL: URL?
+    @State private var isLoadingBlob = false
+    @State private var activeBlobCID: String?
+    @State private var blobError: String?
+
+    public init(
+        record: RecordRow?,
+        commit: (rev: String, hash: String)? = nil,
+        space: SpaceItem? = nil,
+        repo: RepoEntry? = nil,
+        account: AccountStore.Account? = nil,
+        model: RecordListModel? = nil
+    ) {
         self.record = record
         self.commit = commit
+        self.space = space
+        self.repo = repo
+        self.account = account
+        self.model = model
     }
 
     public var body: some View {
@@ -38,6 +62,13 @@ public struct RecordInspectorView: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
+                    .contextMenu {
+                        Button {
+                            PasteboardHelper.copyString(record.cid)
+                        } label: {
+                            Label("Copy CID", systemImage: "doc.on.doc")
+                        }
+                    }
 
                     HStack(spacing: 8) {
                         Text("URI:")
@@ -49,6 +80,13 @@ public struct RecordInspectorView: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
+                    .contextMenu {
+                        Button {
+                            PasteboardHelper.copyString(record.uri)
+                        } label: {
+                            Label("Copy at:// URI", systemImage: "link")
+                        }
+                    }
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -57,23 +95,85 @@ public struct RecordInspectorView: View {
                 Divider()
 
                 // Blob refs section if present
-                if !record.blobRefs.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Blob References (\(record.blobRefs.count))")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
+                if !record.blobEntries.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("Blob References (\(record.blobEntries.count))")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            if isLoadingBlob {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                        }
 
-                        ForEach(record.blobRefs, id: \.self) { blobCID in
-                            HStack(spacing: 6) {
+                        ForEach(record.blobEntries) { entry in
+                            HStack(spacing: 8) {
                                 Image(systemName: "doc.zipper")
                                     .foregroundStyle(.secondary)
-                                Text(blobCID)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
+
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(entry.cid)
+                                        .font(.system(.caption, design: .monospaced))
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+
+                                    if let mime = entry.mimeType {
+                                        Text(mime)
+                                            .font(.system(.caption2, design: .monospaced))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+
+                                Spacer()
+
+                                Button {
+                                    quickLookBlob(entry)
+                                } label: {
+                                    Image(systemName: "eye")
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Quick Look")
+                                .disabled(isLoadingBlob || account == nil)
+
+                                Button {
+                                    downloadBlob(entry)
+                                } label: {
+                                    Image(systemName: "arrow.down.circle")
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Download…")
+                                .disabled(isLoadingBlob || account == nil)
                             }
-                            .padding(.vertical, 2)
+                            .padding(.vertical, 3)
+                            .padding(.horizontal, 6)
+                            .background(activeBlobCID == entry.cid ? Color.accentColor.opacity(0.1) : Color.clear)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .contextMenu {
+                                Button {
+                                    downloadBlob(entry)
+                                } label: {
+                                    Label("Download…", systemImage: "arrow.down.circle")
+                                }
+                                .disabled(account == nil)
+
+                                Button {
+                                    quickLookBlob(entry)
+                                } label: {
+                                    Label("Quick Look", systemImage: "eye")
+                                }
+                                .disabled(account == nil)
+
+                                Divider()
+
+                                Button {
+                                    PasteboardHelper.copyString(entry.cid)
+                                } label: {
+                                    Label("Copy CID", systemImage: "doc.on.doc")
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal)
@@ -91,6 +191,13 @@ public struct RecordInspectorView: View {
                         .textSelection(.enabled)
                         .padding()
                         .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contextMenu {
+                    Button {
+                        PasteboardHelper.copyString(record.json)
+                    } label: {
+                        Label("Copy JSON", systemImage: "curlybraces")
+                    }
                 }
 
                 Divider()
@@ -115,6 +222,17 @@ public struct RecordInspectorView: View {
                 }
             }
             .frame(minWidth: 260)
+            .quickLookPreview($quickLookURL)
+            .alert("Blob Action Error", isPresented: Binding(
+                get: { blobError != nil },
+                set: { if !$0 { blobError = nil } }
+            )) {
+                Button("OK", role: .cancel) { blobError = nil }
+            } message: {
+                if let blobError {
+                    Text(blobError)
+                }
+            }
         } else {
             ContentUnavailableView(
                 "No Record Selected",
@@ -122,6 +240,72 @@ public struct RecordInspectorView: View {
                 description: Text("Select a record to inspect its value and metadata.")
             )
             .frame(minWidth: 260)
+        }
+    }
+
+    private func downloadBlob(_ entry: BlobRefEntry) {
+        guard let space = space, let repo = repo, let account = account else { return }
+        let savePanel = NSSavePanel()
+        savePanel.title = "Save Blob"
+        savePanel.nameFieldStringValue = BlobFileHelper.suggestedFilename(cid: entry.cid, mimeType: entry.mimeType)
+        if let ext = BlobFileHelper.fileExtension(forMimeType: entry.mimeType),
+           let utType = UTType(filenameExtension: ext) {
+            savePanel.allowedContentTypes = [utType]
+        }
+        savePanel.canCreateDirectories = true
+
+        if savePanel.runModal() == .OK, let targetURL = savePanel.url {
+            let modelToUse = model ?? RecordListModel()
+            activeBlobCID = entry.cid
+            isLoadingBlob = true
+            Task {
+                defer {
+                    isLoadingBlob = false
+                    activeBlobCID = nil
+                }
+                do {
+                    let data = try await modelToUse.getBlob(
+                        space: space,
+                        repo: repo,
+                        cid: entry.cid,
+                        account: account
+                    )
+                    try data.write(to: targetURL)
+                } catch {
+                    blobError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func quickLookBlob(_ entry: BlobRefEntry) {
+        guard let space = space, let repo = repo, let account = account else { return }
+        let modelToUse = model ?? RecordListModel()
+        activeBlobCID = entry.cid
+        isLoadingBlob = true
+        Task {
+            defer {
+                isLoadingBlob = false
+                activeBlobCID = nil
+            }
+            do {
+                let data = try await modelToUse.getBlob(
+                    space: space,
+                    repo: repo,
+                    cid: entry.cid,
+                    account: account
+                )
+                let tempURL = try BlobFileHelper.writeTempFile(
+                    cid: entry.cid,
+                    mimeType: entry.mimeType,
+                    data: data
+                )
+                await MainActor.run {
+                    quickLookURL = tempURL
+                }
+            } catch {
+                blobError = error.localizedDescription
+            }
         }
     }
 }

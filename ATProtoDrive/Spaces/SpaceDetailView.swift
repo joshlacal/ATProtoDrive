@@ -184,19 +184,26 @@ public struct SpaceDetailView: View {
                 Text(space.skey)
                     .font(.title2.bold())
                 Spacer()
-                if space.isOwnAuthority {
-                    Menu {
+                Menu {
+                    Button {
+                        PasteboardHelper.copyString(space.ref.uriString())
+                    } label: {
+                        Label("Copy Space Ref", systemImage: "doc.on.doc")
+                    }
+
+                    if space.isOwnAuthority {
+                        Divider()
                         Button(role: .destructive) {
                             showingDeleteSpaceConfirmation = true
                         } label: {
                             Label("Delete Space…", systemImage: "trash")
                         }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .font(.title3)
                     }
-                    .menuStyle(.borderlessButton)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.title3)
                 }
+                .menuStyle(.borderlessButton)
 
                 Text(space.isOwnAuthority ? "Owned Space" : "Shared Space")
                     .font(.caption.weight(.medium))
@@ -216,9 +223,23 @@ public struct SpaceDetailView: View {
                 LabeledContent("Type", value: space.spaceType)
                 LabeledContent("Key", value: space.skey)
                 LabeledContent("URI", value: space.ref.uriString())
+                    .contextMenu {
+                        Button {
+                            PasteboardHelper.copyString(space.ref.uriString())
+                        } label: {
+                            Label("Copy Space Ref", systemImage: "doc.on.doc")
+                        }
+                    }
             }
             .font(.caption)
             .padding(.top, 4)
+        }
+        .contextMenu {
+            Button {
+                PasteboardHelper.copyString(space.ref.uriString())
+            } label: {
+                Label("Copy Space Ref", systemImage: "doc.on.doc")
+            }
         }
     }
 

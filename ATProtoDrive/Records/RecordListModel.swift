@@ -3,9 +3,28 @@
 //  ATProtoDrive
 //
 
+import AppKit
 import Foundation
 import Observation
 import Petrel
+import UniformTypeIdentifiers
+
+public struct BlobRefEntry: Identifiable, Hashable, Sendable {
+    public var id: String { cid }
+    public let cid: String
+    public let mimeType: String?
+    public let size: Int?
+
+    public init(
+        cid: String,
+        mimeType: String? = nil,
+        size: Int? = nil
+    ) {
+        self.cid = cid
+        self.mimeType = mimeType
+        self.size = size
+    }
+}
 
 public struct RecordRow: Identifiable, Hashable, Sendable {
     public var id: String { uri }
@@ -15,6 +34,7 @@ public struct RecordRow: Identifiable, Hashable, Sendable {
     public let cid: String
     public let json: String       // pretty-printed record value
     public let blobRefs: [String] // extracted blob cids or links if any
+    public let blobEntries: [BlobRefEntry]
 
     public init(
         uri: String,
@@ -22,14 +42,88 @@ public struct RecordRow: Identifiable, Hashable, Sendable {
         rkey: String,
         cid: String,
         json: String,
-        blobRefs: [String] = []
+        blobRefs: [String] = [],
+        blobEntries: [BlobRefEntry]? = nil
     ) {
         self.uri = uri
         self.collection = collection
         self.rkey = rkey
         self.cid = cid
         self.json = json
-        self.blobRefs = blobRefs
+        if let blobEntries = blobEntries {
+            self.blobEntries = blobEntries
+            self.blobRefs = blobEntries.map(\.cid)
+        } else {
+            self.blobRefs = blobRefs
+            self.blobEntries = blobRefs.map { BlobRefEntry(cid: $0) }
+        }
+    }
+}
+
+public enum BlobFileHelper {
+    public static func fileExtension(forMimeType mimeType: String?) -> String? {
+        guard let mimeType = mimeType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !mimeType.isEmpty else {
+            return nil
+        }
+        if let utType = UTType(mimeType: mimeType), let ext = utType.preferredFilenameExtension {
+            return ext
+        }
+        let fallbackMap: [String: String] = [
+            "image/jpeg": "jpg",
+            "image/jpg": "jpg",
+            "image/png": "png",
+            "image/gif": "gif",
+            "image/webp": "webp",
+            "image/svg+xml": "svg",
+            "text/plain": "txt",
+            "text/html": "html",
+            "text/markdown": "md",
+            "text/csv": "csv",
+            "application/json": "json",
+            "application/pdf": "pdf",
+            "application/zip": "zip",
+            "application/gzip": "gz",
+            "application/octet-stream": "bin",
+            "audio/mpeg": "mp3",
+            "audio/wav": "wav",
+            "audio/ogg": "ogg",
+            "video/mp4": "mp4",
+            "video/webm": "webm",
+            "video/quicktime": "mov"
+        ]
+        return fallbackMap[mimeType]
+    }
+
+    public static func suggestedFilename(cid: String, mimeType: String?) -> String {
+        if let ext = fileExtension(forMimeType: mimeType), !ext.isEmpty {
+            return "\(cid).\(ext)"
+        }
+        return cid
+    }
+
+    public static func writeTempFile(
+        cid: String,
+        mimeType: String?,
+        data: Data,
+        directory: URL = FileManager.default.temporaryDirectory
+    ) throws -> URL {
+        let filename = suggestedFilename(cid: cid, mimeType: mimeType)
+        let fileURL = directory.appendingPathComponent(filename)
+        try data.write(to: fileURL, options: .atomic)
+        return fileURL
+    }
+}
+
+public enum PasteboardHelper {
+    @discardableResult
+    public static func copyString(_ string: String, pasteboard: NSPasteboard = .general) -> Bool {
+        pasteboard.clearContents()
+        return pasteboard.setString(string, forType: .string)
+    }
+
+    public static func readString(pasteboard: NSPasteboard = .general) -> String? {
+        pasteboard.string(forType: .string)
     }
 }
 
@@ -301,27 +395,37 @@ public final class RecordListModel {
         return "{}"
     }
 
-    /// Extracts blob references (CIDs / links) from a JSON string or value container where `$type` or type indicates blob.
-    nonisolated public static func extractBlobRefs(from container: ATProtocolValueContainer?) -> [String] {
+    /// Extracts rich `BlobRefEntry` structures from a container where `$type` or type indicates blob.
+    nonisolated public static func extractBlobEntries(from container: ATProtocolValueContainer?) -> [BlobRefEntry] {
         guard let container = container else { return [] }
-        var blobs: [String] = []
+        var entries: [BlobRefEntry] = []
 
         func traverse(_ val: ATProtocolValueContainer) {
             switch val {
             case .object(let dict):
-                // Check if this object is a blob descriptor
-                // Standard atproto blob descriptor: { "$type": "blob", "ref": { "$link": "bafy..." }, "mimeType": "...", "size": 123 }
-                if let typeVal = dict["$type"] {
-                    if case .string(let typeStr) = typeVal, typeStr == "blob" {
-                        if let refVal = dict["ref"] {
-                            if case .link(let link) = refVal {
-                                blobs.append(link.cid.description)
-                            } else if case .object(let refDict) = refVal,
-                                      let linkVal = refDict["$link"],
-                                      case .string(let linkStr) = linkVal {
-                                blobs.append(linkStr)
-                            }
+                if let typeVal = dict["$type"], case .string(let typeStr) = typeVal, typeStr == "blob" {
+                    var cidStr: String?
+                    if let refVal = dict["ref"] {
+                        if case .link(let link) = refVal {
+                            cidStr = link.cid.description
+                        } else if case .object(let refDict) = refVal,
+                                  let linkVal = refDict["$link"],
+                                  case .string(let str) = linkVal {
+                            cidStr = str
                         }
+                    }
+                    var mime: String?
+                    if let mimeVal = dict["mimeType"], case .string(let m) = mimeVal {
+                        mime = m
+                    }
+                    var size: Int?
+                    if let sizeVal = dict["size"] {
+                        if case .number(let s) = sizeVal {
+                            size = s
+                        }
+                    }
+                    if let cid = cidStr {
+                        entries.append(BlobRefEntry(cid: cid, mimeType: mime, size: size))
                     }
                 }
                 for child in dict.values {
@@ -333,20 +437,33 @@ public final class RecordListModel {
                 }
             case .unknownType(let typeStr, let child):
                 if typeStr == "blob" {
-                    if case .object(let dict) = child,
-                       let refVal = dict["ref"] {
-                        if case .link(let link) = refVal {
-                            blobs.append(link.cid.description)
-                        } else if case .object(let refDict) = refVal,
-                                  let linkVal = refDict["$link"],
-                                  case .string(let linkStr) = linkVal {
-                            blobs.append(linkStr)
+                    if case .object(let dict) = child {
+                        var cidStr: String?
+                        if let refVal = dict["ref"] {
+                            if case .link(let link) = refVal {
+                                cidStr = link.cid.description
+                            } else if case .object(let refDict) = refVal,
+                                      let linkVal = refDict["$link"],
+                                      case .string(let str) = linkVal {
+                                cidStr = str
+                            }
+                        }
+                        var mime: String?
+                        if let mimeVal = dict["mimeType"], case .string(let m) = mimeVal {
+                            mime = m
+                        }
+                        var size: Int?
+                        if let sizeVal = dict["size"], case .number(let s) = sizeVal {
+                            size = s
+                        }
+                        if let cid = cidStr {
+                            entries.append(BlobRefEntry(cid: cid, mimeType: mime, size: size))
                         }
                     }
                 }
                 traverse(child)
-            case .link(let link):
-                _ = link
+            case .link:
+                break
             default:
                 break
             }
@@ -354,37 +471,56 @@ public final class RecordListModel {
 
         traverse(container)
 
-        // If AST traversal didn't catch specialized structures, inspect via JSONSerialization
-        if blobs.isEmpty,
+        if entries.isEmpty,
            let encoder = try? JSONEncoder().encode(container),
            let jsonObject = try? JSONSerialization.jsonObject(with: encoder) {
-            blobs = extractBlobRefsFromJSONObject(jsonObject)
+            entries = extractBlobEntriesFromJSONObject(jsonObject)
         }
 
-        return Array(NSOrderedSet(array: blobs)).compactMap { $0 as? String }
+        // Deduplicate entries by CID while preserving first encountered metadata
+        var uniqueCIDs = Set<String>()
+        var deduplicated: [BlobRefEntry] = []
+        for entry in entries {
+            if !uniqueCIDs.contains(entry.cid) {
+                uniqueCIDs.insert(entry.cid)
+                deduplicated.append(entry)
+            }
+        }
+        return deduplicated
     }
 
-    nonisolated private static func extractBlobRefsFromJSONObject(_ object: Any) -> [String] {
-        var results: [String] = []
+    nonisolated private static func extractBlobEntriesFromJSONObject(_ object: Any) -> [BlobRefEntry] {
+        var results: [BlobRefEntry] = []
         if let dict = object as? [String: Any] {
             if let type = dict["$type"] as? String, type == "blob" {
+                var cidStr: String?
                 if let ref = dict["ref"] as? [String: Any], let link = ref["$link"] as? String {
-                    results.append(link)
+                    cidStr = link
                 } else if let ref = dict["ref"] as? String {
-                    results.append(ref)
+                    cidStr = ref
                 } else if let cid = dict["cid"] as? String {
-                    results.append(cid)
+                    cidStr = cid
+                }
+                let mime = dict["mimeType"] as? String
+                let size = dict["size"] as? Int
+                if let cid = cidStr {
+                    results.append(BlobRefEntry(cid: cid, mimeType: mime, size: size))
                 }
             }
             for value in dict.values {
-                results.append(contentsOf: extractBlobRefsFromJSONObject(value))
+                results.append(contentsOf: extractBlobEntriesFromJSONObject(value))
             }
         } else if let array = object as? [Any] {
             for item in array {
-                results.append(contentsOf: extractBlobRefsFromJSONObject(item))
+                results.append(contentsOf: extractBlobEntriesFromJSONObject(item))
             }
         }
         return results
+    }
+
+    /// Extracts blob references (CIDs / links) from a JSON string or value container where `$type` or type indicates blob.
+    nonisolated public static func extractBlobRefs(from container: ATProtocolValueContainer?) -> [String] {
+        return extractBlobEntries(from: container).map(\.cid)
     }
 
     /// Constructs the canonical record `at://` URI for a space record:
@@ -409,7 +545,7 @@ public final class RecordListModel {
             rkey: record.rkey.description
         )
         let json = formatPrettyJSON(from: record.value)
-        let blobRefs = extractBlobRefs(from: record.value)
+        let blobEntries = extractBlobEntries(from: record.value)
 
         return RecordRow(
             uri: uri,
@@ -417,7 +553,7 @@ public final class RecordListModel {
             rkey: record.rkey.description,
             cid: record.cid.description,
             json: json,
-            blobRefs: blobRefs
+            blobEntries: blobEntries
         )
     }
 
@@ -484,6 +620,92 @@ public final class RecordListModel {
 
         return components.url
     }
+    /// Builds the full XRPC URL for `com.atproto.space.getBlob` on a member's PDS host.
+    nonisolated public static func makeGetBlobURL(
+        pdsHost: URL,
+        space: SpaceRef,
+        repoDID: String,
+        cid: String
+    ) -> URL? {
+        guard var components = URLComponents(url: pdsHost, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+
+        var path = components.path
+        if path.hasSuffix("/") {
+            path.removeLast()
+        }
+        path += "/xrpc/com.atproto.space.getBlob"
+        components.path = path
+
+        components.queryItems = [
+            URLQueryItem(name: "space", value: space.uriString()),
+            URLQueryItem(name: "repo", value: repoDID),
+            URLQueryItem(name: "cid", value: cid)
+        ]
+
+        return components.url
+    }
+
+    /// Pure pipeline helper that decides and executes the own-vs-foreign repo path for blob retrieval:
+    /// - Own repo: uses `clientGetBlob`
+    /// - Foreign repo: uses `resolveDIDToPDS` + `credentialGet`
+    nonisolated public static func getBlobPipeline(
+        space: SpaceItem,
+        repo: RepoEntry,
+        cid: String,
+        accountDID: String,
+        clientGetBlob: @Sendable (_ cid: String) async throws -> (responseCode: Int, data: Data?),
+        resolveDIDToPDS: @Sendable (_ did: String) async throws -> URL,
+        credentialGet: @Sendable (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data)
+    ) async throws -> Data {
+        let isOwnRepo = (repo.did == accountDID)
+
+        if isOwnRepo {
+            let (responseCode, data) = try await clientGetBlob(cid)
+            guard (200...299).contains(responseCode) else {
+                if let data = data, let genericError = ATProtoErrorParser.parseGeneric(data: data, statusCode: responseCode) {
+                    throw genericError
+                }
+                throw ATProtoXRPCError(
+                    error: "GetBlobFailed_\(responseCode)",
+                    message: "HTTP \(responseCode)",
+                    statusCode: responseCode
+                )
+            }
+            guard let data = data else {
+                throw ATProtoXRPCError(
+                    error: "EmptyResponse",
+                    message: "No blob data returned",
+                    statusCode: responseCode
+                )
+            }
+            return data
+        } else {
+            let pdsURL = try await resolveDIDToPDS(repo.did)
+            guard let blobURL = makeGetBlobURL(
+                pdsHost: pdsURL,
+                space: space.ref,
+                repoDID: repo.did,
+                cid: cid
+            ) else {
+                throw SpaceHostResolutionError.invalidDID(repo.did)
+            }
+            let (responseCode, data) = try await credentialGet(blobURL, space.ref)
+            guard (200...299).contains(responseCode) else {
+                if let genericError = ATProtoErrorParser.parseGeneric(data: data, statusCode: responseCode) {
+                    throw genericError
+                }
+                throw ATProtoXRPCError(
+                    error: "GetBlobFailed_\(responseCode)",
+                    message: "HTTP \(responseCode)",
+                    statusCode: responseCode
+                )
+            }
+            return data
+        }
+    }
+
 
     /// Pure pagination helper: repeatedly invokes `fetchPage` following `output.cursor` until nil,
     /// decoding `ComAtprotoSpaceListRecords.Output` and protecting against duplicate-cursor loops.
@@ -922,6 +1144,41 @@ public final class RecordListModel {
             mimeType: mimeType,
             account: account,
             transport: transport
+        )
+    }
+    public func getBlob(
+        space: SpaceItem,
+        repo: RepoEntry,
+        cid: String,
+        account: AccountStore.Account,
+        clientGetBlob: (@Sendable (_ cid: String) async throws -> (responseCode: Int, data: Data?))? = nil
+    ) async throws -> Data {
+        let executeClientGetBlob: @Sendable (_ cid: String) async throws -> (responseCode: Int, data: Data?) = clientGetBlob ?? { blobCID in
+            let repoDIDObj = try DID(didString: repo.did)
+            let cidObj = try CID.parse(blobCID)
+            let (responseCode, output) = try await account.client.com.atproto.space.getBlob(
+                input: ComAtprotoSpaceGetBlob.Parameters(
+                    space: space.ref,
+                    repo: repoDIDObj,
+                    cid: cidObj
+                )
+            )
+            return (responseCode, output?.data)
+        }
+
+        return try await Self.getBlobPipeline(
+            space: space,
+            repo: repo,
+            cid: cid,
+            accountDID: account.id,
+            clientGetBlob: executeClientGetBlob,
+            resolveDIDToPDS: { did in
+                try await account.client.resolveDIDToPDSURL(did: did)
+            },
+            credentialGet: { url, spaceRef in
+                let (data, response) = try await account.credentials.get(url: url, space: spaceRef)
+                return (response.statusCode, data)
+            }
         )
     }
 }

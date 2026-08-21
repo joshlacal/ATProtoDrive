@@ -83,6 +83,13 @@ struct AccountSpacesSection: View {
                 ForEach(model.spaces) { space in
                     SpaceRowView(space: space)
                         .tag(space)
+                        .contextMenu {
+                            Button {
+                                PasteboardHelper.copyString(space.ref.uriString())
+                            } label: {
+                                Label("Copy Space Ref", systemImage: "doc.on.doc")
+                            }
+                        }
                 }
                 if let error = model.error {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -164,6 +171,13 @@ struct SpaceRowView: View {
                     .padding(.vertical, 2)
                     .background(.quaternary, in: Capsule())
                     .foregroundStyle(.secondary)
+            }
+        }
+        .contextMenu {
+            Button {
+                PasteboardHelper.copyString(space.ref.uriString())
+            } label: {
+                Label("Copy Space Ref", systemImage: "doc.on.doc")
             }
         }
     }

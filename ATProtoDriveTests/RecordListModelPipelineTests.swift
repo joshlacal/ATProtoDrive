@@ -318,4 +318,209 @@ struct RecordListModelPipelineTests {
         #expect(blobs.contains("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"))
         #expect(blobs.contains("bafyreif7h6gxlc6kpxthfclr3vkqffn4yixoqmmqr7m2kq4xfacgjnlvhm"))
     }
+
+    // MARK: - Task 11: Blob Fetch Dual Routing & Context Menu Helper Tests
+
+    @Test("Dual-path blob routing: own repo exclusively invokes clientGetBlob")
+    func testGetBlobOwnRepoRoutingExclusivity() async throws {
+        let spaceItem = try SpaceItem(
+            uriString: "at://did:plc:space1/space/com.atproto.feed/main",
+            accountDID: "did:plc:alice123"
+        )
+        let ownRepo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
+        let targetCID = "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"
+        let expectedData = Data("hello blob data".utf8)
+
+        let clientGetBlobCalled = TestCallTracker()
+        let didResolverCalled = TestCallTracker()
+        let credentialGetCalled = TestCallTracker()
+
+        let fetchedData = try await RecordListModel.getBlobPipeline(
+            space: spaceItem,
+            repo: ownRepo,
+            cid: targetCID,
+            accountDID: "did:plc:alice123",
+            clientGetBlob: { cid in
+                await clientGetBlobCalled.record(cursor: nil)
+                #expect(cid == targetCID)
+                return (200, expectedData)
+            },
+            resolveDIDToPDS: { _ in
+                await didResolverCalled.record(cursor: nil)
+                return URL(string: "https://pds.example.com")!
+            },
+            credentialGet: { _, _ in
+                await credentialGetCalled.record(cursor: nil)
+                return (200, Data())
+            }
+        )
+
+        #expect(fetchedData == expectedData)
+        let clientBlobCount = await clientGetBlobCalled.count
+        let didResCount = await didResolverCalled.count
+        let credGetCount = await credentialGetCalled.count
+
+        #expect(clientBlobCount == 1)
+        #expect(didResCount == 0)
+        #expect(credGetCount == 0)
+    }
+
+    @Test("Dual-path blob routing: foreign repo exclusively invokes resolveDIDToPDS and credentialGet")
+    func testGetBlobForeignRepoRoutingExclusivity() async throws {
+        let spaceItem = try SpaceItem(
+            uriString: "at://did:plc:space1/space/com.atproto.feed/main",
+            accountDID: "did:plc:alice123"
+        )
+        let foreignRepo = RepoEntry(did: "did:plc:bob456", rev: "rev1", hash: "hash1")
+        let targetCID = "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"
+        let expectedData = Data("foreign blob content".utf8)
+
+        let clientGetBlobCalled = TestCallTracker()
+        let didResolverCalled = TestCallTracker()
+        let credentialGetCalled = TestCallTracker()
+
+        let fetchedData = try await RecordListModel.getBlobPipeline(
+            space: spaceItem,
+            repo: foreignRepo,
+            cid: targetCID,
+            accountDID: "did:plc:alice123",
+            clientGetBlob: { _ in
+                await clientGetBlobCalled.record(cursor: nil)
+                return (200, Data())
+            },
+            resolveDIDToPDS: { did in
+                await didResolverCalled.record(cursor: nil)
+                #expect(did == "did:plc:bob456")
+                return URL(string: "https://bob.pds.place")!
+            },
+            credentialGet: { url, spaceRef in
+                await credentialGetCalled.record(cursor: nil)
+                #expect(spaceRef == spaceItem.ref)
+                #expect(url.host == "bob.pds.place")
+                #expect(url.path.contains("/xrpc/com.atproto.space.getBlob"))
+                let query = url.query ?? ""
+                #expect(query.contains("space=at%3A%2F%2Fdid%3Aplc%3Aspace1%2Fspace%2Fcom.atproto.feed%2Fmain") || query.contains("space=at://did:plc:space1/space/com.atproto.feed/main"))
+                #expect(query.contains("repo=did:plc:bob456") || query.contains("repo=did%3Aplc%3Abob456"))
+                #expect(query.contains("cid=\(targetCID)"))
+                return (200, expectedData)
+            }
+        )
+
+        #expect(fetchedData == expectedData)
+        let clientBlobCount = await clientGetBlobCalled.count
+        let didResCount = await didResolverCalled.count
+        let credGetCount = await credentialGetCalled.count
+
+        #expect(clientBlobCount == 0)
+        #expect(didResCount == 1)
+        #expect(credGetCount == 1)
+    }
+
+    @Test("makeGetBlobURL constructs valid XRPC query parameters")
+    func testMakeGetBlobURL() throws {
+        let spaceRef = try SpaceRef(uriString: "at://did:plc:space1/space/com.atproto.feed/main")
+        let pdsHost = URL(string: "https://pds.example.com/subpath/")!
+        let blobURL = try #require(RecordListModel.makeGetBlobURL(
+            pdsHost: pdsHost,
+            space: spaceRef,
+            repoDID: "did:plc:alice",
+            cid: "bafyreih321"
+        ))
+
+        #expect(blobURL.scheme == "https")
+        #expect(blobURL.host == "pds.example.com")
+        #expect(blobURL.path == "/subpath/xrpc/com.atproto.space.getBlob")
+        let query = try #require(blobURL.query)
+        #expect(query.contains("space="))
+        #expect(query.contains("repo=did%3Aplc%3Aalice") || query.contains("repo=did:plc:alice"))
+        #expect(query.contains("cid=bafyreih321"))
+    }
+
+    @Test("BlobFileHelper derives correct extensions and suggested filenames")
+    func testBlobFileHelperExtensions() throws {
+        #expect(BlobFileHelper.fileExtension(forMimeType: "image/png") == "png")
+        #expect(BlobFileHelper.fileExtension(forMimeType: "image/jpeg") == "jpeg" || BlobFileHelper.fileExtension(forMimeType: "image/jpeg") == "jpg")
+        #expect(BlobFileHelper.fileExtension(forMimeType: "application/json") == "json")
+        #expect(BlobFileHelper.fileExtension(forMimeType: "application/pdf") == "pdf")
+        #expect(BlobFileHelper.fileExtension(forMimeType: "text/plain") == "txt")
+        #expect(BlobFileHelper.fileExtension(forMimeType: nil) == nil)
+        #expect(BlobFileHelper.fileExtension(forMimeType: "") == nil)
+
+        let filenamePNG = BlobFileHelper.suggestedFilename(cid: "bafy123", mimeType: "image/png")
+        #expect(filenamePNG == "bafy123.png")
+
+        let filenameUnknown = BlobFileHelper.suggestedFilename(cid: "bafy123", mimeType: nil)
+        #expect(filenameUnknown == "bafy123")
+    }
+
+    @Test("BlobFileHelper writes temp file atomically with proper extension")
+    func testBlobFileHelperWriteTemp() throws {
+        let testData = Data("temporary file content test".utf8)
+        let tempURL = try BlobFileHelper.writeTempFile(
+            cid: "bafytesttemp123",
+            mimeType: "text/plain",
+            data: testData
+        )
+        defer {
+            try? FileManager.default.removeItem(at: tempURL)
+        }
+
+        #expect(tempURL.lastPathComponent == "bafytesttemp123.txt")
+        let readBack = try Data(contentsOf: tempURL)
+        #expect(readBack == testData)
+    }
+
+    @Test("PasteboardHelper copies and reads back exact payload strings")
+    @MainActor
+    func testPasteboardHelperPayloads() throws {
+        let testURI = "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz"
+        let testCID = "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"
+        let testJSON = "{\n  \"text\": \"Hello ATProto\"\n}"
+        let testSpaceRef = "at://did:plc:space1/space/com.atproto.feed/main"
+
+        PasteboardHelper.copyString(testURI)
+        #expect(PasteboardHelper.readString() == testURI)
+
+        PasteboardHelper.copyString(testCID)
+        #expect(PasteboardHelper.readString() == testCID)
+
+        PasteboardHelper.copyString(testJSON)
+        #expect(PasteboardHelper.readString() == testJSON)
+
+        PasteboardHelper.copyString(testSpaceRef)
+        #expect(PasteboardHelper.readString() == testSpaceRef)
+    }
+
+    @Test("extractBlobEntries extracts rich BlobRefEntry metadata including mimeType and size")
+    func testExtractBlobEntriesRich() throws {
+        let multiBlobJSON = """
+        {
+          "$type": "app.bsky.feed.post",
+          "text": "Rich blob test",
+          "embed": {
+            "$type": "app.bsky.embed.images",
+            "images": [
+              {
+                "image": {
+                  "$type": "blob",
+                  "ref": {
+                    "$link": "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"
+                  },
+                  "mimeType": "image/png",
+                  "size": 12345
+                }
+              }
+            ]
+          }
+        }
+        """
+        let data = try #require(multiBlobJSON.data(using: .utf8))
+        let container = try JSONDecoder().decode(ATProtocolValueContainer.self, from: data)
+
+        let entries = RecordListModel.extractBlobEntries(from: container)
+        #expect(entries.count == 1)
+        #expect(entries[0].cid == "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+        #expect(entries[0].mimeType == "image/png")
+        #expect(entries[0].size == 12345)
+    }
 }
