@@ -50,6 +50,7 @@ struct AccountSpacesSection: View {
     let account: AccountStore.Account
     @Binding var selectedSpace: SpaceItem?
     @State private var model = SpaceListModel()
+    @State private var showingCreateSpace = false
 
     var body: some View {
         Section {
@@ -97,12 +98,27 @@ struct AccountSpacesSection: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                Button {
+                    showingCreateSpace = true
+                } label: {
+                    Image(systemName: "plus")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("New Space")
+
                 if model.isLoading {
                     ProgressView()
                         .controlSize(.mini)
                 }
             }
             .contextMenu {
+                Button {
+                    showingCreateSpace = true
+                } label: {
+                    Label("New Space…", systemImage: "plus")
+                }
+                Divider()
                 Button(role: .destructive) {
                     Task {
                         await accountStore.remove(account.id)
@@ -117,6 +133,13 @@ struct AccountSpacesSection: View {
         }
         .refreshable {
             await model.load(account: account)
+        }
+        .sheet(isPresented: $showingCreateSpace) {
+            CreateSpaceSheet(account: account) { _ in
+                Task {
+                    await model.load(account: account)
+                }
+            }
         }
     }
 }

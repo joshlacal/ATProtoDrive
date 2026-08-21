@@ -13,7 +13,9 @@ public struct RecordTableView: View {
 
     @State private var model = RecordListModel()
     @State private var selectedRecordID: RecordRow.ID?
-
+    @State private var editorMode: RecordEditorSheet.Mode?
+    @State private var recordToDelete: RecordRow?
+    @State private var actionError: String?
     public init(
         space: SpaceItem,
         repo: RepoEntry,
@@ -89,6 +91,87 @@ public struct RecordTableView: View {
         .refreshable {
             if let account = account {
                 await model.load(space: space, repo: repo, account: account)
+            }
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    editorMode = .create()
+                } label: {
+                    Label("New Record", systemImage: "plus")
+                }
+                .disabled(account == nil)
+
+                Button {
+                    if let selectedRecord {
+                        editorMode = .edit(row: selectedRecord)
+                    }
+                } label: {
+                    Label("Edit Record", systemImage: "pencil")
+                }
+                .disabled(selectedRecord == nil || account == nil)
+
+                Button(role: .destructive) {
+                    if let selectedRecord {
+                        recordToDelete = selectedRecord
+                    }
+                } label: {
+                    Label("Delete Record", systemImage: "trash")
+                }
+                .disabled(selectedRecord == nil || account == nil)
+            }
+        }
+        .sheet(item: $editorMode) { mode in
+            if let account {
+                RecordEditorSheet(
+                    space: space,
+                    repo: repo,
+                    account: account,
+                    mode: mode
+                ) {
+                    Task {
+                        await model.load(space: space, repo: repo, account: account)
+                    }
+                }
+            }
+        }
+        .confirmationDialog(
+            "Delete Record",
+            isPresented: Binding(
+                get: { recordToDelete != nil },
+                set: { if !$0 { recordToDelete = nil } }
+            ),
+            presenting: recordToDelete
+        ) { record in
+            Button("Delete \(record.rkey)", role: .destructive) {
+                if let account {
+                    Task {
+                        do {
+                            try await model.deleteRecord(
+                                space: space,
+                                repo: repo,
+                                collection: record.collection,
+                                rkey: record.rkey,
+                                account: account
+                            )
+                            if selectedRecordID == record.id {
+                                selectedRecordID = nil
+                            }
+                        } catch {
+                            actionError = error.localizedDescription
+                        }
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { record in
+            Text("Are you sure you want to delete record \"\(record.rkey)\" from collection \"\(record.collection)\"?")
+        }
+        .alert("Error", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
+            Button("OK", role: .cancel) { actionError = nil }
+        } message: {
+            if let actionError {
+                Text(actionError)
             }
         }
     }

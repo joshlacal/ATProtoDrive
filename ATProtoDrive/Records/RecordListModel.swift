@@ -93,6 +93,296 @@ public final class RecordListModel {
     private func applySorting() {
         rows.sort(using: sortOrder)
     }
+    // MARK: - Validation & Write Pipelines
+
+    public enum RecordValidationError: LocalizedError, Equatable, Sendable {
+        case empty
+        case notJSONObject
+        case serializationFailed(String)
+        case decodingFailed(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .empty:
+                return "JSON content cannot be empty."
+            case .notJSONObject:
+                return "Invalid JSON: Root must be a JSON object ({ ... })."
+            case .serializationFailed(let msg):
+                return "Invalid JSON syntax: \(msg)"
+            case .decodingFailed(let msg):
+                return "Failed to parse ATProtocol value: \(msg)"
+            }
+        }
+    }
+
+    /// Validates raw JSON string using JSONSerialization and decodes into ATProtocolValueContainer.
+    nonisolated public static func validateRecordJSON(_ text: String) throws -> ATProtocolValueContainer {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw RecordValidationError.empty
+        }
+        guard let data = trimmed.data(using: .utf8) else {
+            throw RecordValidationError.serializationFailed("Could not encode string as UTF-8")
+        }
+
+        let jsonObject: Any
+        do {
+            jsonObject = try JSONSerialization.jsonObject(with: data)
+        } catch {
+            throw RecordValidationError.serializationFailed(error.localizedDescription)
+        }
+
+        guard jsonObject is [String: Any] else {
+            throw RecordValidationError.notJSONObject
+        }
+
+        do {
+            let container = try JSONDecoder().decode(ATProtocolValueContainer.self, from: data)
+            return container
+        } catch {
+            throw RecordValidationError.decodingFailed(error.localizedDescription)
+        }
+    }
+
+    /// Pure helper to construct `ComAtprotoSpaceCreateRecord.Input` after validating JSON.
+    nonisolated public static func makeCreateRecordInput(
+        space: SpaceRef,
+        repoDID: String,
+        collection: String,
+        rkey: String?,
+        jsonText: String
+    ) throws -> ComAtprotoSpaceCreateRecord.Input {
+        let container = try validateRecordJSON(jsonText)
+        let repo = try DID(didString: repoDID.trimmingCharacters(in: .whitespacesAndNewlines))
+        let colNSID = try NSID(nsidString: collection.trimmingCharacters(in: .whitespacesAndNewlines))
+        let recordKey: RecordKey?
+        if let rkey = rkey?.trimmingCharacters(in: .whitespacesAndNewlines), !rkey.isEmpty {
+            recordKey = try RecordKey(keyString: rkey)
+        } else {
+            recordKey = nil
+        }
+        return ComAtprotoSpaceCreateRecord.Input(
+            space: space,
+            repo: repo,
+            collection: colNSID,
+            rkey: recordKey,
+            validate: true,
+            record: container
+        )
+    }
+
+    /// Performs `createRecord` with an injected transport. Validates JSON BEFORE invoking the transport.
+    nonisolated public static func performCreateRecord(
+        space: SpaceRef,
+        repoDID: String,
+        collection: String,
+        rkey: String?,
+        jsonText: String,
+        account: AccountStore.Account,
+        transport: (@Sendable (_ input: ComAtprotoSpaceCreateRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpaceCreateRecord.Output?))? = nil
+    ) async throws -> ComAtprotoSpaceCreateRecord.Output {
+        let input = try makeCreateRecordInput(
+            space: space,
+            repoDID: repoDID,
+            collection: collection,
+            rkey: rkey,
+            jsonText: jsonText
+        )
+        let execute = transport ?? { input in
+            try await account.client.com.atproto.space.createRecord(input: input)
+        }
+        let (responseCode, output) = try await execute(input)
+        guard (200...299).contains(responseCode) else {
+            throw ATProtoXRPCError(error: "CreateRecordFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
+        }
+        guard let output else {
+            throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body", statusCode: responseCode)
+        }
+        return output
+    }
+
+    /// Pure helper to construct `ComAtprotoSpacePutRecord.Input` after validating JSON.
+    nonisolated public static func makePutRecordInput(
+        space: SpaceRef,
+        repoDID: String,
+        collection: String,
+        rkey: String,
+        jsonText: String
+    ) throws -> ComAtprotoSpacePutRecord.Input {
+        let container = try validateRecordJSON(jsonText)
+        let repo = try DID(didString: repoDID.trimmingCharacters(in: .whitespacesAndNewlines))
+        let colNSID = try NSID(nsidString: collection.trimmingCharacters(in: .whitespacesAndNewlines))
+        let recordKey = try RecordKey(keyString: rkey.trimmingCharacters(in: .whitespacesAndNewlines))
+        return ComAtprotoSpacePutRecord.Input(
+            space: space,
+            repo: repo,
+            collection: colNSID,
+            rkey: recordKey,
+            validate: true,
+            record: container
+        )
+    }
+
+    /// Performs `putRecord` with an injected transport. Validates JSON BEFORE invoking the transport.
+    nonisolated public static func performPutRecord(
+        space: SpaceRef,
+        repoDID: String,
+        collection: String,
+        rkey: String,
+        jsonText: String,
+        account: AccountStore.Account,
+        transport: (@Sendable (_ input: ComAtprotoSpacePutRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpacePutRecord.Output?))? = nil
+    ) async throws -> ComAtprotoSpacePutRecord.Output {
+        let input = try makePutRecordInput(
+            space: space,
+            repoDID: repoDID,
+            collection: collection,
+            rkey: rkey,
+            jsonText: jsonText
+        )
+        let execute = transport ?? { input in
+            try await account.client.com.atproto.space.putRecord(input: input)
+        }
+        let (responseCode, output) = try await execute(input)
+        guard (200...299).contains(responseCode) else {
+            throw ATProtoXRPCError(error: "PutRecordFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
+        }
+        guard let output else {
+            throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body", statusCode: responseCode)
+        }
+        return output
+    }
+
+    /// Pure helper to construct `ComAtprotoSpaceDeleteRecord.Input`.
+    nonisolated public static func makeDeleteRecordInput(
+        space: SpaceRef,
+        repoDID: String,
+        collection: String,
+        rkey: String
+    ) throws -> ComAtprotoSpaceDeleteRecord.Input {
+        let repo = try DID(didString: repoDID.trimmingCharacters(in: .whitespacesAndNewlines))
+        let colNSID = try NSID(nsidString: collection.trimmingCharacters(in: .whitespacesAndNewlines))
+        let recordKey = try RecordKey(keyString: rkey.trimmingCharacters(in: .whitespacesAndNewlines))
+        return ComAtprotoSpaceDeleteRecord.Input(
+            space: space,
+            repo: repo,
+            collection: colNSID,
+            rkey: recordKey
+        )
+    }
+
+    /// Performs `deleteRecord` with an injected transport.
+    nonisolated public static func performDeleteRecord(
+        space: SpaceRef,
+        repoDID: String,
+        collection: String,
+        rkey: String,
+        account: AccountStore.Account,
+        transport: (@Sendable (_ input: ComAtprotoSpaceDeleteRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpaceDeleteRecord.Output?))? = nil
+    ) async throws -> ComAtprotoSpaceDeleteRecord.Output {
+        let input = try makeDeleteRecordInput(
+            space: space,
+            repoDID: repoDID,
+            collection: collection,
+            rkey: rkey
+        )
+        let execute = transport ?? { input in
+            try await account.client.com.atproto.space.deleteRecord(input: input)
+        }
+        let (responseCode, output) = try await execute(input)
+        guard (200...299).contains(responseCode) else {
+            throw ATProtoXRPCError(error: "DeleteRecordFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
+        }
+        guard let output else {
+            throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body", statusCode: responseCode)
+        }
+        return output
+    }
+
+    /// Uploads a blob via `com.atproto.repo.uploadBlob` on the user's PDS.
+    nonisolated public static func performUploadBlob(
+        data: Data,
+        mimeType: String,
+        account: AccountStore.Account,
+        transport: (@Sendable (_ data: Data, _ mimeType: String) async throws -> (responseCode: Int, data: ComAtprotoRepoUploadBlob.Output?))? = nil
+    ) async throws -> Blob {
+        let execute = transport ?? { data, mimeType in
+            try await account.client.com.atproto.repo.uploadBlob(data: data, mimeType: mimeType)
+        }
+        let (responseCode, output) = try await execute(data, mimeType)
+        guard (200...299).contains(responseCode) else {
+            throw ATProtoXRPCError(error: "UploadBlobFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
+        }
+        guard let output else {
+            throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body from uploadBlob", statusCode: responseCode)
+        }
+        return output.blob
+    }
+
+    /// Formats a `Blob` into standard pretty-printed ATProto JSON.
+    nonisolated public static func formatBlobRefJSON(blob: Blob) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        if let data = try? encoder.encode(blob), let string = String(data: data, encoding: .utf8) {
+            return string
+        }
+        if let link = blob.ref?.cid.description {
+            return """
+            {
+              "$type": "blob",
+              "mimeType": "\(blob.mimeType)",
+              "ref": {
+                "$link": "\(link)"
+              },
+              "size": \(blob.size)
+            }
+            """
+        }
+        return """
+        {
+          "$type": "blob",
+          "mimeType": "\(blob.mimeType)",
+          "size": \(blob.size)
+        }
+        """
+    }
+
+    /// Inserts a blob reference JSON into existing JSON text.
+    nonisolated public static func insertBlobRef(into jsonText: String, blob: Blob) -> String {
+        let trimmed = jsonText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let blobJSON = formatBlobRefJSON(blob: blob)
+
+        if trimmed.isEmpty || trimmed == "{}" {
+            return """
+            {
+              "blob": \(blobJSON.replacingOccurrences(of: "\n", with: "\n  "))
+            }
+            """
+        }
+
+        guard let data = trimmed.data(using: .utf8),
+              var jsonObject = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let blobData = blobJSON.data(using: .utf8),
+              let blobObject = try? JSONSerialization.jsonObject(with: blobData) else {
+            // Fallback: append or replace
+            return jsonText + "\n\n// Inserted Blob:\n" + blobJSON
+        }
+
+        // If "blob" already exists, use "blob_<timestamp>" or keep key
+        var key = "blob"
+        if jsonObject[key] != nil {
+            key = "blob_\(Int(Date().timeIntervalSince1970))"
+        }
+        jsonObject[key] = blobObject
+
+        if let updatedData = try? JSONSerialization.data(withJSONObject: jsonObject, options: [.prettyPrinted, .sortedKeys]),
+           let updatedString = String(data: updatedData, encoding: .utf8) {
+            return updatedString
+        }
+
+        return jsonText
+    }
+
 
     // MARK: - Pure Static Helpers
 
@@ -588,6 +878,89 @@ public final class RecordListModel {
             onInvalidateSpace: { spaceRef in
                 await account.credentials.invalidate(spaceRef)
             }
+        )
+    }
+
+    // MARK: - Mutation Actions
+
+    @discardableResult
+    public func createRecord(
+        space: SpaceItem,
+        repo: RepoEntry,
+        collection: String,
+        rkey: String?,
+        jsonText: String,
+        account: AccountStore.Account,
+        transport: (@Sendable (_ input: ComAtprotoSpaceCreateRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpaceCreateRecord.Output?))? = nil
+    ) async throws -> ComAtprotoSpaceCreateRecord.Output {
+        let output = try await Self.performCreateRecord(
+            space: space.ref,
+            repoDID: repo.did,
+            collection: collection,
+            rkey: rkey,
+            jsonText: jsonText,
+            account: account,
+            transport: transport
+        )
+        await load(space: space, repo: repo, account: account)
+        return output
+    }
+
+    @discardableResult
+    public func putRecord(
+        space: SpaceItem,
+        repo: RepoEntry,
+        collection: String,
+        rkey: String,
+        jsonText: String,
+        account: AccountStore.Account,
+        transport: (@Sendable (_ input: ComAtprotoSpacePutRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpacePutRecord.Output?))? = nil
+    ) async throws -> ComAtprotoSpacePutRecord.Output {
+        let output = try await Self.performPutRecord(
+            space: space.ref,
+            repoDID: repo.did,
+            collection: collection,
+            rkey: rkey,
+            jsonText: jsonText,
+            account: account,
+            transport: transport
+        )
+        await load(space: space, repo: repo, account: account)
+        return output
+    }
+
+    @discardableResult
+    public func deleteRecord(
+        space: SpaceItem,
+        repo: RepoEntry,
+        collection: String,
+        rkey: String,
+        account: AccountStore.Account,
+        transport: (@Sendable (_ input: ComAtprotoSpaceDeleteRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpaceDeleteRecord.Output?))? = nil
+    ) async throws -> ComAtprotoSpaceDeleteRecord.Output {
+        let output = try await Self.performDeleteRecord(
+            space: space.ref,
+            repoDID: repo.did,
+            collection: collection,
+            rkey: rkey,
+            account: account,
+            transport: transport
+        )
+        await load(space: space, repo: repo, account: account)
+        return output
+    }
+
+    public func uploadBlob(
+        data: Data,
+        mimeType: String,
+        account: AccountStore.Account,
+        transport: (@Sendable (_ data: Data, _ mimeType: String) async throws -> (responseCode: Int, data: ComAtprotoRepoUploadBlob.Output?))? = nil
+    ) async throws -> Blob {
+        return try await Self.performUploadBlob(
+            data: data,
+            mimeType: mimeType,
+            account: account,
+            transport: transport
         )
     }
 }

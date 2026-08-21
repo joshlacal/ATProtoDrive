@@ -11,7 +11,10 @@ public struct SpaceDetailView: View {
     let account: AccountStore.Account?
     @Binding var selectedRepo: RepoEntry?
     @State private var model = SpaceDetailModel()
-
+    @State private var showingAddMemberSheet = false
+    @State private var memberToRemove: String?
+    @State private var showingDeleteSpaceConfirmation = false
+    @State private var actionError: String?
     public init(space: SpaceItem, account: AccountStore.Account?, selectedRepo: Binding<RepoEntry?> = .constant(nil)) {
         self.space = space
         self.account = account
@@ -66,6 +69,65 @@ public struct SpaceDetailView: View {
                 await model.load(space: space, account: account)
             }
         }
+        .sheet(isPresented: $showingAddMemberSheet) {
+            if let account {
+                MemberEditor(space: space, account: account) {
+                    Task {
+                        await model.load(space: space, account: account)
+                    }
+                }
+            }
+        }
+        .confirmationDialog(
+            "Remove Member",
+            isPresented: Binding(
+                get: { memberToRemove != nil },
+                set: { if !$0 { memberToRemove = nil } }
+            ),
+            presenting: memberToRemove
+        ) { did in
+            Button("Remove \(did)", role: .destructive) {
+                if let account {
+                    Task {
+                        do {
+                            try await model.removeMember(did: did, space: space, account: account)
+                        } catch {
+                            actionError = error.localizedDescription
+                        }
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { did in
+            Text("Are you sure you want to remove \(did) from this space?")
+        }
+        .confirmationDialog(
+            "Delete Space",
+            isPresented: $showingDeleteSpaceConfirmation
+        ) {
+            Button("Delete Space", role: .destructive) {
+                if let account {
+                    Task {
+                        do {
+                            try await model.deleteSpace(space: space, account: account)
+                            await model.load(space: space, account: account)
+                        } catch {
+                            actionError = error.localizedDescription
+                        }
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to delete space \"\(space.skey)\"? This action is irreversible.")
+        }
+        .alert("Error", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
+            Button("OK", role: .cancel) { actionError = nil }
+        } message: {
+            if let actionError {
+                Text(actionError)
+            }
+        }
     }
 
     // MARK: - Header Section
@@ -76,6 +138,20 @@ public struct SpaceDetailView: View {
                 Text(space.skey)
                     .font(.title2.bold())
                 Spacer()
+                if space.isOwnAuthority {
+                    Menu {
+                        Button(role: .destructive) {
+                            showingDeleteSpaceConfirmation = true
+                        } label: {
+                            Label("Delete Space…", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.title3)
+                    }
+                    .menuStyle(.borderlessButton)
+                }
+
                 Text(space.isOwnAuthority ? "Owned Space" : "Shared Space")
                     .font(.caption.weight(.medium))
                     .padding(.horizontal, 8)
@@ -223,6 +299,16 @@ public struct SpaceDetailView: View {
                 Text("\(members.count)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if space.isOwnAuthority, account != nil {
+                    Button {
+                        showingAddMemberSheet = true
+                    } label: {
+                        Label("Add Member", systemImage: "person.badge.plus")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
             }
 
             if members.isEmpty {
@@ -239,6 +325,17 @@ public struct SpaceDetailView: View {
                             Text(memberDID)
                                 .font(.system(.body, design: .monospaced))
                             Spacer()
+
+                            if space.isOwnAuthority {
+                                Button(role: .destructive) {
+                                    memberToRemove = memberDID
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Remove Member")
+                            }
                         }
                         .padding(8)
                         .background(Color.secondary.opacity(0.08))
