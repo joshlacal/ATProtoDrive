@@ -63,6 +63,7 @@ public enum RepoVerifierError: LocalizedError, Equatable, Sendable {
         }
     }
 }
+
 public enum AuthorSigningKey: Sendable, Equatable {
     case p256(P256.Signing.PublicKey)
     case secp256k1PublicKey(Data)
@@ -77,6 +78,7 @@ public enum AuthorSigningKey: Sendable, Equatable {
             return false
         }
     }
+
     public func verify(signature: Data, context: SpaceCommitContext) -> Bool {
         guard let signingInput = try? SpaceCommitCodec.contextSigningBytes(context) else {
             return false
@@ -152,7 +154,7 @@ public enum RepoVerifier {
     ///
     /// Delegates strictly to `SpaceCARCodec.verifyStreamingRecovery`:
     /// 1. Bounded memory recovery streaming via `SpaceCARRecoveryByteSource`.
-    /// 2. Bounded in-memory index staging via `SpaceCARRecoveryIndex`.
+    /// 2. Bounded in-memory index staging via `SpaceCARRecoveryIndex` (O(1) lookups).
     /// 3. Validates commit context signature with ES256 (P-256) or ES256K (secp256k1).
     /// 4. Validates DPoP/IKM content binding, DRISL canonical index ordering, and record DAG-CBOR CIDs.
     /// 5. Validates LtHash homomorphic set commitment match.
@@ -170,9 +172,9 @@ public enum RepoVerifier {
             throw RepoVerifierError.invalidSpaceRef
         }
 
-        // Bounded pull source
         let byteSource = MemoryCARByteSource(data: carData)
         let recoveryIndex = InMemorySpaceRecoveryIndex()
+        let sink = MemoryRecordSink()
 
         do {
             let result = try await SpaceCARCodec.verifyStreamingRecovery(
@@ -182,28 +184,33 @@ public enum RepoVerifier {
                 contextSignatureVerifier: { envelope in
                     signingKey.verify(signature: envelope.contextSignature, context: envelope.context)
                 },
-                index: recoveryIndex
+                index: recoveryIndex,
+                recordSink: sink
             )
             return VerificationReport(
                 outcome: .verified(recordCount: result.recordCount),
                 rev: result.wireRevision.toString()
             )
         } catch let streamingError as SpaceCARStreamingError {
+            let commitBody = await sink.commitBody
+            let envelope = commitBody.flatMap { try? SpaceCARCodec.structurallyValidateRecoveryCommit($0, space: spaceURI, author: authorDID) }
+            let rev = envelope?.context.rev ?? (extractRevision(from: carData, space: spaceURI, author: authorDID) ?? "")
+
             switch streamingError {
             case .commitDidNotVerify:
-                let rev = extractRevision(from: carData, space: spaceURI, author: authorDID) ?? ""
                 return VerificationReport(outcome: .signatureInvalid, rev: rev)
-            case .commitmentMismatch, .blockCIDMismatch, .invalidRecordOrder:
-                let (rev, expectedCommitment) = extractCommitInfo(from: carData, space: spaceURI, author: authorDID)
+            case .commitmentMismatch:
+                let expectedCommitment = envelope.map { Hex.encode($0.commitment) }
+                    ?? (extractCommitInfo(from: carData, space: spaceURI, author: authorDID).commitment ?? "expected")
+                let computedCommitment = await Hex.encode(recoveryIndex.ltHash.commitment)
                 return VerificationReport(
                     outcome: .hashMismatch(
-                        expected: expectedCommitment ?? "expected",
-                        computed: "mismatch"
+                        expected: expectedCommitment,
+                        computed: computedCommitment
                     ),
-                    rev: rev ?? ""
+                    rev: rev
                 )
             default:
-                let rev = extractRevision(from: carData, space: spaceURI, author: authorDID) ?? ""
                 return VerificationReport(
                     outcome: .malformedCAR(String(describing: streamingError)),
                     rev: rev
@@ -225,7 +232,7 @@ public enum RepoVerifier {
         }
     }
 
-    /// Pure helper to extract commit revision from commit block for reporting on failed downstream checks.
+    /// Helper to extract commit revision and commitment from the first CAR frame for reporting on early stream failures.
     private static func extractCommitInfo(from carData: Data, space: SpaceURI, author: String) -> (rev: String?, commitment: String?) {
         guard let reader = try? CARReader(data: carData), reader.roots.count >= 1 else {
             return (nil, nil)
@@ -278,10 +285,10 @@ extension RepoVerifier {
     }
 }
 
-// MARK: - Streaming Recovery Byte Source & Index
+// MARK: - Streaming Recovery Byte Source, Sink & Keyed Index
 
 /// Bounded in-memory pull source conforming to SwanSpaces' `SpaceCARRecoveryByteSource`.
-private actor MemoryCARByteSource: SpaceCARRecoveryByteSource {
+actor MemoryCARByteSource: SpaceCARRecoveryByteSource {
     private let data: Data
     private var offset: Int = 0
 
@@ -298,35 +305,76 @@ private actor MemoryCARByteSource: SpaceCARRecoveryByteSource {
     }
 }
 
-/// Scratch in-memory DRISL index conforming to SwanSpaces' `SpaceCARRecoveryIndex`.
-private actor InMemorySpaceRecoveryIndex: SpaceCARRecoveryIndex {
-    private var entries: [SpaceCARRecoveryIndexEntry] = []
+/// Sink to capture commit block from stream for error classification.
+actor MemoryRecordSink: SpaceCARRecoveryRecordSink {
+    var commitCID: CID?
+    var commitBody: Data?
+
+    func receiveRoots(commit: CID, index: CID) async throws {}
+
+    func receiveCommit(cid: CID, body: Data) async throws {
+        self.commitCID = cid
+        self.commitBody = body
+    }
+
+    func beginRecord(cid: CID, byteCount: Int) async throws {}
+    func appendRecordChunk(cid: CID, chunkIndex: Int, bytes: Data) async throws {}
+    func completeRecord(cid: CID, byteCount: Int, chunkCount: Int) async throws {}
+}
+
+/// Linear-time in-memory DRISL index conforming to SwanSpaces' `SpaceCARRecoveryIndex`.
+///
+/// Uses O(1) keyed lookups for insertions, CID-to-path index, and a forward cursor over
+/// a lazily sorted path list to ensure high performance even for 100,000+ repository records.
+actor InMemorySpaceRecoveryIndex: SpaceCARRecoveryIndex {
+    private var seenPaths = Set<String>()
+    private var entriesByPath: [String: SpaceCARRecoveryIndexEntry] = [:]
+    private var pathsByCID: [CID: [String]] = [:]
     private var consumedPaths = Set<String>()
+    private var sortedPaths: [String]? = nil
+    private var cursor: Int = 0
+    private(set) var ltHash = LtHash()
 
     func insert(_ entry: SpaceCARRecoveryIndexEntry) throws {
-        guard !entries.contains(where: { $0.path == entry.path }) else {
+        guard seenPaths.insert(entry.path).inserted else {
             throw SpaceCARStreamingError.duplicateIndexEntry
         }
-        entries.append(entry)
+        entriesByPath[entry.path] = entry
+        pathsByCID[entry.cid, default: []].append(entry.path)
+        ltHash.add(element: "\(entry.path)/\(entry.cid.string)")
+        sortedPaths = nil
     }
 
     func nextUnconsumedLexicographicEntry() -> SpaceCARRecoveryIndexEntry? {
-        entries
-            .filter { !consumedPaths.contains($0.path) }
-            .min { $0.path.utf8.lexicographicallyPrecedes($1.path.utf8) }
+        if sortedPaths == nil {
+            sortedPaths = entriesByPath.keys.sorted { $0.utf8.lexicographicallyPrecedes($1.utf8) }
+            cursor = 0
+        }
+        guard let sorted = sortedPaths else { return nil }
+        while cursor < sorted.count {
+            let path = sorted[cursor]
+            if !consumedPaths.contains(path) {
+                return entriesByPath[path]
+            }
+            cursor += 1
+        }
+        return nil
     }
 
     func consumeEntries(forCID cid: CID) throws -> Int {
-        let matching = entries.filter {
-            $0.cid == cid && !consumedPaths.contains($0.path)
-        }
-        guard !matching.isEmpty else {
+        guard let paths = pathsByCID[cid] else {
             throw SpaceCARStreamingError.invalidRecordOrder
         }
-        for entry in matching {
-            consumedPaths.insert(entry.path)
+        var count = 0
+        for path in paths {
+            if consumedPaths.insert(path).inserted {
+                count += 1
+            }
         }
-        return matching.count
+        guard count > 0 else {
+            throw SpaceCARStreamingError.invalidRecordOrder
+        }
+        return count
     }
 }
 

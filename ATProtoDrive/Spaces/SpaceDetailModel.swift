@@ -94,17 +94,26 @@ public final class SpaceDetailModel {
     public private(set) var isLoading: Bool = false
     public private(set) var error: String?
     public private(set) var errorState: ErrorState?
-    public private(set) var verificationReports: [String: VerificationReport] = [:]
-    public private(set) var verifyingRepoDIDs: Set<String> = []
-    /// Returns the verified report for a repository entry iff it matches the current repo revision (not stale).
-    public func verificationReport(for repo: RepoEntry) -> VerificationReport? {
-        guard let report = verificationReports[repo.did], report.rev == repo.rev, !repo.rev.isEmpty else {
-            return nil
+    public struct StoredVerification: Sendable, Equatable {
+        public let targetRev: String
+        public let report: VerificationReport
+
+        public init(targetRev: String, report: VerificationReport) {
+            self.targetRev = targetRev
+            self.report = report
         }
-        return report
     }
 
+    public private(set) var verificationReports: [String: StoredVerification] = [:]
+    public private(set) var verifyingRepoDIDs: Set<String> = []
 
+    /// Returns the verified report for a repository entry iff it matches the requested repo revision (not stale).
+    public func verificationReport(for repo: RepoEntry) -> VerificationReport? {
+        guard let stored = verificationReports[repo.did], stored.targetRev == repo.rev else {
+            return nil
+        }
+        return stored.report
+    }
 
     public init(
         repos: [RepoEntry] = [],
@@ -112,7 +121,7 @@ public final class SpaceDetailModel {
         isLoading: Bool = false,
         error: String? = nil,
         errorState: ErrorState? = nil,
-        verificationReports: [String: VerificationReport] = [:],
+        verificationReports: [String: StoredVerification] = [:],
         verifyingRepoDIDs: Set<String> = []
     ) {
         self.repos = repos
@@ -626,7 +635,7 @@ public final class SpaceDetailModel {
             verifyCAR: verifyCAR
         )
 
-        verificationReports[repo.did] = report
+        verificationReports[repo.did] = StoredVerification(targetRev: repo.rev, report: report)
         return report
     }
 

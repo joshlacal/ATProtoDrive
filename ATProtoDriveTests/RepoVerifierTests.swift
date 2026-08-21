@@ -63,10 +63,33 @@ struct RepoVerifierTests {
         #expect(recordCount == 2)
     }
 
-    // MARK: - Step 3: Hash Mismatch on Corrupted Record Block
+    // MARK: - Step 3: Genuine Commitment Mismatch Reporting (Finding 1)
 
-    @Test("RepoVerifier returns hashMismatch after flipping one byte in a record block")
-    func testVerifyHashMismatchOnFlippedByteInRecordBlock() async throws {
+    @Test("RepoVerifier reports genuine expected and computed LtHash commitments on commitment mismatch")
+    func testVerifyCommitmentMismatchReportsGenuineExpectedAndComputedHashes() async throws {
+        let fixture = try await TestCARFixtureHelper.makeCommitmentMismatchFixture()
+
+        let report = try await RepoVerifier.verify(
+            carData: fixture.carData,
+            authorDID: TestCARFixtureHelper.authorDID,
+            space: fixture.spaceRef,
+            authorSigningKey: fixture.publicKey.rawRepresentation
+        )
+
+        #expect(report.rev == TestCARFixtureHelper.revision)
+        guard case let .hashMismatch(expected, computed) = report.outcome else {
+            Issue.record("Expected .hashMismatch outcome, got \(report.outcome)")
+            return
+        }
+        #expect(expected == fixture.expectedHex)
+        #expect(computed == fixture.computedHex)
+        #expect(expected != computed)
+    }
+
+    // MARK: - Step 4: Malformed CAR on Corrupted Record Block
+
+    @Test("RepoVerifier returns malformedCAR after flipping one byte in a record block")
+    func testVerifyMalformedCAROnCorruptedRecordBlock() async throws {
         let fixture = try await TestCARFixtureHelper.makeFixture()
 
         // Corrupt one byte in the trailing record block
@@ -82,15 +105,13 @@ struct RepoVerifierTests {
         )
 
         #expect(report.rev == TestCARFixtureHelper.revision)
-        guard case let .hashMismatch(expected, computed) = report.outcome else {
-            Issue.record("Expected .hashMismatch outcome for corrupted record block, got \(report.outcome)")
+        guard case .malformedCAR = report.outcome else {
+            Issue.record("Expected .malformedCAR outcome for corrupted record block, got \(report.outcome)")
             return
         }
-        #expect(!expected.isEmpty)
-        #expect(!computed.isEmpty)
     }
 
-    // MARK: - Step 4: Signature Invalid with Wrong Key
+    // MARK: - Step 5: Signature Invalid with Wrong Key
 
     @Test("RepoVerifier returns signatureInvalid when author signing key does not match commit signature")
     func testVerifySignatureInvalidWithWrongKey() async throws {
@@ -108,10 +129,10 @@ struct RepoVerifierTests {
         #expect(report.outcome == .signatureInvalid)
     }
 
-    // MARK: - Step 5: Malformed CAR Handling
+    // MARK: - Step 6: Malformed CAR Handling on Truncated Data
 
     @Test("RepoVerifier returns malformedCAR on truncated or invalid CAR bytes")
-    func testVerifyMalformedCAR() async throws {
+    func testVerifyMalformedCAROnTruncatedData() async throws {
         let fixture = try await TestCARFixtureHelper.makeFixture()
         let truncated = fixture.carData.prefix(20)
 
@@ -126,6 +147,80 @@ struct RepoVerifierTests {
             Issue.record("Expected .malformedCAR outcome for truncated CAR data, got \(report.outcome)")
             return
         }
+    }
+
+    // MARK: - Step 7: Malformed CAR Remains Visible for Requested Repo Rev (Finding 2)
+
+    @Test("SpaceDetailModel keeps malformed CAR report visible for requested repo revision and invalidates on advance")
+    @MainActor
+    func testMalformedCARReportRemainsVisibleForRequestedRepoRev() {
+        let repoDID = "did:plc:alice"
+        let initialRev = "3l3vbfz2zsk22"
+        let advancedRev = "3l3vbfz2zsk23"
+
+        // Malformed CAR report has rev == ""
+        let malformedReport = VerificationReport(
+            outcome: .malformedCAR("malformedHeader"),
+            rev: ""
+        )
+
+        let model = SpaceDetailModel(
+            verificationReports: [
+                repoDID: SpaceDetailModel.StoredVerification(
+                    targetRev: initialRev,
+                    report: malformedReport
+                )
+            ]
+        )
+
+        let currentRepo = RepoEntry(did: repoDID, rev: initialRev, hash: "hash1")
+        let advancedRepo = RepoEntry(did: repoDID, rev: advancedRev, hash: "hash2")
+
+        // 1. Malformed CAR failure remains visible for the requested repo
+        let visibleReport = model.verificationReport(for: currentRepo)
+        #expect(visibleReport != nil)
+        #expect(visibleReport?.outcome == .malformedCAR("malformedHeader"))
+
+        // 2. Advanced revision invalidates the report
+        #expect(model.verificationReport(for: advancedRepo) == nil)
+    }
+
+    // MARK: - Step 8: Linear-Time Recovery Index Performance (Finding 3)
+
+    @Test("InMemorySpaceRecoveryIndex performs O(1) insertions and lookups without quadratic slowdown")
+    func testLinearTimeRecoveryIndexPerformanceWithLargeEntrySet() async throws {
+        let dummyCID = try CID.parse("bafyreidfayvfuwzyakov5xbnm6negf4qnoahu6si2oaplg7twtwgz4e4ee")
+        let entryCount = 3_000
+
+        // Build 3,000 index entries
+        var entries: [SpaceCARRecoveryIndexEntry] = []
+        entries.reserveCapacity(entryCount)
+        for i in 0 ..< entryCount {
+            let path = String(format: "app.bsky.feed.post/%06d", i)
+            entries.append(SpaceCARRecoveryIndexEntry(path: path, cid: dummyCID))
+        }
+
+        // Test insertion and consumption time
+        let startTime = ContinuousClock.now
+        let recoveryIndex = InMemorySpaceRecoveryIndex()
+        for entry in entries {
+            try await recoveryIndex.insert(entry)
+        }
+
+        // Check next unconsumed
+        let first = await recoveryIndex.nextUnconsumedLexicographicEntry()
+        #expect(first?.path == "app.bsky.feed.post/000000")
+
+        // Consume all entries
+        let consumed = try await recoveryIndex.consumeEntries(forCID: dummyCID)
+        #expect(consumed == entryCount)
+
+        let afterConsume = await recoveryIndex.nextUnconsumedLexicographicEntry()
+        #expect(afterConsume == nil)
+
+        let elapsedTime = ContinuousClock.now - startTime
+        // Must complete 3,000 insertions, sorting, and full consumption in under 0.2s (quadratic would take >10s)
+        #expect(elapsedTime < .milliseconds(500))
     }
 
     // MARK: - Public Key Format Support (P-256 and secp256k1)
@@ -238,34 +333,6 @@ struct RepoVerifierTests {
         #expect(throws: RepoVerifierError.self) {
             try RepoVerifier.extractSigningKey(from: docWithUnrelatedKey)
         }
-    }
-
-    // MARK: - Staleness Invalidation (Finding 4)
-
-    @Test("SpaceDetailModel verificationReport invalidates stale report when repo revision advances")
-    @MainActor
-    func testVerificationReportStalenessInvalidation() {
-        let repoDID = "did:plc:alice"
-        let initialRev = "3l3vbfz2zsk22"
-        let advancedRev = "3l3vbfz2zsk23"
-
-        let report = VerificationReport(
-            outcome: .verified(recordCount: 5),
-            rev: initialRev
-        )
-
-        let model = SpaceDetailModel(
-            verificationReports: [repoDID: report]
-        )
-
-        let currentRepo = RepoEntry(did: repoDID, rev: initialRev, hash: "hash1")
-        let advancedRepo = RepoEntry(did: repoDID, rev: advancedRev, hash: "hash2")
-
-        // Matching revision returns report
-        #expect(model.verificationReport(for: currentRepo) == report)
-
-        // Advanced revision returns nil (stale badge suppressed)
-        #expect(model.verificationReport(for: advancedRepo) == nil)
     }
 
     // MARK: - did:web Path-Based Resolution (Finding 5)

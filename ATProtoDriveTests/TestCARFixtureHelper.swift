@@ -86,4 +86,36 @@ public enum TestCARFixtureHelper {
         let multicodecKey = Data([0xe7, 0x01]) + secpKey.publicKey.dataRepresentation
         return (carData: car.data, publicKeyBytes: multicodecKey, spaceRef: spaceRef)
     }
+
+    public static func makeCommitmentMismatchFixture() async throws -> (carData: Data, publicKey: P256.Signing.PublicKey, spaceRef: SpaceRef, expectedHex: String, computedHex: String) {
+        let space = try SpaceURI(authority: "did:plc:alice", spaceType: "app.bsky.bookmarks", skey: "shared")
+        let spaceRef = try SpaceRef(uriString: spaceRefString)
+        let uri1 = try SpaceRecordURI(space: space, author: authorDID, collection: "app.bsky.feed.post", rkey: "one")
+        let repository = try SpaceRepository(space: space, author: authorDID)
+        let authorization = AuthorizationContext.accountOAuth(
+            subject: authorDID,
+            scopes: [
+                "space:app.bsky.bookmarks?authority=did:plc:alice&skey=shared&action=create&collection=app.bsky.feed.post",
+                "space:app.bsky.bookmarks?authority=did:plc:alice&skey=shared&action=read",
+            ]
+        )
+        let recordCBOR1 = Data([0xa1, 0x64, 0x74, 0x65, 0x78, 0x74, 0x65, 0x68, 0x65, 0x6c, 0x6c, 0x6f])
+        _ = try await repository.apply(.put(uri: uri1, value: recordCBOR1), authorization: authorization)
+        let state = await repository.currentState()
+        let actualCommitment = state.commitment
+        var tamperedCommitment = actualCommitment
+        tamperedCommitment[0] ^= 0xff
+
+        let key = try P256.Signing.PrivateKey(rawRepresentation: privateKeyRaw)
+        let context = try SpaceCommitContext(space: space, author: authorDID, rev: revision, ikm: Data(repeating: 7, count: 32))
+        let commit = try SpaceCommitCodec.sign(context: context, commitment: tamperedCommitment, key: key)
+        let car = try await SpaceCARCodec.encode(commit: commit, records: repository.snapshot(authorization: authorization))
+        return (
+            carData: car.data,
+            publicKey: key.publicKey,
+            spaceRef: spaceRef,
+            expectedHex: Hex.encode(tamperedCommitment),
+            computedHex: Hex.encode(actualCommitment)
+        )
+    }
 }
