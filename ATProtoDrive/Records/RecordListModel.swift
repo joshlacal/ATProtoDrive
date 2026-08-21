@@ -9,7 +9,7 @@ import Petrel
 
 public struct RecordRow: Identifiable, Hashable, Sendable {
     public var id: String { uri }
-    public let uri: String        // full space record at:// URI
+    public let uri: String        // full space record at:// URI: at://{spaceDid}/space/{spaceType}/{skey}/{authorDid}/{collection}/{rkey}
     public let collection: String
     public let rkey: String
     public let cid: String
@@ -153,14 +153,12 @@ public final class RecordListModel {
                 }
                 traverse(child)
             case .link(let link):
-                // Some bare links might be blobs, but standard is $type: blob
                 _ = link
             default:
                 break
             }
         }
 
-        // Also check if fallback JSON search finds $type == "blob" or ref link
         traverse(container)
 
         // If AST traversal didn't catch specialized structures, inspect via JSONSerialization
@@ -196,9 +194,13 @@ public final class RecordListModel {
         return results
     }
 
-    /// Constructs the full record `at://` URI for a space record.
+    /// Constructs the canonical record `at://` URI for a space record:
+    /// `at://{spaceDid}/space/{spaceType}/{skey}/{authorDid}/{collection}/{rkey}`
     nonisolated public static func makeRecordURI(space: SpaceRef, repoDID: String, collection: String, rkey: String) -> String {
-        "at://\(space.spaceDID)/\(space.spaceType)/\(space.skey)/\(repoDID)/\(collection)/\(rkey)"
+        if let uri = try? space.recordURI(authorDID: repoDID, collection: collection, recordKey: rkey) {
+            return uri.uriString()
+        }
+        return "\(space.uriString())/\(repoDID)/\(collection)/\(rkey)"
     }
 
     /// Maps a `ComAtprotoSpaceListRecords.Record` to a UI `RecordRow`.
@@ -225,6 +227,7 @@ public final class RecordListModel {
             blobRefs: blobRefs
         )
     }
+
     /// Builds the full XRPC URL for `com.atproto.space.listRecords` on a member's PDS host.
     nonisolated public static func makeListRecordsURL(
         pdsHost: URL,
@@ -302,17 +305,12 @@ public final class RecordListModel {
             let (statusCode, data) = try await fetchPage(nextCursor)
 
             guard (200...299).contains(statusCode) else {
-                let message: String
-                if let decoded = try? JSONDecoder().decode(Petrel.ATProtoErrorResponse.self, from: data) {
-                    message = decoded.message ?? decoded.error
-                } else if let rawString = String(data: data, encoding: .utf8), !rawString.isEmpty {
-                    message = "HTTP \(statusCode): \(rawString)"
-                } else {
-                    message = "HTTP \(statusCode)"
+                if let genericError = ATProtoErrorParser.parseGeneric(data: data, statusCode: statusCode) {
+                    throw genericError
                 }
                 throw ATProtoXRPCError(
                     error: "XRPCError_\(statusCode)",
-                    message: message,
+                    message: "HTTP \(statusCode)",
                     statusCode: statusCode
                 )
             }
@@ -417,6 +415,38 @@ public final class RecordListModel {
 
         return .general(message)
     }
+
+    // MARK: - Pure Pipeline
+
+    /// Pure pipeline helper that decides and executes the own-vs-foreign repo path with injected closures.
+    nonisolated public static func loadRecordsPipeline(
+        space: SpaceItem,
+        repo: RepoEntry,
+        accountDID: String,
+        fetchOwnRecords: @Sendable () async throws -> [ComAtprotoSpaceListRecords.Record],
+        fetchOwnCommit: @Sendable () async throws -> (rev: String, hash: String),
+        resolveForeignPDS: @Sendable () async throws -> URL,
+        fetchForeignRecords: @Sendable (_ pdsURL: URL) async throws -> [ComAtprotoSpaceListRecords.Record],
+        fetchForeignCommit: @Sendable (_ pdsURL: URL) async throws -> (rev: String, hash: String)
+    ) async throws -> (records: [ComAtprotoSpaceListRecords.Record], commit: (rev: String, hash: String)) {
+        let isOwnRepo = (repo.did == accountDID)
+
+        if isOwnRepo {
+            async let recordsTask = fetchOwnRecords()
+            async let commitTask = fetchOwnCommit()
+            let records = try await recordsTask
+            let commit = try await commitTask
+            return (records, commit)
+        } else {
+            let pdsURL = try await resolveForeignPDS()
+            async let recordsTask = fetchForeignRecords(pdsURL)
+            async let commitTask = fetchForeignCommit(pdsURL)
+            let records = try await recordsTask
+            let commit = try await commitTask
+            return (records, commit)
+        }
+    }
+
     // MARK: - Load Action
 
     public func load(space: SpaceItem, repo: RepoEntry, account: AccountStore.Account) async {
@@ -427,79 +457,83 @@ public final class RecordListModel {
         commit = nil
         defer { isLoading = false }
 
-        let isOwnRepo = (repo.did == account.id)
-
         do {
-            let fetchedRecords: [ComAtprotoSpaceListRecords.Record]
-            var fetchedCommit: (rev: String, hash: String)? = nil
-
-            if isOwnRepo {
-                // Own repo path: use generated client
-                let repoDIDObj = try DID(didString: repo.did)
-                fetchedRecords = try await Self.fetchAllRecordsClient { cursor in
-                    let (responseCode, output) = try await account.client.com.atproto.space.listRecords(
-                        input: ComAtprotoSpaceListRecords.Parameters(
-                            space: space.ref,
-                            repo: repoDIDObj,
-                            cursor: cursor
+            let (fetchedRecords, fetchedCommit) = try await Self.loadRecordsPipeline(
+                space: space,
+                repo: repo,
+                accountDID: account.id,
+                fetchOwnRecords: {
+                    let repoDIDObj = try DID(didString: repo.did)
+                    return try await Self.fetchAllRecordsClient { cursor in
+                        let (responseCode, output) = try await account.client.com.atproto.space.listRecords(
+                            input: ComAtprotoSpaceListRecords.Parameters(
+                                space: space.ref,
+                                repo: repoDIDObj,
+                                cursor: cursor
+                            )
                         )
-                    )
-                    return (responseCode, output)
-                }
-
-                do {
+                        return (responseCode, output)
+                    }
+                },
+                fetchOwnCommit: {
+                    let repoDIDObj = try DID(didString: repo.did)
                     let (_, commitOutput) = try await account.client.com.atproto.space.getLatestCommit(
                         input: ComAtprotoSpaceGetLatestCommit.Parameters(
                             space: space.ref,
                             repo: repoDIDObj
                         )
                     )
-                    if let commitObj = commitOutput?.commit {
-                        let hashStr = commitObj.hash.data.base64EncodedString()
-                        fetchedCommit = (rev: commitObj.rev.description, hash: hashStr)
+                    guard let commitObj = commitOutput?.commit else {
+                        throw ATProtoXRPCError(
+                            error: "CommitNotFound",
+                            message: "Latest commit not returned by server",
+                            statusCode: 404
+                        )
                     }
-                } catch {
-                    // Non-fatal if getLatestCommit fails, fallback to repo entry rev/hash
-                    fetchedCommit = (rev: repo.rev, hash: repo.hash)
-                }
-            } else {
-                // Foreign repo path: resolve member's PDS, use SpaceCredentialManager
-                let pdsURL = try await account.client.resolveDIDToPDSURL(did: repo.did)
-
-                fetchedRecords = try await Self.fetchAllRecords { cursor in
-                    guard let requestURL = Self.makeListRecordsURL(
-                        pdsHost: pdsURL,
-                        space: space.ref,
-                        repoDID: repo.did,
-                        cursor: cursor
-                    ) else {
-                        throw SpaceHostResolutionError.invalidDID(repo.did)
+                    let hashStr = commitObj.hash.data.base64EncodedString()
+                    return (rev: commitObj.rev.description, hash: hashStr)
+                },
+                resolveForeignPDS: {
+                    try await account.client.resolveDIDToPDSURL(did: repo.did)
+                },
+                fetchForeignRecords: { pdsURL in
+                    try await Self.fetchAllRecords { cursor in
+                        guard let requestURL = Self.makeListRecordsURL(
+                            pdsHost: pdsURL,
+                            space: space.ref,
+                            repoDID: repo.did,
+                            cursor: cursor
+                        ) else {
+                            throw SpaceHostResolutionError.invalidDID(repo.did)
+                        }
+                        let (data, response) = try await account.credentials.get(url: requestURL, space: space.ref)
+                        return (responseCode: response.statusCode, data: data)
                     }
-                    let (data, response) = try await account.credentials.get(url: requestURL, space: space.ref)
-                    return (responseCode: response.statusCode, data: data)
-                }
-
-                do {
-                    if let commitURL = Self.makeGetLatestCommitURL(
+                },
+                fetchForeignCommit: { pdsURL in
+                    guard let commitURL = Self.makeGetLatestCommitURL(
                         pdsHost: pdsURL,
                         space: space.ref,
                         repoDID: repo.did
-                    ) {
-                        let (data, response) = try await account.credentials.get(url: commitURL, space: space.ref)
-                        if (200...299).contains(response.statusCode) {
-                            let commitOutput = try JSONDecoder().decode(ComAtprotoSpaceGetLatestCommit.Output.self, from: data)
-                            let hashStr = commitOutput.commit.hash.data.base64EncodedString()
-                            fetchedCommit = (rev: commitOutput.commit.rev.description, hash: hashStr)
-                        }
+                    ) else {
+                        throw SpaceHostResolutionError.invalidDID(repo.did)
                     }
-                } catch {
-                    fetchedCommit = (rev: repo.rev, hash: repo.hash)
+                    let (data, response) = try await account.credentials.get(url: commitURL, space: space.ref)
+                    guard (200...299).contains(response.statusCode) else {
+                        if let parsed = ATProtoErrorParser.parseGeneric(data: data, statusCode: response.statusCode) {
+                            throw parsed
+                        }
+                        throw ATProtoXRPCError(
+                            error: "XRPCError_\(response.statusCode)",
+                            message: "HTTP \(response.statusCode)",
+                            statusCode: response.statusCode
+                        )
+                    }
+                    let commitOutput = try JSONDecoder().decode(ComAtprotoSpaceGetLatestCommit.Output.self, from: data)
+                    let hashStr = commitOutput.commit.hash.data.base64EncodedString()
+                    return (rev: commitOutput.commit.rev.description, hash: hashStr)
                 }
-            }
-
-            if fetchedCommit == nil {
-                fetchedCommit = (rev: repo.rev, hash: repo.hash)
-            }
+            )
 
             let mappedRows = fetchedRecords.map {
                 Self.mapRecordRow(from: $0, space: space.ref, repoDID: repo.did)

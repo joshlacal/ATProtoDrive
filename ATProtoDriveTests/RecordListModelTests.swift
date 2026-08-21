@@ -16,7 +16,7 @@ struct RecordListModelTests {
     @Test("RecordRow properties, Identifiable, and Hashable conformance")
     func testRecordRowProperties() {
         let row1 = RecordRow(
-            uri: "at://did:plc:space1/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz",
+            uri: "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz",
             collection: "app.bsky.feed.post",
             rkey: "3l3vbfz",
             cid: "bafyreih321",
@@ -24,7 +24,7 @@ struct RecordListModelTests {
             blobRefs: ["bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"]
         )
         let row2 = RecordRow(
-            uri: "at://did:plc:space1/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz",
+            uri: "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz",
             collection: "app.bsky.feed.post",
             rkey: "3l3vbfz",
             cid: "bafyreih321",
@@ -32,7 +32,7 @@ struct RecordListModelTests {
             blobRefs: ["bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"]
         )
         let row3 = RecordRow(
-            uri: "at://did:plc:space1/com.atproto.feed/main/did:plc:bob/app.bsky.feed.post/3l3vbf9",
+            uri: "at://did:plc:space1/space/com.atproto.feed/main/did:plc:bob/app.bsky.feed.post/3l3vbf9",
             collection: "app.bsky.feed.post",
             rkey: "3l3vbf9",
             cid: "bafyreih999",
@@ -54,21 +54,21 @@ struct RecordListModelTests {
     @MainActor
     func testRecordListModelSorting() {
         let rowA = RecordRow(
-            uri: "at://did:plc:space1/com.atproto.feed/main/did:plc:alice/app.bsky.feed.like/1",
+            uri: "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.like/1",
             collection: "app.bsky.feed.like",
             rkey: "1",
             cid: "cid1",
             json: "{}"
         )
         let rowB = RecordRow(
-            uri: "at://did:plc:space1/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/2",
+            uri: "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/2",
             collection: "app.bsky.feed.post",
             rkey: "2",
             cid: "cid2",
             json: "{}"
         )
         let rowC = RecordRow(
-            uri: "at://did:plc:space1/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/1",
+            uri: "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/1",
             collection: "app.bsky.feed.post",
             rkey: "1",
             cid: "cid3",
@@ -152,7 +152,7 @@ struct RecordListModelTests {
 
     // MARK: - makeRecordURI and mapRecordRow Tests
 
-    @Test("makeRecordURI formats space record at:// URI correctly")
+    @Test("makeRecordURI formats space record at:// URI with normative /space/ marker correctly")
     func testMakeRecordURI() throws {
         let ref = try SpaceRef(uriString: "at://did:plc:authority123/space/com.atproto.feed/main")
         let uri = RecordListModel.makeRecordURI(
@@ -161,10 +161,11 @@ struct RecordListModelTests {
             collection: "app.bsky.feed.post",
             rkey: "3l3vbfz"
         )
-        #expect(uri == "at://did:plc:authority123/com.atproto.feed/main/did:plc:author456/app.bsky.feed.post/3l3vbfz")
+        // Proposal 0016 canonical format: at://{spaceDid}/space/{spaceType}/{skey}/{authorDid}/{collection}/{rkey}
+        #expect(uri == "at://did:plc:authority123/space/com.atproto.feed/main/did:plc:author456/app.bsky.feed.post/3l3vbfz")
     }
 
-    @Test("mapRecordRow maps ComAtprotoSpaceListRecords.Record to UI RecordRow")
+    @Test("mapRecordRow maps ComAtprotoSpaceListRecords.Record to UI RecordRow with canonical URI")
     func testMapRecordRow() throws {
         let ref = try SpaceRef(uriString: "at://did:plc:authority123/space/com.atproto.feed/main")
         let valData = "{\"text\":\"Hello\",\"createdAt\":\"2026-08-21T00:00:00Z\"}".data(using: .utf8)!
@@ -178,7 +179,7 @@ struct RecordListModelTests {
         )
 
         let row = RecordListModel.mapRecordRow(from: record, space: ref, repoDID: "did:plc:author456")
-        #expect(row.uri == "at://did:plc:authority123/com.atproto.feed/main/did:plc:author456/app.bsky.feed.post/3l3vbfz")
+        #expect(row.uri == "at://did:plc:authority123/space/com.atproto.feed/main/did:plc:author456/app.bsky.feed.post/3l3vbfz")
         #expect(row.collection == "app.bsky.feed.post")
         #expect(row.rkey == "3l3vbfz")
         #expect(row.cid == "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
@@ -307,7 +308,7 @@ struct RecordListModelTests {
         #expect(count == 2)
     }
 
-    @Test("fetchAllRecords propagates XRPC errors with raw description")
+    @Test("fetchAllRecords parses and preserves exact raw error code, message, and classification")
     func testFetchAllRecordsErrorPropagation() async throws {
         let errorJSON = """
         {
@@ -316,10 +317,21 @@ struct RecordListModelTests {
         }
         """.data(using: .utf8)!
 
-        await #expect(throws: ATProtoXRPCError.self) {
-            try await RecordListModel.fetchAllRecords { _ in
-                (400, errorJSON)
+        do {
+            _ = try await RecordListModel.fetchAllRecords { _ in
+                (404, errorJSON)
             }
+            Issue.record("Expected fetchAllRecords to throw")
+        } catch let xrpc as ATProtoXRPCError {
+            #expect(xrpc.error == "RepoNotFound")
+            #expect(xrpc.message == "Repository did:plc:123 not found in space")
+            #expect(xrpc.statusCode == 404)
+            #expect(xrpc.errorDescription == "RepoNotFound: Repository did:plc:123 not found in space")
+
+            let state = RecordListModel.classifyError(xrpc)
+            #expect(state == .repoNotFound("RepoNotFound: Repository did:plc:123 not found in space"))
+        } catch {
+            Issue.record("Expected ATProtoXRPCError, got \(error)")
         }
     }
 

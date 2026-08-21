@@ -69,6 +69,9 @@ struct ATProtoDriveApp: App {
                 }
             }
             .environment(accountStore)
+            .onChange(of: selectedSpace) { _, _ in
+                selectedRepo = nil
+            }
             .sheet(isPresented: $showingAddAccount) {
                 AddAccountView()
                     .environment(accountStore)
