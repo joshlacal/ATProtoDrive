@@ -30,7 +30,6 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>blue.catbird.atprotodrive</string>
-				<string>place.swan.cab</string>
 			</array>
 		</dict>
 	</array>

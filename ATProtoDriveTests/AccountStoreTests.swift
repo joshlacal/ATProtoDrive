@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import Petrel
 import Testing
 @testable import ATProtoDrive
 
@@ -47,21 +48,39 @@ struct AccountStoreTests {
     }
 
     @MainActor
-    @Test("handleCallback rejects unknown or missing state parameter without affecting state")
-    func testHandleCallbackRejectsInvalidState() async {
+    @Test("handleCallback rejects unknown or missing state parameter while preserving legitimate pending entries")
+    func testHandleCallbackPreservesPendingLoginsOnInvalidState() async throws {
         let store = AccountStore()
+        let dummyClient = await ATProtoClient(baseURL: URL(string: "https://bsky.social")!)
+        let legitimateState = "legitimate_state_token_123"
 
-        // Missing state
+        // Arrange: Register a legitimate pending login flow
+        store.registerPendingLoginForTesting(
+            state: legitimateState,
+            client: dummyClient,
+            did: "did:plc:testuser",
+            handle: "testuser.bsky.social",
+            authMode: .cab
+        )
+
+        #expect(store.pendingLoginCount == 1)
+        #expect(store.hasPendingLogin(for: legitimateState))
+
+        // Act & Assert 1: Missing state parameter in callback
         let noStateURL = URL(string: "blue.catbird.atprotodrive:/callback?code=testcode")!
         await #expect(throws: Error.self) {
             try await store.handleCallback(noStateURL)
         }
+        #expect(store.hasPendingLogin(for: legitimateState))
+        #expect(store.pendingLoginCount == 1)
 
-        // Unknown state
-        let unknownStateURL = URL(string: "blue.catbird.atprotodrive:/callback?code=testcode&state=nonexistent_state")!
+        // Act & Assert 2: Unknown / mismatched state parameter in callback
+        let unknownStateURL = URL(string: "blue.catbird.atprotodrive:/callback?code=testcode&state=unknown_unrelated_state")!
         await #expect(throws: Error.self) {
             try await store.handleCallback(unknownStateURL)
         }
+        #expect(store.hasPendingLogin(for: legitimateState))
+        #expect(store.pendingLoginCount == 1)
 
         #expect(store.accounts.isEmpty)
     }

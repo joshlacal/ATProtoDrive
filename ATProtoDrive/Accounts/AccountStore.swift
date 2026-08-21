@@ -119,20 +119,6 @@ public final class AccountStore {
         return try await resolverClient.resolveHandleToDID(handle: handle)
     }
 
-    private static func isClientMetadataRejection(_ error: Error) -> Bool {
-        if let authError = error as? AuthError {
-            switch authError {
-            case .invalidClientMetadata:
-                return true
-            case let .serverError(_, message):
-                guard let msg = message?.lowercased() else { return false }
-                return msg.contains("invalid_client_metadata") || msg.contains("none method")
-            default:
-                return false
-            }
-        }
-        return false
-    }
 
     /// Begin OAuth for a handle; returns the authorization URL to open.
     public func beginLogin(handle: String) async throws -> URL {
@@ -161,7 +147,7 @@ public final class AccountStore {
                 stateToken: state
             )
             return authURL
-        } catch let error where Self.isClientMetadataRejection(error) {
+        } catch AuthError.nativeClientNoneAuthRequired {
             // Attempt 2: Public OAuth fallback (triggered ONLY on native/none client-metadata rejection)
             let publicClient = try await ATProtoClient(
                 oauthConfig: OAuthConfig(
@@ -299,4 +285,30 @@ public final class AccountStore {
             .first(where: { $0.name == "state" })?
             .value
     }
+
+#if DEBUG
+    var pendingLoginCount: Int {
+        pendingLogins.count
+    }
+
+    func hasPendingLogin(for state: String) -> Bool {
+        pendingLogins[state] != nil
+    }
+
+    func registerPendingLoginForTesting(
+        state: String,
+        client: ATProtoClient,
+        did: String,
+        handle: String,
+        authMode: AuthModeType
+    ) {
+        pendingLogins[state] = PendingLogin(
+            client: client,
+            did: did,
+            requestedHandle: handle,
+            authMode: authMode,
+            stateToken: state
+        )
+    }
+#endif
 }
