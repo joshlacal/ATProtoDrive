@@ -184,42 +184,75 @@ struct RepoVerifierTests {
         // 2. Advanced revision invalidates the report
         #expect(model.verificationReport(for: advancedRepo) == nil)
     }
+    // MARK: - Step 8: Wire Revision Mismatch Rejects Verified Badge (Round 3 Finding 2)
 
-    // MARK: - Step 8: Linear-Time Recovery Index Performance (Finding 3)
+    @Test("SpaceDetailModel rejects verified badge when wire revision differs from repo revision")
+    @MainActor
+    func testWireRevisionMismatchSuppressesVerifiedBadge() {
+        let repoDID = "did:plc:alice"
+        let requestedRev = "3l3vbfz2zsk22"
+        let mismatchedWireRev = "3l3vbfz2zsk20" // Stale or raced CAR response
 
-    @Test("InMemorySpaceRecoveryIndex performs O(1) insertions and lookups without quadratic slowdown")
+        // Verified report for wire revision B
+        let verifiedReportForOtherRev = VerificationReport(
+            outcome: .verified(recordCount: 5),
+            rev: mismatchedWireRev
+        )
+
+        let model = SpaceDetailModel(
+            verificationReports: [
+                repoDID: SpaceDetailModel.StoredVerification(
+                    targetRev: requestedRev,
+                    report: verifiedReportForOtherRev
+                )
+            ]
+        )
+
+        let repo = RepoEntry(did: repoDID, rev: requestedRev, hash: "hash1")
+
+        // Must reject verified badge because wire rev != repo rev
+        #expect(model.verificationReport(for: repo) == nil)
+    }
+
+    // MARK: - Step 9: Linear-Time Recovery Index Performance (Finding 3)
+
+    @Test("InMemorySpaceRecoveryIndex performs O(1) insertions and lookups without quadratic slowdown across distinct CIDs")
     func testLinearTimeRecoveryIndexPerformanceWithLargeEntrySet() async throws {
-        let dummyCID = try CID.parse("bafyreidfayvfuwzyakov5xbnm6negf4qnoahu6si2oaplg7twtwgz4e4ee")
         let entryCount = 3_000
 
-        // Build 3,000 index entries
+        // Build 3,000 index entries with 3,000 DISTINCT CIDs
         var entries: [SpaceCARRecoveryIndexEntry] = []
         entries.reserveCapacity(entryCount)
         for i in 0 ..< entryCount {
+            var cborBytes = Data([0xa1, 0x61, 0x61]) // {"a": i}
+            cborBytes.append(contentsOf: withUnsafeBytes(of: UInt32(i).bigEndian) { Array($0) })
+            let cid = CID.fromDAGCBOR(cborBytes)
             let path = String(format: "app.bsky.feed.post/%06d", i)
-            entries.append(SpaceCARRecoveryIndexEntry(path: path, cid: dummyCID))
+            entries.append(SpaceCARRecoveryIndexEntry(path: path, cid: cid))
         }
 
-        // Test insertion and consumption time
+        // Test insertion and per-CID consumption time
         let startTime = ContinuousClock.now
         let recoveryIndex = InMemorySpaceRecoveryIndex()
         for entry in entries {
             try await recoveryIndex.insert(entry)
         }
 
-        // Check next unconsumed
-        let first = await recoveryIndex.nextUnconsumedLexicographicEntry()
-        #expect(first?.path == "app.bsky.feed.post/000000")
-
-        // Consume all entries
-        let consumed = try await recoveryIndex.consumeEntries(forCID: dummyCID)
-        #expect(consumed == entryCount)
+        // Sequentially inspect and consume each of the 3,000 distinct CIDs
+        for expectedEntry in entries {
+            let next = await recoveryIndex.nextUnconsumedLexicographicEntry()
+            #expect(next?.path == expectedEntry.path)
+            #expect(next?.cid == expectedEntry.cid)
+            let consumed = try await recoveryIndex.consumeEntries(forCID: expectedEntry.cid)
+            #expect(consumed == 1)
+        }
 
         let afterConsume = await recoveryIndex.nextUnconsumedLexicographicEntry()
         #expect(afterConsume == nil)
 
         let elapsedTime = ContinuousClock.now - startTime
-        // Must complete 3,000 insertions, sorting, and full consumption in under 0.2s (quadratic would take >10s)
+        // 3,000 distinct insertions + 3,000 distinct lookups + 3,000 distinct consumptions
+        // In linear time this takes ~0.05s; quadratic would take >10s and fail this bound
         #expect(elapsedTime < .milliseconds(500))
     }
 

@@ -107,10 +107,16 @@ public final class SpaceDetailModel {
     public private(set) var verificationReports: [String: StoredVerification] = [:]
     public private(set) var verifyingRepoDIDs: Set<String> = []
 
-    /// Returns the verified report for a repository entry iff it matches the requested repo revision (not stale).
+    /// Returns the verified report for a repository entry iff it matches the requested repo revision (not stale),
+    /// and for `.verified` outcomes additionally verifies that the wire revision matches the repo revision.
     public func verificationReport(for repo: RepoEntry) -> VerificationReport? {
         guard let stored = verificationReports[repo.did], stored.targetRev == repo.rev else {
             return nil
+        }
+        if case .verified = stored.report.outcome {
+            guard stored.report.rev == repo.rev && !repo.rev.isEmpty else {
+                return nil
+            }
         }
         return stored.report
     }
