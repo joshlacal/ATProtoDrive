@@ -15,6 +15,7 @@ public struct SpaceDetailView: View {
     var onDelete: (() -> Void)?
 
     @State private var model = SpaceDetailModel()
+    @State private var recordListModel = RecordListModel()
     @State private var showingAddMemberSheet = false
     @State private var showingCreateRecordSheet = false
     @State private var memberToRemove: String?
@@ -99,7 +100,7 @@ public struct SpaceDetailView: View {
                     space: space,
                     repo: RepoEntry(did: account.id, rev: "", hash: ""),
                     account: account,
-                    mode: .create()
+                    model: recordListModel,
                 ) {
                     Task {
                         await model.load(space: space, account: account)

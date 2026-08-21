@@ -31,7 +31,7 @@ public struct RecordEditorSheet: View {
     let space: SpaceItem
     let repo: RepoEntry
     let account: AccountStore.Account
-    let model: RecordListModel?
+    let model: RecordListModel
     let mode: Mode
     var onSaved: (() -> Void)?
 
@@ -49,7 +49,7 @@ public struct RecordEditorSheet: View {
         space: SpaceItem,
         repo: RepoEntry,
         account: AccountStore.Account,
-        model: RecordListModel? = nil,
+        model: RecordListModel,
         mode: Mode = .create(),
         onSaved: (() -> Void)? = nil
     ) {
@@ -319,48 +319,25 @@ public struct RecordEditorSheet: View {
         defer { isSubmitting = false }
 
         do {
-            if let model {
-                switch mode {
-                case .create:
-                    _ = try await model.createRecord(
-                        space: space,
-                        repo: repo,
-                        collection: collection,
-                        rkey: rkey.isEmpty ? nil : rkey,
-                        jsonText: jsonText,
-                        account: account
-                    )
-                case .edit:
-                    _ = try await model.putRecord(
-                        space: space,
-                        repo: repo,
-                        collection: collection,
-                        rkey: rkey,
-                        jsonText: jsonText,
-                        account: account
-                    )
-                }
-            } else {
-                switch mode {
-                case .create:
-                    _ = try await RecordListModel.performCreateRecord(
-                        space: space.ref,
-                        repoDID: account.id,
-                        collection: collection,
-                        rkey: rkey.isEmpty ? nil : rkey,
-                        jsonText: jsonText,
-                        account: account
-                    )
-                case .edit:
-                    _ = try await RecordListModel.performPutRecord(
-                        space: space.ref,
-                        repoDID: account.id,
-                        collection: collection,
-                        rkey: rkey,
-                        jsonText: jsonText,
-                        account: account
-                    )
-                }
+            switch mode {
+            case .create:
+                _ = try await model.createRecord(
+                    space: space,
+                    repo: repo,
+                    collection: collection,
+                    rkey: rkey.isEmpty ? nil : rkey,
+                    jsonText: jsonText,
+                    account: account
+                )
+            case .edit:
+                _ = try await model.putRecord(
+                    space: space,
+                    repo: repo,
+                    collection: collection,
+                    rkey: rkey,
+                    jsonText: jsonText,
+                    account: account
+                )
             }
             onSaved?()
             dismiss()

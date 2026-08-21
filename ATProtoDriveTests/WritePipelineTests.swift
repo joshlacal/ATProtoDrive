@@ -89,13 +89,15 @@ struct WritePipelineTests {
         }
     }
 
-    @Test("performCreateSpace calls injected transport and returns created SpaceRef")
-    func testPerformCreateSpace() async throws {
+    @MainActor
+    @Test("createSpace calls injected transport and returns created SpaceRef")
+    func testCreateSpace() async throws {
         let tracker = WriteTestCallTracker()
         let expectedRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
         let dummyAccount = await makeTestAccount()
+        let model = SpaceListModel()
 
-        let result = try await SpaceDetailModel.performCreateSpace(
+        let result = try await model.createSpace(
             spaceType: "space.swan.drive",
             skey: "self",
             policy: .memberList,
@@ -104,6 +106,9 @@ struct WritePipelineTests {
                 await tracker.record(input)
                 #expect(input.type.description == "space.swan.drive")
                 return (200, ComAtprotoSimplespaceCreateSpace.Output(uri: expectedRef))
+            },
+            listSpacesTransport: { cursor in
+                return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: expectedRef)]))
             }
         )
 
@@ -146,18 +151,20 @@ struct WritePipelineTests {
         }
     }
 
-    @Test("performAddMember invokes handle resolution and member transport with SpaceRef and DID")
-    func testPerformAddMember() async throws {
+    @MainActor
+    @Test("addMember invokes handle resolution and member transport with SpaceRef and DID")
+    func testAddMember() async throws {
         let spaceItem = try SpaceItem(
             uriString: "at://did:plc:alice123/space/space.swan.drive/self",
             accountDID: "did:plc:alice123"
         )
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
+        let model = SpaceDetailModel()
 
-        try await SpaceDetailModel.performAddMember(
-            space: spaceItem,
+        try await model.addMember(
             identifier: "carol.test",
+            space: spaceItem,
             account: dummyAccount,
             resolveHandle: { handle in
                 #expect(handle == "carol.test")
@@ -168,6 +175,10 @@ struct WritePipelineTests {
                 #expect(input.space.uriString() == spaceItem.ref.uriString())
                 #expect(input.did.description == "did:plc:carol789")
                 return 200
+            },
+            fetchRepos: { [] },
+            listMembersTransport: { cursor in
+                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:carol789"))]))
             }
         )
 
@@ -175,24 +186,30 @@ struct WritePipelineTests {
         #expect(count == 1)
     }
 
-    @Test("performRemoveMember invokes remove transport with SpaceRef and DID")
-    func testPerformRemoveMember() async throws {
+    @MainActor
+    @Test("removeMember invokes remove transport with SpaceRef and DID")
+    func testRemoveMember() async throws {
         let spaceItem = try SpaceItem(
             uriString: "at://did:plc:alice123/space/space.swan.drive/self",
             accountDID: "did:plc:alice123"
         )
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
+        let model = SpaceDetailModel()
 
-        try await SpaceDetailModel.performRemoveMember(
-            space: spaceItem,
+        try await model.removeMember(
             did: "did:plc:carol789",
+            space: spaceItem,
             account: dummyAccount,
             transport: { input in
                 await tracker.record(input)
                 #expect(input.space.uriString() == spaceItem.ref.uriString())
                 #expect(input.did.description == "did:plc:carol789")
                 return 200
+            },
+            fetchRepos: { [] },
+            listMembersTransport: { cursor in
+                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: []))
             }
         )
 
@@ -276,17 +293,20 @@ struct WritePipelineTests {
         #expect(input.rkey.description == "post123")
     }
 
-    @Test("performCreateRecord executes injected transport")
-    func testPerformCreateRecord() async throws {
-        let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+    @MainActor
+    @Test("createRecord executes injected transport")
+    func testCreateRecord() async throws {
+        let spaceItem = try SpaceItem(uriString: "at://did:plc:alice123/space/space.swan.drive/self", accountDID: "did:plc:alice123")
+        let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
         let expectedCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
         let expectedURI = try ATProtocolURI(uriString: "at://did:plc:alice123/app.bsky.feed.post/3l3vbfz2zsk22")
+        let model = RecordListModel()
 
-        let output = try await RecordListModel.performCreateRecord(
-            space: spaceRef,
-            repoDID: "did:plc:alice123",
+        let output = try await model.createRecord(
+            space: spaceItem,
+            repo: repo,
             collection: "app.bsky.feed.post",
             rkey: nil,
             jsonText: "{\"text\": \"Hi\"}",
@@ -296,7 +316,9 @@ struct WritePipelineTests {
                 #expect(input.collection.description == "app.bsky.feed.post")
                 #expect(input.rkey == nil)
                 return (200, ComAtprotoSpaceCreateRecord.Output(uri: expectedURI, cid: expectedCID))
-            }
+            },
+            clientListRecords: { _ in (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [])) },
+            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.SignedCommit(ver: 1, hash: Bytes(data: Data([1])), ikm: Bytes(data: Data()), sig: Bytes(data: Data()), mac: Bytes(data: Data()), rev: try TID(tidString: "3l3vbfz2zsk22")))) }
         )
 
         #expect(output.cid == expectedCID)
@@ -305,17 +327,20 @@ struct WritePipelineTests {
         #expect(count == 1)
     }
 
-    @Test("performPutRecord executes injected transport")
-    func testPerformPutRecord() async throws {
-        let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+    @MainActor
+    @Test("putRecord executes injected transport")
+    func testPutRecord() async throws {
+        let spaceItem = try SpaceItem(uriString: "at://did:plc:alice123/space/space.swan.drive/self", accountDID: "did:plc:alice123")
+        let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
         let expectedCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
         let expectedURI = try ATProtocolURI(uriString: "at://did:plc:alice123/app.bsky.feed.post/post123")
+        let model = RecordListModel()
 
-        let output = try await RecordListModel.performPutRecord(
-            space: spaceRef,
-            repoDID: "did:plc:alice123",
+        let output = try await model.putRecord(
+            space: spaceItem,
+            repo: repo,
             collection: "app.bsky.feed.post",
             rkey: "post123",
             jsonText: "{\"text\": \"Updated\"}",
@@ -324,7 +349,9 @@ struct WritePipelineTests {
                 await tracker.record(input)
                 #expect(input.rkey.description == "post123")
                 return (200, ComAtprotoSpacePutRecord.Output(uri: expectedURI, cid: expectedCID))
-            }
+            },
+            clientListRecords: { _ in (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [])) },
+            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.SignedCommit(ver: 1, hash: Bytes(data: Data([1])), ikm: Bytes(data: Data()), sig: Bytes(data: Data()), mac: Bytes(data: Data()), rev: try TID(tidString: "3l3vbfz2zsk22")))) }
         )
 
         #expect(output.cid == expectedCID)
@@ -333,15 +360,18 @@ struct WritePipelineTests {
         #expect(count == 1)
     }
 
-    @Test("performDeleteRecord executes injected transport")
-    func testPerformDeleteRecord() async throws {
-        let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+    @MainActor
+    @Test("deleteRecord executes injected transport")
+    func testDeleteRecord() async throws {
+        let spaceItem = try SpaceItem(uriString: "at://did:plc:alice123/space/space.swan.drive/self", accountDID: "did:plc:alice123")
+        let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
+        let model = RecordListModel()
 
-        _ = try await RecordListModel.performDeleteRecord(
-            space: spaceRef,
-            repoDID: "did:plc:alice123",
+        _ = try await model.deleteRecord(
+            space: spaceItem,
+            repo: repo,
             collection: "app.bsky.feed.post",
             rkey: "post123",
             account: dummyAccount,
@@ -350,7 +380,9 @@ struct WritePipelineTests {
                 #expect(input.collection.description == "app.bsky.feed.post")
                 #expect(input.rkey.description == "post123")
                 return (200, ComAtprotoSpaceDeleteRecord.Output())
-            }
+            },
+            clientListRecords: { _ in (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [])) },
+            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.SignedCommit(ver: 1, hash: Bytes(data: Data([1])), ikm: Bytes(data: Data()), sig: Bytes(data: Data()), mac: Bytes(data: Data()), rev: try TID(tidString: "3l3vbfz2zsk22")))) }
         )
 
         let count = await tracker.callCount
@@ -359,16 +391,19 @@ struct WritePipelineTests {
 
     // MARK: - 4. JSON Validation Gate Tests
 
+    @MainActor
     @Test("JSON validation gate: empty string throws and NEVER calls transport")
     func testValidationGateEmptyString() async throws {
-        let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+        let spaceItem = try SpaceItem(uriString: "at://did:plc:alice123/space/space.swan.drive/self", accountDID: "did:plc:alice123")
+        let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
+        let model = RecordListModel()
 
         do {
-            _ = try await RecordListModel.performCreateRecord(
-                space: spaceRef,
-                repoDID: "did:plc:alice123",
+            _ = try await model.createRecord(
+                space: spaceItem,
+                repo: repo,
                 collection: "app.bsky.feed.post",
                 rkey: nil,
                 jsonText: "   ",
@@ -387,16 +422,19 @@ struct WritePipelineTests {
         #expect(count == 0) // CRITICAL: Transport was NEVER called
     }
 
+    @MainActor
     @Test("JSON validation gate: malformed syntax throws and NEVER calls transport")
     func testValidationGateMalformedSyntax() async throws {
-        let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+        let spaceItem = try SpaceItem(uriString: "at://did:plc:alice123/space/space.swan.drive/self", accountDID: "did:plc:alice123")
+        let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
+        let model = RecordListModel()
 
         do {
-            _ = try await RecordListModel.performPutRecord(
-                space: spaceRef,
-                repoDID: "did:plc:alice123",
+            _ = try await model.putRecord(
+                space: spaceItem,
+                repo: repo,
                 collection: "app.bsky.feed.post",
                 rkey: "1",
                 jsonText: "{ unquoted_key: 123, }",
@@ -419,16 +457,19 @@ struct WritePipelineTests {
         #expect(count == 0) // CRITICAL: Transport was NEVER called
     }
 
+    @MainActor
     @Test("JSON validation gate: array root instead of object throws notJSONObject and NEVER calls transport")
     func testValidationGateArrayRoot() async throws {
-        let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+        let spaceItem = try SpaceItem(uriString: "at://did:plc:alice123/space/space.swan.drive/self", accountDID: "did:plc:alice123")
+        let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
+        let model = RecordListModel()
 
         do {
-            _ = try await RecordListModel.performCreateRecord(
-                space: spaceRef,
-                repoDID: "did:plc:alice123",
+            _ = try await model.createRecord(
+                space: spaceItem,
+                repo: repo,
                 collection: "app.bsky.feed.post",
                 rkey: nil,
                 jsonText: "[1, 2, 3]",
@@ -446,7 +487,6 @@ struct WritePipelineTests {
         let count = await tracker.callCount
         #expect(count == 0) // CRITICAL: Transport was NEVER called
     }
-
     // MARK: - 5. Blob Upload & Insertion Tests
 
     @Test("performUploadBlob calls transport with Data and mimeType and returns Blob")
@@ -523,12 +563,25 @@ struct WritePipelineTests {
     @Test("SpaceListModel createSpace executes transport and reloads model state from empty to populated")
     func testSpaceListModelCreateSpaceReloads() async throws {
         let dummyAccount = await makeTestAccount()
-        let model = SpaceListModel(spaces: [])
-        #expect(model.spaces.isEmpty)
-
+        let model = SpaceListModel()
         let createdRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
         let createTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
+
+        let listTransport: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListSpaces.Output?) = { cursor in
+            let count = await listTracker.callCount
+            await listTracker.record(cursor as Any)
+            if count == 0 {
+                return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: []))
+            } else {
+                return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: createdRef)]))
+            }
+        }
+
+        await model.load(accountDID: dummyAccount.id, fetchPage: listTransport)
+        #expect(model.spaces.isEmpty)
+        let initialListCount = await listTracker.callCount
+        #expect(initialListCount == 1)
 
         let ref = try await model.createSpace(
             spaceType: "space.swan.drive",
@@ -539,17 +592,14 @@ struct WritePipelineTests {
                 await createTracker.record(input)
                 return (200, ComAtprotoSimplespaceCreateSpace.Output(uri: createdRef))
             },
-            listSpacesTransport: { cursor in
-                await listTracker.record(cursor as Any)
-                return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: createdRef)]))
-            }
+            listSpacesTransport: listTransport
         )
 
         #expect(ref.uriString() == createdRef.uriString())
         let createCount = await createTracker.callCount
-        let listCount = await listTracker.callCount
+        let finalListCount = await listTracker.callCount
         #expect(createCount == 1)
-        #expect(listCount == 1)
+        #expect(finalListCount == 2)
         #expect(model.spaces.count == 1)
         #expect(model.spaces.first?.skey == "self")
     }
@@ -560,12 +610,25 @@ struct WritePipelineTests {
         let dummyAccount = await makeTestAccount()
         let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
         let spaceItem = SpaceItem(ref: spaceRef, accountDID: "did:plc:alice123")
-
-        let model = SpaceListModel(spaces: [spaceItem])
-        #expect(model.spaces.count == 1)
+        let model = SpaceListModel()
 
         let deleteTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
+
+        let listTransport: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListSpaces.Output?) = { cursor in
+            let count = await listTracker.callCount
+            await listTracker.record(cursor as Any)
+            if count == 0 {
+                return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: spaceRef)]))
+            } else {
+                return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: []))
+            }
+        }
+
+        await model.load(accountDID: dummyAccount.id, fetchPage: listTransport)
+        #expect(model.spaces.count == 1)
+        let initialListCount = await listTracker.callCount
+        #expect(initialListCount == 1)
 
         try await model.deleteSpace(
             space: spaceItem,
@@ -574,16 +637,13 @@ struct WritePipelineTests {
                 await deleteTracker.record(input)
                 return 200
             },
-            listSpacesTransport: { cursor in
-                await listTracker.record(cursor as Any)
-                return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: []))
-            }
+            listSpacesTransport: listTransport
         )
 
         let deleteCount = await deleteTracker.callCount
-        let listCount = await listTracker.callCount
+        let finalListCount = await listTracker.callCount
         #expect(deleteCount == 1)
-        #expect(listCount == 1)
+        #expect(finalListCount == 2)
         #expect(model.spaces.isEmpty)
     }
 
@@ -596,9 +656,7 @@ struct WritePipelineTests {
         )
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
-
-        let model = RecordListModel(rows: [])
-        #expect(model.rows.isEmpty)
+        let model = RecordListModel()
 
         let expectedURI = try ATProtocolURI(uriString: "at://did:plc:alice123/app.bsky.feed.post/post1")
         let expectedCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
@@ -623,6 +681,26 @@ struct WritePipelineTests {
         let listTracker = WriteTestCallTracker()
         let commitTracker = WriteTestCallTracker()
 
+        let listRecordsClosure: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListRecords.Output?) = { cursor in
+            let count = await listTracker.callCount
+            await listTracker.record(cursor as Any)
+            if count == 0 {
+                return (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: []))
+            } else {
+                return (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [createdRecord]))
+            }
+        }
+
+        let commitClosure: @Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetLatestCommit.Output?) = {
+            await commitTracker.record()
+            return (200, ComAtprotoSpaceGetLatestCommit.Output(commit: signedCommit))
+        }
+
+        await model.load(space: spaceItem, repo: repo, account: dummyAccount, clientListRecords: listRecordsClosure, clientGetLatestCommit: commitClosure)
+        #expect(model.rows.isEmpty)
+        let initialListCount = await listTracker.callCount
+        #expect(initialListCount == 1)
+
         let output = try await model.createRecord(
             space: spaceItem,
             repo: repo,
@@ -634,23 +712,17 @@ struct WritePipelineTests {
                 await createTracker.record(input)
                 return (200, ComAtprotoSpaceCreateRecord.Output(uri: expectedURI, cid: expectedCID))
             },
-            clientListRecords: { cursor in
-                await listTracker.record(cursor as Any)
-                return (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [createdRecord]))
-            },
-            clientGetLatestCommit: {
-                await commitTracker.record()
-                return (200, ComAtprotoSpaceGetLatestCommit.Output(commit: signedCommit))
-            }
+            clientListRecords: listRecordsClosure,
+            clientGetLatestCommit: commitClosure
         )
 
         #expect(output.uri == expectedURI)
         let createCount = await createTracker.callCount
-        let listCount = await listTracker.callCount
-        let commitCount = await commitTracker.callCount
+        let finalListCount = await listTracker.callCount
+        let finalCommitCount = await commitTracker.callCount
         #expect(createCount == 1)
-        #expect(listCount == 1)
-        #expect(commitCount == 1)
+        #expect(finalListCount == 2)
+        #expect(finalCommitCount == 2)
         #expect(model.rows.count == 1)
         #expect(model.rows.first?.rkey == "post1")
         #expect(model.commit?.rev == "3l3vbfz2zsk22")
@@ -665,18 +737,17 @@ struct WritePipelineTests {
         )
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
-
-        let oldRow = RecordRow(
-            uri: "at://did:plc:alice123/space/space.swan.drive/self/did:plc:alice123/app.bsky.feed.post/post1",
-            collection: "app.bsky.feed.post",
-            rkey: "post1",
-            cid: "oldcid",
-            json: "{\"text\": \"Old Post\"}"
-        )
-        let model = RecordListModel(rows: [oldRow])
+        let model = RecordListModel()
 
         let expectedURI = try ATProtocolURI(uriString: "at://did:plc:alice123/app.bsky.feed.post/post1")
         let expectedCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+
+        let initialRecord = ComAtprotoSpaceListRecords.Record(
+            collection: try NSID(nsidString: "app.bsky.feed.post"),
+            rkey: try RecordKey(keyString: "post1"),
+            cid: expectedCID,
+            value: try RecordListModel.validateRecordJSON("{\"text\": \"Initial Post\"}")
+        )
 
         let updatedRecord = ComAtprotoSpaceListRecords.Record(
             collection: try NSID(nsidString: "app.bsky.feed.post"),
@@ -698,6 +769,27 @@ struct WritePipelineTests {
         let listTracker = WriteTestCallTracker()
         let commitTracker = WriteTestCallTracker()
 
+        let listRecordsClosure: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListRecords.Output?) = { cursor in
+            let count = await listTracker.callCount
+            await listTracker.record(cursor as Any)
+            if count == 0 {
+                return (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [initialRecord]))
+            } else {
+                return (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [updatedRecord]))
+            }
+        }
+
+        let commitClosure: @Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetLatestCommit.Output?) = {
+            await commitTracker.record()
+            return (200, ComAtprotoSpaceGetLatestCommit.Output(commit: signedCommit))
+        }
+
+        await model.load(space: spaceItem, repo: repo, account: dummyAccount, clientListRecords: listRecordsClosure, clientGetLatestCommit: commitClosure)
+        #expect(model.rows.count == 1)
+        #expect(model.rows.first?.json.contains("Initial Post") == true)
+        let initialListCount = await listTracker.callCount
+        #expect(initialListCount == 1)
+
         let output = try await model.putRecord(
             space: spaceItem,
             repo: repo,
@@ -709,23 +801,17 @@ struct WritePipelineTests {
                 await putTracker.record(input)
                 return (200, ComAtprotoSpacePutRecord.Output(uri: expectedURI, cid: expectedCID))
             },
-            clientListRecords: { cursor in
-                await listTracker.record(cursor as Any)
-                return (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [updatedRecord]))
-            },
-            clientGetLatestCommit: {
-                await commitTracker.record()
-                return (200, ComAtprotoSpaceGetLatestCommit.Output(commit: signedCommit))
-            }
+            clientListRecords: listRecordsClosure,
+            clientGetLatestCommit: commitClosure
         )
 
         #expect(output.uri == expectedURI)
         let putCount = await putTracker.callCount
-        let listCount = await listTracker.callCount
-        let commitCount = await commitTracker.callCount
+        let finalListCount = await listTracker.callCount
+        let finalCommitCount = await commitTracker.callCount
         #expect(putCount == 1)
-        #expect(listCount == 1)
-        #expect(commitCount == 1)
+        #expect(finalListCount == 2)
+        #expect(finalCommitCount == 2)
         #expect(model.rows.count == 1)
         #expect(model.rows.first?.json.contains("Updated Post") == true)
     }
@@ -739,16 +825,15 @@ struct WritePipelineTests {
         )
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
+        let model = RecordListModel()
 
-        let existingRow = RecordRow(
-            uri: "at://did:plc:alice123/space/space.swan.drive/self/did:plc:alice123/app.bsky.feed.post/post1",
-            collection: "app.bsky.feed.post",
-            rkey: "post1",
-            cid: "cid1",
-            json: "{\"text\": \"Post\"}"
+        let expectedCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+        let existingRecord = ComAtprotoSpaceListRecords.Record(
+            collection: try NSID(nsidString: "app.bsky.feed.post"),
+            rkey: try RecordKey(keyString: "post1"),
+            cid: expectedCID,
+            value: try RecordListModel.validateRecordJSON("{\"text\": \"Post\"}")
         )
-        let model = RecordListModel(rows: [existingRow])
-        #expect(model.rows.count == 1)
 
         let signedCommit = ComAtprotoSpaceDefs.SignedCommit(
             ver: 1,
@@ -763,6 +848,26 @@ struct WritePipelineTests {
         let listTracker = WriteTestCallTracker()
         let commitTracker = WriteTestCallTracker()
 
+        let listRecordsClosure: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListRecords.Output?) = { cursor in
+            let count = await listTracker.callCount
+            await listTracker.record(cursor as Any)
+            if count == 0 {
+                return (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [existingRecord]))
+            } else {
+                return (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: []))
+            }
+        }
+
+        let commitClosure: @Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetLatestCommit.Output?) = {
+            await commitTracker.record()
+            return (200, ComAtprotoSpaceGetLatestCommit.Output(commit: signedCommit))
+        }
+
+        await model.load(space: spaceItem, repo: repo, account: dummyAccount, clientListRecords: listRecordsClosure, clientGetLatestCommit: commitClosure)
+        #expect(model.rows.count == 1)
+        let initialListCount = await listTracker.callCount
+        #expect(initialListCount == 1)
+
         _ = try await model.deleteRecord(
             space: spaceItem,
             repo: repo,
@@ -773,22 +878,16 @@ struct WritePipelineTests {
                 await deleteTracker.record(input)
                 return (200, ComAtprotoSpaceDeleteRecord.Output())
             },
-            clientListRecords: { cursor in
-                await listTracker.record(cursor as Any)
-                return (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: []))
-            },
-            clientGetLatestCommit: {
-                await commitTracker.record()
-                return (200, ComAtprotoSpaceGetLatestCommit.Output(commit: signedCommit))
-            }
+            clientListRecords: listRecordsClosure,
+            clientGetLatestCommit: commitClosure
         )
 
         let deleteCount = await deleteTracker.callCount
-        let listCount = await listTracker.callCount
-        let commitCount = await commitTracker.callCount
+        let finalListCount = await listTracker.callCount
+        let finalCommitCount = await commitTracker.callCount
         #expect(deleteCount == 1)
-        #expect(listCount == 1)
-        #expect(commitCount == 1)
+        #expect(finalListCount == 2)
+        #expect(finalCommitCount == 2)
         #expect(model.rows.isEmpty)
     }
 
@@ -800,14 +899,28 @@ struct WritePipelineTests {
             accountDID: "did:plc:alice123"
         )
         let dummyAccount = await makeTestAccount()
-        let model = SpaceDetailModel(members: [])
-        #expect(model.members?.isEmpty == true)
+        let model = SpaceDetailModel()
 
         let m1 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:alice123"))
         let m2 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:bob456"))
 
         let addTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
+
+        let listTransport: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?) = { cursor in
+            let count = await listTracker.callCount
+            await listTracker.record(cursor as Any)
+            if count == 0 {
+                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [m1]))
+            } else {
+                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [m1, m2]))
+            }
+        }
+
+        await model.load(space: spaceItem, account: dummyAccount, fetchRepos: { [] }, listMembersTransport: listTransport)
+        #expect(model.members == ["did:plc:alice123"])
+        let initialListCount = await listTracker.callCount
+        #expect(initialListCount == 1)
 
         try await model.addMember(
             identifier: "did:plc:bob456",
@@ -819,15 +932,13 @@ struct WritePipelineTests {
                 return 200
             },
             fetchRepos: { [] },
-            listMembersTransport: { cursor in
-                await listTracker.record(cursor as Any)
-                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [m1, m2]))
-            }
+            listMembersTransport: listTransport
         )
+
         let addCount = await addTracker.callCount
-        let listCount = await listTracker.callCount
+        let finalListCount = await listTracker.callCount
         #expect(addCount == 1)
-        #expect(listCount == 1)
+        #expect(finalListCount == 2)
         #expect(model.members == ["did:plc:alice123", "did:plc:bob456"])
     }
 
@@ -839,13 +950,28 @@ struct WritePipelineTests {
             accountDID: "did:plc:alice123"
         )
         let dummyAccount = await makeTestAccount()
-        let model = SpaceDetailModel(members: ["did:plc:alice123", "did:plc:bob456"])
-        #expect(model.members?.count == 2)
+        let model = SpaceDetailModel()
 
         let m1 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:alice123"))
+        let m2 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:bob456"))
 
         let removeTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
+
+        let listTransport: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?) = { cursor in
+            let count = await listTracker.callCount
+            await listTracker.record(cursor as Any)
+            if count == 0 {
+                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [m1, m2]))
+            } else {
+                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [m1]))
+            }
+        }
+
+        await model.load(space: spaceItem, account: dummyAccount, fetchRepos: { [] }, listMembersTransport: listTransport)
+        #expect(model.members == ["did:plc:alice123", "did:plc:bob456"])
+        let initialListCount = await listTracker.callCount
+        #expect(initialListCount == 1)
 
         try await model.removeMember(
             did: "did:plc:bob456",
@@ -856,15 +982,13 @@ struct WritePipelineTests {
                 return 200
             },
             fetchRepos: { [] },
-            listMembersTransport: { cursor in
-                await listTracker.record(cursor as Any)
-                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [m1]))
-            }
+            listMembersTransport: listTransport
         )
-        let listCount = await listTracker.callCount
+
         let removeCount = await removeTracker.callCount
+        let finalListCount = await listTracker.callCount
         #expect(removeCount == 1)
-        #expect(listCount == 1)
+        #expect(finalListCount == 2)
         #expect(model.members == ["did:plc:alice123"])
     }
 }

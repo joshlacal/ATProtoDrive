@@ -171,36 +171,6 @@ public final class RecordListModel {
         )
     }
 
-    /// Performs `createRecord` with an injected transport. Validates JSON BEFORE invoking the transport.
-    nonisolated public static func performCreateRecord(
-        space: SpaceRef,
-        repoDID: String,
-        collection: String,
-        rkey: String?,
-        jsonText: String,
-        account: AccountStore.Account,
-        transport: (@Sendable (_ input: ComAtprotoSpaceCreateRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpaceCreateRecord.Output?))? = nil
-    ) async throws -> ComAtprotoSpaceCreateRecord.Output {
-        let input = try makeCreateRecordInput(
-            space: space,
-            repoDID: repoDID,
-            collection: collection,
-            rkey: rkey,
-            jsonText: jsonText
-        )
-        let execute = transport ?? { input in
-            try await account.client.com.atproto.space.createRecord(input: input)
-        }
-        let (responseCode, output) = try await execute(input)
-        guard (200...299).contains(responseCode) else {
-            throw ATProtoXRPCError(error: "CreateRecordFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
-        }
-        guard let output else {
-            throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body", statusCode: responseCode)
-        }
-        return output
-    }
-
     /// Pure helper to construct `ComAtprotoSpacePutRecord.Input` after validating JSON.
     nonisolated public static func makePutRecordInput(
         space: SpaceRef,
@@ -223,36 +193,6 @@ public final class RecordListModel {
         )
     }
 
-    /// Performs `putRecord` with an injected transport. Validates JSON BEFORE invoking the transport.
-    nonisolated public static func performPutRecord(
-        space: SpaceRef,
-        repoDID: String,
-        collection: String,
-        rkey: String,
-        jsonText: String,
-        account: AccountStore.Account,
-        transport: (@Sendable (_ input: ComAtprotoSpacePutRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpacePutRecord.Output?))? = nil
-    ) async throws -> ComAtprotoSpacePutRecord.Output {
-        let input = try makePutRecordInput(
-            space: space,
-            repoDID: repoDID,
-            collection: collection,
-            rkey: rkey,
-            jsonText: jsonText
-        )
-        let execute = transport ?? { input in
-            try await account.client.com.atproto.space.putRecord(input: input)
-        }
-        let (responseCode, output) = try await execute(input)
-        guard (200...299).contains(responseCode) else {
-            throw ATProtoXRPCError(error: "PutRecordFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
-        }
-        guard let output else {
-            throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body", statusCode: responseCode)
-        }
-        return output
-    }
-
     /// Pure helper to construct `ComAtprotoSpaceDeleteRecord.Input`.
     nonisolated public static func makeDeleteRecordInput(
         space: SpaceRef,
@@ -269,34 +209,6 @@ public final class RecordListModel {
             collection: colNSID,
             rkey: recordKey
         )
-    }
-
-    /// Performs `deleteRecord` with an injected transport.
-    nonisolated public static func performDeleteRecord(
-        space: SpaceRef,
-        repoDID: String,
-        collection: String,
-        rkey: String,
-        account: AccountStore.Account,
-        transport: (@Sendable (_ input: ComAtprotoSpaceDeleteRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpaceDeleteRecord.Output?))? = nil
-    ) async throws -> ComAtprotoSpaceDeleteRecord.Output {
-        let input = try makeDeleteRecordInput(
-            space: space,
-            repoDID: repoDID,
-            collection: collection,
-            rkey: rkey
-        )
-        let execute = transport ?? { input in
-            try await account.client.com.atproto.space.deleteRecord(input: input)
-        }
-        let (responseCode, output) = try await execute(input)
-        guard (200...299).contains(responseCode) else {
-            throw ATProtoXRPCError(error: "DeleteRecordFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
-        }
-        guard let output else {
-            throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body", statusCode: responseCode)
-        }
-        return output
     }
 
     /// Uploads a blob via `com.atproto.repo.uploadBlob` on the user's PDS.
@@ -896,15 +808,23 @@ public final class RecordListModel {
         clientListRecords: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListRecords.Output?))? = nil,
         clientGetLatestCommit: (@Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetLatestCommit.Output?))? = nil
     ) async throws -> ComAtprotoSpaceCreateRecord.Output {
-        let output = try await Self.performCreateRecord(
+        let input = try Self.makeCreateRecordInput(
             space: space.ref,
             repoDID: account.id,
             collection: collection,
             rkey: rkey,
-            jsonText: jsonText,
-            account: account,
-            transport: transport
+            jsonText: jsonText
         )
+        let execute = transport ?? { input in
+            try await account.client.com.atproto.space.createRecord(input: input)
+        }
+        let (responseCode, output) = try await execute(input)
+        guard (200...299).contains(responseCode) else {
+            throw ATProtoXRPCError(error: "CreateRecordFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
+        }
+        guard let output else {
+            throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body", statusCode: responseCode)
+        }
         await load(
             space: space,
             repo: repo,
@@ -927,15 +847,23 @@ public final class RecordListModel {
         clientListRecords: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListRecords.Output?))? = nil,
         clientGetLatestCommit: (@Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetLatestCommit.Output?))? = nil
     ) async throws -> ComAtprotoSpacePutRecord.Output {
-        let output = try await Self.performPutRecord(
+        let input = try Self.makePutRecordInput(
             space: space.ref,
             repoDID: account.id,
             collection: collection,
             rkey: rkey,
-            jsonText: jsonText,
-            account: account,
-            transport: transport
+            jsonText: jsonText
         )
+        let execute = transport ?? { input in
+            try await account.client.com.atproto.space.putRecord(input: input)
+        }
+        let (responseCode, output) = try await execute(input)
+        guard (200...299).contains(responseCode) else {
+            throw ATProtoXRPCError(error: "PutRecordFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
+        }
+        guard let output else {
+            throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body", statusCode: responseCode)
+        }
         await load(
             space: space,
             repo: repo,
@@ -957,14 +885,22 @@ public final class RecordListModel {
         clientListRecords: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListRecords.Output?))? = nil,
         clientGetLatestCommit: (@Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetLatestCommit.Output?))? = nil
     ) async throws -> ComAtprotoSpaceDeleteRecord.Output {
-        let output = try await Self.performDeleteRecord(
+        let input = try Self.makeDeleteRecordInput(
             space: space.ref,
             repoDID: repo.did,
             collection: collection,
-            rkey: rkey,
-            account: account,
-            transport: transport
+            rkey: rkey
         )
+        let execute = transport ?? { input in
+            try await account.client.com.atproto.space.deleteRecord(input: input)
+        }
+        let (responseCode, output) = try await execute(input)
+        guard (200...299).contains(responseCode) else {
+            throw ATProtoXRPCError(error: "DeleteRecordFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
+        }
+        guard let output else {
+            throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body", statusCode: responseCode)
+        }
         await load(
             space: space,
             repo: repo,

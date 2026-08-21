@@ -414,44 +414,6 @@ public final class SpaceDetailModel {
         )
     }
 
-    /// Performs `createSpace` with an injected transport.
-    nonisolated public static func performCreateSpace(
-        spaceType: String,
-        skey: String?,
-        policy: SpacePolicyOption,
-        account: AccountStore.Account,
-        transport: (@Sendable (_ input: ComAtprotoSimplespaceCreateSpace.Input) async throws -> (responseCode: Int, data: ComAtprotoSimplespaceCreateSpace.Output?))? = nil
-    ) async throws -> SpaceRef {
-        let input = try makeCreateSpaceInput(spaceType: spaceType, skey: skey, policy: policy)
-        let execute = transport ?? { input in
-            try await account.client.com.atproto.simplespace.createSpace(input: input)
-        }
-        let (responseCode, output) = try await execute(input)
-        guard (200...299).contains(responseCode) else {
-            throw ATProtoXRPCError(error: "CreateSpaceFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
-        }
-        guard let output else {
-            throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body from createSpace", statusCode: responseCode)
-        }
-        return output.uri
-    }
-
-    /// Performs `deleteSpace` with an injected transport.
-    nonisolated public static func performDeleteSpace(
-        space: SpaceItem,
-        account: AccountStore.Account,
-        transport: (@Sendable (_ input: ComAtprotoSimplespaceDeleteSpace.Input) async throws -> Int)? = nil
-    ) async throws {
-        let input = ComAtprotoSimplespaceDeleteSpace.Input(space: space.ref)
-        let execute = transport ?? { input in
-            try await account.client.com.atproto.simplespace.deleteSpace(input: input)
-        }
-        let responseCode = try await execute(input)
-        guard (200...299).contains(responseCode) else {
-            throw ATProtoXRPCError(error: "DeleteSpaceFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
-        }
-    }
-
     /// Resolves an identifier (either a DID or a handle) to a validated `DID`.
     nonisolated public static func resolveIdentifierToDID(
         _ identifier: String,
@@ -472,28 +434,6 @@ public final class SpaceDetailModel {
         return try DID(didString: resolved)
     }
 
-    /// Performs `addMember` with handle resolution and injected transport.
-    nonisolated public static func performAddMember(
-        space: SpaceItem,
-        identifier: String,
-        account: AccountStore.Account,
-        resolveHandle: (@Sendable (_ handle: String) async throws -> String)? = nil,
-        transport: (@Sendable (_ input: ComAtprotoSimplespaceAddMember.Input) async throws -> Int)? = nil
-    ) async throws {
-        let resolver = resolveHandle ?? { handle in
-            try await account.client.resolveHandleToDID(handle: handle)
-        }
-        let did = try await resolveIdentifierToDID(identifier, resolveHandle: resolver)
-        let input = ComAtprotoSimplespaceAddMember.Input(space: space.ref, did: did)
-        let execute = transport ?? { input in
-            try await account.client.com.atproto.simplespace.addMember(input: input)
-        }
-        let responseCode = try await execute(input)
-        guard (200...299).contains(responseCode) else {
-            throw ATProtoXRPCError(error: "AddMemberFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
-        }
-    }
-
     /// Adds a member to the space and reloads members.
     public func addMember(
         identifier: String,
@@ -504,37 +444,24 @@ public final class SpaceDetailModel {
         fetchRepos: (@Sendable () async throws -> [RepoEntry])? = nil,
         listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?))? = nil
     ) async throws {
-        try await Self.performAddMember(
-            space: space,
-            identifier: identifier,
-            account: account,
-            resolveHandle: resolveHandle,
-            transport: transport
-        )
+        let resolver = resolveHandle ?? { handle in
+            try await account.client.resolveHandleToDID(handle: handle)
+        }
+        let did = try await Self.resolveIdentifierToDID(identifier, resolveHandle: resolver)
+        let input = ComAtprotoSimplespaceAddMember.Input(space: space.ref, did: did)
+        let execute = transport ?? { input in
+            try await account.client.com.atproto.simplespace.addMember(input: input)
+        }
+        let responseCode = try await execute(input)
+        guard (200...299).contains(responseCode) else {
+            throw ATProtoXRPCError(error: "AddMemberFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
+        }
         await load(
             space: space,
             account: account,
             fetchRepos: fetchRepos,
             listMembersTransport: listMembersTransport
         )
-    }
-
-    /// Performs `removeMember` with injected transport.
-    nonisolated public static func performRemoveMember(
-        space: SpaceItem,
-        did: String,
-        account: AccountStore.Account,
-        transport: (@Sendable (_ input: ComAtprotoSimplespaceRemoveMember.Input) async throws -> Int)? = nil
-    ) async throws {
-        let didVal = try DID(didString: did.trimmingCharacters(in: .whitespacesAndNewlines))
-        let input = ComAtprotoSimplespaceRemoveMember.Input(space: space.ref, did: didVal)
-        let execute = transport ?? { input in
-            try await account.client.com.atproto.simplespace.removeMember(input: input)
-        }
-        let responseCode = try await execute(input)
-        guard (200...299).contains(responseCode) else {
-            throw ATProtoXRPCError(error: "RemoveMemberFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
-        }
     }
 
     /// Removes a member from the space and reloads members.
@@ -546,30 +473,20 @@ public final class SpaceDetailModel {
         fetchRepos: (@Sendable () async throws -> [RepoEntry])? = nil,
         listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?))? = nil
     ) async throws {
-        try await Self.performRemoveMember(
-            space: space,
-            did: did,
-            account: account,
-            transport: transport
-        )
+        let didVal = try DID(didString: did.trimmingCharacters(in: .whitespacesAndNewlines))
+        let input = ComAtprotoSimplespaceRemoveMember.Input(space: space.ref, did: didVal)
+        let execute = transport ?? { input in
+            try await account.client.com.atproto.simplespace.removeMember(input: input)
+        }
+        let responseCode = try await execute(input)
+        guard (200...299).contains(responseCode) else {
+            throw ATProtoXRPCError(error: "RemoveMemberFailed", message: "Failed with HTTP \(responseCode)", statusCode: responseCode)
+        }
         await load(
             space: space,
             account: account,
             fetchRepos: fetchRepos,
             listMembersTransport: listMembersTransport
-        )
-    }
-
-    /// Deletes the space.
-    public func deleteSpace(
-        space: SpaceItem,
-        account: AccountStore.Account,
-        transport: (@Sendable (_ input: ComAtprotoSimplespaceDeleteSpace.Input) async throws -> Int)? = nil
-    ) async throws {
-        try await Self.performDeleteSpace(
-            space: space,
-            account: account,
-            transport: transport
         )
     }
 }

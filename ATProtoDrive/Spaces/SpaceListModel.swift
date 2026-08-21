@@ -125,9 +125,10 @@ public final class SpaceListModel {
         }
 
         let listTransport = listSpacesTransport ?? { cursor in
-            try await account.client.com.atproto.space.listSpaces(
+            let (responseCode, data) = try await account.client.com.atproto.space.listSpaces(
                 input: ComAtprotoSpaceListSpaces.Parameters(cursor: cursor)
             )
+            return (responseCode: responseCode, output: data)
         }
         await load(accountDID: account.id, fetchPage: listTransport)
         return output.uri
@@ -149,9 +150,10 @@ public final class SpaceListModel {
         }
 
         let listTransport = listSpacesTransport ?? { cursor in
-            try await account.client.com.atproto.space.listSpaces(
+            let (responseCode, data) = try await account.client.com.atproto.space.listSpaces(
                 input: ComAtprotoSpaceListSpaces.Parameters(cursor: cursor)
             )
+            return (responseCode: responseCode, output: data)
         }
         await load(accountDID: account.id, fetchPage: listTransport)
     }
