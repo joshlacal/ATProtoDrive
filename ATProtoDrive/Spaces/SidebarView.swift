@@ -84,11 +84,7 @@ struct AccountSpacesSection: View {
                     SpaceRowView(space: space)
                         .tag(space)
                         .contextMenu {
-                            Button {
-                                RecordCopyAction.copySpaceRef(space)
-                            } label: {
-                                Label("Copy Space Ref", systemImage: "doc.on.doc")
-                            }
+                            ContextMenuEntriesView(items: RecordMenuDescriptors.spaceRowMenu(for: space))
                         }
                 }
                 if let error = model.error {
@@ -174,11 +170,7 @@ struct SpaceRowView: View {
             }
         }
         .contextMenu {
-            Button {
-                RecordCopyAction.copySpaceRef(space)
-            } label: {
-                Label("Copy Space Ref", systemImage: "doc.on.doc")
-            }
+            ContextMenuEntriesView(items: RecordMenuDescriptors.spaceRowMenu(for: space))
         }
     }
 }

@@ -484,19 +484,14 @@ struct RecordListModelPipelineTests {
         #expect(readBack.count == 39)
     }
 
-    @Test("RecordCopyAction routes each menu action to the exact model field on an isolated pasteboard")
-    func testRecordCopyActionsIsolatedPasteboard() throws {
-        let spaceItem = try SpaceItem(
-            uriString: "at://did:plc:space1/space/com.atproto.feed/main",
-            accountDID: "did:plc:space1"
-        )
-
+    @Test("RecordMenuDescriptors.recordRowMenu wires exact labels to canonical model fields on isolated pasteboard and enforces delete gating")
+    @MainActor
+    func testRecordRowMenuDescriptorWiring() throws {
         let blob = BlobRefEntry(
             cid: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a",
             mimeType: "image/png",
             size: 12345
         )
-
         let record = RecordRow(
             uri: "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz",
             collection: "app.bsky.feed.post",
@@ -506,32 +501,194 @@ struct RecordListModelPipelineTests {
             blobEntries: [blob]
         )
 
-        let isolatedPasteboard = InMemoryPasteboard()
+        let pasteboard = InMemoryPasteboard()
+        var didCallDelete = false
 
-        // 1. Copy at:// URI
-        RecordCopyAction.copyRecordURI(record, pasteboard: isolatedPasteboard)
-        #expect(isolatedPasteboard.readString() == "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz")
-        #expect(isolatedPasteboard.readString() == record.uri)
+        let menuItems = RecordMenuDescriptors.recordRowMenu(
+            for: record,
+            isOwnRepo: true,
+            hasAccount: true,
+            pasteboard: pasteboard,
+            onDelete: { didCallDelete = true }
+        )
 
-        // 2. Copy CID
-        RecordCopyAction.copyRecordCID(record, pasteboard: isolatedPasteboard)
-        #expect(isolatedPasteboard.readString() == "bafyreih321cid")
-        #expect(isolatedPasteboard.readString() == record.cid)
+        #expect(menuItems.count == 4)
 
-        // 3. Copy JSON
-        RecordCopyAction.copyRecordJSON(record, pasteboard: isolatedPasteboard)
-        #expect(isolatedPasteboard.readString() == "{\n  \"text\": \"Hello ATProto\"\n}")
-        #expect(isolatedPasteboard.readString() == record.json)
+        // Item 0: Copy at:// URI
+        let uriItem = menuItems[0]
+        #expect(uriItem.title == "Copy at:// URI")
+        #expect(uriItem.systemImage == "link")
+        #expect(uriItem.payload?() == record.uri)
+        uriItem.action()
+        #expect(pasteboard.readString() == record.uri)
+        #expect(pasteboard.readString() == "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz")
 
-        // 4. Copy Blob CID
-        RecordCopyAction.copyBlobCID(blob, pasteboard: isolatedPasteboard)
-        #expect(isolatedPasteboard.readString() == "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
-        #expect(isolatedPasteboard.readString() == blob.cid)
+        // Item 1: Copy CID
+        let cidItem = menuItems[1]
+        #expect(cidItem.title == "Copy CID")
+        #expect(cidItem.systemImage == "doc.on.doc")
+        #expect(cidItem.payload?() == record.cid)
+        cidItem.action()
+        #expect(pasteboard.readString() == record.cid)
+        #expect(pasteboard.readString() == "bafyreih321cid")
 
-        // 5. Copy Space Ref
-        RecordCopyAction.copySpaceRef(spaceItem, pasteboard: isolatedPasteboard)
-        #expect(isolatedPasteboard.readString() == "at://did:plc:space1/space/com.atproto.feed/main")
-        #expect(isolatedPasteboard.readString() == spaceItem.ref.uriString())
+        // Item 2: Copy JSON
+        let jsonItem = menuItems[2]
+        #expect(jsonItem.title == "Copy JSON")
+        #expect(jsonItem.systemImage == "curlybraces")
+        #expect(jsonItem.payload?() == record.json)
+        jsonItem.action()
+        #expect(pasteboard.readString() == record.json)
+        #expect(pasteboard.readString() == "{\n  \"text\": \"Hello ATProto\"\n}")
+
+        // Item 3: Delete Record
+        let deleteItem = menuItems[3]
+        #expect(deleteItem.title == "Delete Record")
+        #expect(deleteItem.systemImage == "trash")
+        #expect(deleteItem.isDestructive == true)
+        #expect(deleteItem.isDividerBefore == true)
+        #expect(deleteItem.isEnabled == true)
+        deleteItem.action()
+        #expect(didCallDelete == true)
+
+        // Test disabled states for delete item
+        let foreignMenu = RecordMenuDescriptors.recordRowMenu(
+            for: record,
+            isOwnRepo: false,
+            hasAccount: true
+        )
+        #expect(foreignMenu[3].isEnabled == false)
+
+        let noAccountMenu = RecordMenuDescriptors.recordRowMenu(
+            for: record,
+            isOwnRepo: true,
+            hasAccount: false
+        )
+        #expect(noAccountMenu[3].isEnabled == false)
+    }
+    @Test("RecordMenuDescriptors.blobRefMenu wires Download, QuickLook, and Copy CID with correct gating and isolated pasteboard payload")
+    @MainActor
+    func testBlobRefMenuDescriptorWiring() throws {
+        let blob = BlobRefEntry(
+            cid: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a",
+            mimeType: "image/png",
+            size: 12345
+        )
+
+        let pasteboard = InMemoryPasteboard()
+        var didCallDownload = false
+        var didCallQuickLook = false
+
+        let enabledMenu = RecordMenuDescriptors.blobRefMenu(
+            for: blob,
+            hasAccount: true,
+            pasteboard: pasteboard,
+            onDownload: { didCallDownload = true },
+            onQuickLook: { didCallQuickLook = true }
+        )
+
+        #expect(enabledMenu.count == 3)
+
+        // Item 0: Download…
+        let downloadItem = enabledMenu[0]
+        #expect(downloadItem.title == "Download…")
+        #expect(downloadItem.systemImage == "arrow.down.circle")
+        #expect(downloadItem.isEnabled == true)
+        downloadItem.action()
+        #expect(didCallDownload == true)
+
+        // Item 1: Quick Look
+        let quickLookItem = enabledMenu[1]
+        #expect(quickLookItem.title == "Quick Look")
+        #expect(quickLookItem.systemImage == "eye")
+        #expect(quickLookItem.isEnabled == true)
+        quickLookItem.action()
+        #expect(didCallQuickLook == true)
+
+        // Item 2: Copy CID
+        let copyCIDItem = enabledMenu[2]
+        #expect(copyCIDItem.title == "Copy CID")
+        #expect(copyCIDItem.systemImage == "doc.on.doc")
+        #expect(copyCIDItem.isDividerBefore == true)
+        #expect(copyCIDItem.payload?() == blob.cid)
+        copyCIDItem.action()
+        #expect(pasteboard.readString() == blob.cid)
+        #expect(pasteboard.readString() == "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+        // Disabled state when hasAccount == false
+        let disabledMenu = RecordMenuDescriptors.blobRefMenu(
+            for: blob,
+            hasAccount: false
+        )
+        #expect(disabledMenu[0].isEnabled == false)
+        #expect(disabledMenu[1].isEnabled == false)
+        #expect(disabledMenu[2].isEnabled == true)
+    }
+
+    @Test("RecordMenuDescriptors.spaceRowMenu wires Copy Space Ref and Delete Space on isolated pasteboard")
+    @MainActor
+    func testSpaceRowMenuDescriptorWiring() throws {
+        let spaceItem = try SpaceItem(
+            uriString: "at://did:plc:space1/space/com.atproto.feed/main",
+            accountDID: "did:plc:space1"
+        )
+
+        let pasteboard = InMemoryPasteboard()
+        var didCallDeleteSpace = false
+
+        // 1. Owned space with delete closure
+        let ownedMenu = RecordMenuDescriptors.spaceRowMenu(
+            for: spaceItem,
+            pasteboard: pasteboard,
+            onDelete: { didCallDeleteSpace = true }
+        )
+        #expect(ownedMenu.count == 2)
+        #expect(ownedMenu[0].title == "Copy Space Ref")
+        #expect(ownedMenu[0].payload?() == spaceItem.ref.uriString())
+        ownedMenu[0].action()
+        #expect(pasteboard.readString() == spaceItem.ref.uriString())
+        #expect(pasteboard.readString() == "at://did:plc:space1/space/com.atproto.feed/main")
+
+        #expect(ownedMenu[1].title == "Delete Space…")
+        #expect(ownedMenu[1].isDestructive == true)
+        #expect(ownedMenu[1].isDividerBefore == true)
+        ownedMenu[1].action()
+        #expect(didCallDeleteSpace == true)
+
+        // 2. Shared space (not own authority)
+        let sharedSpace = try SpaceItem(
+            uriString: "at://did:plc:space1/space/com.atproto.feed/main",
+            accountDID: "did:plc:otheruser"
+        )
+        let sharedMenu = RecordMenuDescriptors.spaceRowMenu(
+            for: sharedSpace,
+            pasteboard: pasteboard,
+            onDelete: { didCallDeleteSpace = true }
+        )
+        #expect(sharedMenu.count == 1)
+        #expect(sharedMenu[0].title == "Copy Space Ref")
+
+        // 3. Inspector menus
+        let record = RecordRow(
+            uri: "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz",
+            collection: "app.bsky.feed.post",
+            rkey: "3l3vbfz",
+            cid: "bafyreih321cid",
+            json: "{\n  \"text\": \"Hello ATProto\"\n}"
+        )
+        let inspectorCID = RecordMenuDescriptors.recordInspectorCIDMenu(for: record, pasteboard: pasteboard)
+        #expect(inspectorCID.count == 1)
+        inspectorCID[0].action()
+        #expect(pasteboard.readString() == record.cid)
+
+        let inspectorURI = RecordMenuDescriptors.recordInspectorURIMenu(for: record, pasteboard: pasteboard)
+        #expect(inspectorURI.count == 1)
+        inspectorURI[0].action()
+        #expect(pasteboard.readString() == record.uri)
+
+        let inspectorJSON = RecordMenuDescriptors.recordInspectorJSONMenu(for: record, pasteboard: pasteboard)
+        #expect(inspectorJSON.count == 1)
+        inspectorJSON[0].action()
+        #expect(pasteboard.readString() == record.json)
     }
     @Test("extractBlobEntries extracts rich BlobRefEntry metadata including mimeType and size")
     func testExtractBlobEntriesRich() throws {

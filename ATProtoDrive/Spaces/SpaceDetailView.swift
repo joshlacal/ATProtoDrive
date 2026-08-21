@@ -185,20 +185,14 @@ public struct SpaceDetailView: View {
                     .font(.title2.bold())
                 Spacer()
                 Menu {
-                    Button {
-                        RecordCopyAction.copySpaceRef(space)
-                    } label: {
-                        Label("Copy Space Ref", systemImage: "doc.on.doc")
-                    }
-
-                    if space.isOwnAuthority {
-                        Divider()
-                        Button(role: .destructive) {
-                            showingDeleteSpaceConfirmation = true
-                        } label: {
-                            Label("Delete Space…", systemImage: "trash")
-                        }
-                    }
+                    ContextMenuEntriesView(
+                        items: RecordMenuDescriptors.spaceRowMenu(
+                            for: space,
+                            onDelete: {
+                                showingDeleteSpaceConfirmation = true
+                            }
+                        )
+                    )
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .font(.title3)
@@ -224,22 +218,14 @@ public struct SpaceDetailView: View {
                 LabeledContent("Key", value: space.skey)
                 LabeledContent("URI", value: space.ref.uriString())
                     .contextMenu {
-                        Button {
-                            RecordCopyAction.copySpaceRef(space)
-                        } label: {
-                            Label("Copy Space Ref", systemImage: "doc.on.doc")
-                        }
+                        ContextMenuEntriesView(items: RecordMenuDescriptors.spaceRowMenu(for: space))
                     }
             }
             .font(.caption)
             .padding(.top, 4)
         }
         .contextMenu {
-            Button {
-                RecordCopyAction.copySpaceRef(space)
-            } label: {
-                Label("Copy Space Ref", systemImage: "doc.on.doc")
-            }
+            ContextMenuEntriesView(items: RecordMenuDescriptors.spaceRowMenu(for: space))
         }
     }
 

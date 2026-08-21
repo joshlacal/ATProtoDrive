@@ -63,11 +63,7 @@ public struct RecordInspectorView: View {
                             .truncationMode(.middle)
                     }
                     .contextMenu {
-                        Button {
-                            RecordCopyAction.copyRecordCID(record)
-                        } label: {
-                            Label("Copy CID", systemImage: "doc.on.doc")
-                        }
+                        ContextMenuEntriesView(items: RecordMenuDescriptors.recordInspectorCIDMenu(for: record))
                     }
 
                     HStack(spacing: 8) {
@@ -81,11 +77,7 @@ public struct RecordInspectorView: View {
                             .truncationMode(.middle)
                     }
                     .contextMenu {
-                        Button {
-                            RecordCopyAction.copyRecordURI(record)
-                        } label: {
-                            Label("Copy at:// URI", systemImage: "link")
-                        }
+                        ContextMenuEntriesView(items: RecordMenuDescriptors.recordInspectorURIMenu(for: record))
                     }
                 }
                 .padding()
@@ -152,27 +144,18 @@ public struct RecordInspectorView: View {
                             .background(activeBlobCID == entry.cid ? Color.accentColor.opacity(0.1) : Color.clear)
                             .clipShape(RoundedRectangle(cornerRadius: 4))
                             .contextMenu {
-                                Button {
-                                    downloadBlob(entry)
-                                } label: {
-                                    Label("Download…", systemImage: "arrow.down.circle")
-                                }
-                                .disabled(account == nil)
-
-                                Button {
-                                    quickLookBlob(entry)
-                                } label: {
-                                    Label("Quick Look", systemImage: "eye")
-                                }
-                                .disabled(account == nil)
-
-                                Divider()
-
-                                Button {
-                                    RecordCopyAction.copyBlobCID(entry)
-                                } label: {
-                                    Label("Copy CID", systemImage: "doc.on.doc")
-                                }
+                                ContextMenuEntriesView(
+                                    items: RecordMenuDescriptors.blobRefMenu(
+                                        for: entry,
+                                        hasAccount: account != nil,
+                                        onDownload: {
+                                            downloadBlob(entry)
+                                        },
+                                        onQuickLook: {
+                                            quickLookBlob(entry)
+                                        }
+                                    )
+                                )
                             }
                         }
                     }
@@ -193,11 +176,7 @@ public struct RecordInspectorView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .contextMenu {
-                    Button {
-                        RecordCopyAction.copyRecordJSON(record)
-                    } label: {
-                        Label("Copy JSON", systemImage: "curlybraces")
-                    }
+                    ContextMenuEntriesView(items: RecordMenuDescriptors.recordInspectorJSONMenu(for: record))
                 }
 
                 Divider()

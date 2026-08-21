@@ -8,6 +8,7 @@ import Foundation
 import Observation
 import Petrel
 import UniformTypeIdentifiers
+import SwiftUI
 
 public struct BlobRefEntry: Identifiable, Hashable, Sendable {
     public var id: String { cid }
@@ -213,6 +214,208 @@ public enum RecordCopyAction {
     @discardableResult
     public static func copySpaceRef(_ spaceRef: SpaceRef, pasteboard: any PasteboardWriting = AppKitPasteboard()) -> Bool {
         pasteboard.copyString(spaceRef.uriString())
+    }
+}
+public struct ContextMenuItem: Identifiable, Sendable {
+    public let id: String
+    public let title: String
+    public let systemImage: String
+    public let isDestructive: Bool
+    public let isDividerBefore: Bool
+    public let isEnabled: Bool
+    public let action: @MainActor @Sendable () -> Void
+    public let payload: (@Sendable () -> String?)?
+
+    public init(
+        id: String? = nil,
+        title: String,
+        systemImage: String,
+        isDestructive: Bool = false,
+        isDividerBefore: Bool = false,
+        isEnabled: Bool = true,
+        payload: (@Sendable () -> String?)? = nil,
+        action: @escaping @MainActor @Sendable () -> Void
+    ) {
+        self.id = id ?? title
+        self.title = title
+        self.systemImage = systemImage
+        self.isDestructive = isDestructive
+        self.isDividerBefore = isDividerBefore
+        self.isEnabled = isEnabled
+        self.payload = payload
+        self.action = action
+    }
+}
+
+public struct ContextMenuEntriesView: View {
+    public let items: [ContextMenuItem]
+
+    public init(items: [ContextMenuItem]) {
+        self.items = items
+    }
+
+    public var body: some View {
+        ForEach(items) { item in
+            if item.isDividerBefore {
+                Divider()
+            }
+            Button(role: item.isDestructive ? .destructive : nil) {
+                item.action()
+            } label: {
+                Label(item.title, systemImage: item.systemImage)
+            }
+            .disabled(!item.isEnabled)
+        }
+    }
+}
+
+public enum RecordMenuDescriptors {
+    public static func recordRowMenu(
+        for record: RecordRow,
+        isOwnRepo: Bool,
+        hasAccount: Bool,
+        pasteboard: any PasteboardWriting = AppKitPasteboard(),
+        onDelete: (@MainActor @Sendable () -> Void)? = nil
+    ) -> [ContextMenuItem] {
+        [
+            ContextMenuItem(
+                id: "copyRecordURI",
+                title: "Copy at:// URI",
+                systemImage: "link",
+                payload: { record.uri },
+                action: { RecordCopyAction.copyRecordURI(record, pasteboard: pasteboard) }
+            ),
+            ContextMenuItem(
+                id: "copyRecordCID",
+                title: "Copy CID",
+                systemImage: "doc.on.doc",
+                payload: { record.cid },
+                action: { RecordCopyAction.copyRecordCID(record, pasteboard: pasteboard) }
+            ),
+            ContextMenuItem(
+                id: "copyRecordJSON",
+                title: "Copy JSON",
+                systemImage: "curlybraces",
+                payload: { record.json },
+                action: { RecordCopyAction.copyRecordJSON(record, pasteboard: pasteboard) }
+            ),
+            ContextMenuItem(
+                id: "deleteRecord",
+                title: "Delete Record",
+                systemImage: "trash",
+                isDestructive: true,
+                isDividerBefore: true,
+                isEnabled: isOwnRepo && hasAccount,
+                action: { onDelete?() }
+            )
+        ]
+    }
+
+    public static func blobRefMenu(
+        for blob: BlobRefEntry,
+        hasAccount: Bool,
+        pasteboard: any PasteboardWriting = AppKitPasteboard(),
+        onDownload: (@MainActor @Sendable () -> Void)? = nil,
+        onQuickLook: (@MainActor @Sendable () -> Void)? = nil
+    ) -> [ContextMenuItem] {
+        [
+            ContextMenuItem(
+                id: "downloadBlob",
+                title: "Download…",
+                systemImage: "arrow.down.circle",
+                isEnabled: hasAccount,
+                action: { onDownload?() }
+            ),
+            ContextMenuItem(
+                id: "quickLookBlob",
+                title: "Quick Look",
+                systemImage: "eye",
+                isEnabled: hasAccount,
+                action: { onQuickLook?() }
+            ),
+            ContextMenuItem(
+                id: "copyBlobCID",
+                title: "Copy CID",
+                systemImage: "doc.on.doc",
+                isDividerBefore: true,
+                payload: { blob.cid },
+                action: { RecordCopyAction.copyBlobCID(blob, pasteboard: pasteboard) }
+            )
+        ]
+    }
+
+    public static func spaceRowMenu(
+        for space: SpaceItem,
+        pasteboard: any PasteboardWriting = AppKitPasteboard(),
+        onDelete: (@MainActor @Sendable () -> Void)? = nil
+    ) -> [ContextMenuItem] {
+        var items = [
+            ContextMenuItem(
+                id: "copySpaceRef",
+                title: "Copy Space Ref",
+                systemImage: "doc.on.doc",
+                payload: { space.ref.uriString() },
+                action: { RecordCopyAction.copySpaceRef(space, pasteboard: pasteboard) }
+            )
+        ]
+        if let onDelete = onDelete, space.isOwnAuthority {
+            items.append(
+                ContextMenuItem(
+                    id: "deleteSpace",
+                    title: "Delete Space…",
+                    systemImage: "trash",
+                    isDestructive: true,
+                    isDividerBefore: true,
+                    action: { onDelete() }
+                )
+            )
+        }
+        return items
+    }
+
+    public static func recordInspectorCIDMenu(
+        for record: RecordRow,
+        pasteboard: any PasteboardWriting = AppKitPasteboard()
+    ) -> [ContextMenuItem] {
+        [
+            ContextMenuItem(
+                id: "copyRecordCID",
+                title: "Copy CID",
+                systemImage: "doc.on.doc",
+                payload: { record.cid },
+                action: { RecordCopyAction.copyRecordCID(record, pasteboard: pasteboard) }
+            )
+        ]
+    }
+
+    public static func recordInspectorURIMenu(
+        for record: RecordRow,
+        pasteboard: any PasteboardWriting = AppKitPasteboard()
+    ) -> [ContextMenuItem] {
+        [
+            ContextMenuItem(
+                id: "copyRecordURI",
+                title: "Copy at:// URI",
+                systemImage: "link",
+                payload: { record.uri },
+                action: { RecordCopyAction.copyRecordURI(record, pasteboard: pasteboard) }
+            )
+        ]
+    }
+
+    public static func recordInspectorJSONMenu(
+        for record: RecordRow,
+        pasteboard: any PasteboardWriting = AppKitPasteboard()
+    ) -> [ContextMenuItem] {
+        [
+            ContextMenuItem(
+                id: "copyRecordJSON",
+                title: "Copy JSON",
+                systemImage: "curlybraces",
+                payload: { record.json },
+                action: { RecordCopyAction.copyRecordJSON(record, pasteboard: pasteboard) }
+            )
+        ]
     }
 }
 

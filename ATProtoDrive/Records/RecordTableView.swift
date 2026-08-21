@@ -75,34 +75,7 @@ public struct RecordTableView: View {
                         .width(min: 180, ideal: 260)
                     }
                     .contextMenu(forSelectionType: RecordRow.ID.self) { selectedIDs in
-                        if let targetID = selectedIDs.first, let row = model.rows.first(where: { $0.id == targetID }) {
-                            Button {
-                                RecordCopyAction.copyRecordURI(row)
-                            } label: {
-                                Label("Copy at:// URI", systemImage: "link")
-                            }
-
-                            Button {
-                                RecordCopyAction.copyRecordCID(row)
-                            } label: {
-                                Label("Copy CID", systemImage: "doc.on.doc")
-                            }
-
-                            Button {
-                                RecordCopyAction.copyRecordJSON(row)
-                            } label: {
-                                Label("Copy JSON", systemImage: "curlybraces")
-                            }
-
-                            Divider()
-
-                            Button(role: .destructive) {
-                                recordToDelete = row
-                            } label: {
-                                Label("Delete Record", systemImage: "trash")
-                            }
-                            .disabled(!isOwnRepo || account == nil)
-                        }
+                        recordContextMenu(for: selectedIDs)
                     } primaryAction: { selectedIDs in
                         if let targetID = selectedIDs.first {
                             selectedRecordID = targetID
@@ -243,6 +216,22 @@ public struct RecordTableView: View {
             } description: {
                 Text(message)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func recordContextMenu(for selectedIDs: Set<RecordRow.ID>) -> some View {
+        if let targetID = selectedIDs.first, let row = model.rows.first(where: { $0.id == targetID }) {
+            ContextMenuEntriesView(
+                items: RecordMenuDescriptors.recordRowMenu(
+                    for: row,
+                    isOwnRepo: isOwnRepo,
+                    hasAccount: account != nil,
+                    onDelete: {
+                        recordToDelete = row
+                    }
+                )
+            )
         }
     }
 }
