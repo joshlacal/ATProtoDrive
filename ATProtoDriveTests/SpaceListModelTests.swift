@@ -20,7 +20,8 @@ struct SpaceListModelTests {
         let item = SpaceItem(ref: ref, accountDID: ownDID)
 
         #expect(item.ref == ref)
-        #expect(item.id == ref)
+        #expect(item.accountDID == ownDID)
+        #expect(item.id == "\(ownDID):\(ref.uriString())")
         #expect(item.authorityDID == "did:plc:alice123")
         #expect(item.spaceType == "com.example.drive")
         #expect(item.skey == "main")
@@ -36,7 +37,8 @@ struct SpaceListModelTests {
         let item = SpaceItem(ref: ref, accountDID: userDID)
 
         #expect(item.ref == ref)
-        #expect(item.id == ref)
+        #expect(item.accountDID == userDID)
+        #expect(item.id == "\(userDID):\(ref.uriString())")
         #expect(item.authorityDID == "did:plc:alice123")
         #expect(item.spaceType == "com.example.drive")
         #expect(item.skey == "shared-folder")
@@ -49,11 +51,11 @@ struct SpaceListModelTests {
         let spaceURI = "at://did:plc:alice123/space/com.atproto.feed/custom"
 
         let item = try SpaceItem(uriString: spaceURI, accountDID: ownDID)
+        #expect(item.accountDID == ownDID)
         #expect(item.authorityDID == ownDID)
         #expect(item.spaceType == "com.atproto.feed")
         #expect(item.skey == "custom")
         #expect(item.isOwnAuthority == true)
-
         // Invalid URI throws
         #expect(throws: Error.self) {
             try SpaceItem(uriString: "not-a-space-uri", accountDID: ownDID)

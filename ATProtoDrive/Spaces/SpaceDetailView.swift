@@ -53,8 +53,9 @@ public struct SpaceDetailView: View {
             }
             .padding()
         }
+        .id(space.id)
         .navigationTitle(space.skey)
-        .task(id: "\(space.id.uriString())-\(account?.id ?? "")") {
+        .task(id: "\(space.id)-\(account?.id ?? "")") {
             if let account {
                 await model.load(space: space, account: account)
             }

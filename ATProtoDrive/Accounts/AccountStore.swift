@@ -88,14 +88,18 @@ public final class AccountStore {
     public private(set) var accounts: [Account] = []
     public var activeAccountID: String?
 
+    public func account(for did: String) -> Account? {
+        accounts.first(where: { $0.id == did })
+    }
+
     public var activeAccount: Account? {
         if let activeAccountID, let account = accounts.first(where: { $0.id == activeAccountID }) {
             return account
         }
         return accounts.first
     }
-
     private var pendingLogins: [String: PendingLogin] = [:]
+
 
     public init() {}
 
@@ -313,6 +317,14 @@ public final class AccountStore {
             authMode: authMode,
             stateToken: state
         )
+    }
+
+    func addAccountForTesting(_ account: Account) {
+        accounts.append(account)
+    }
+
+    func setAccountsForTesting(_ list: [Account]) {
+        accounts = list
     }
 #endif
 }

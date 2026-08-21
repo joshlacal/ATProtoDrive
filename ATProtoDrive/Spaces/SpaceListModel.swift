@@ -8,8 +8,9 @@ import Observation
 import Petrel
 
 public struct SpaceItem: Identifiable, Hashable, Sendable {
-    public var id: SpaceRef { ref }
+    public var id: String { "\(accountDID):\(ref.uriString())" }
     public let ref: SpaceRef           // at://authority/space/type/skey
+    public let accountDID: String
     public let authorityDID: String
     public let spaceType: String
     public let skey: String
@@ -17,12 +18,12 @@ public struct SpaceItem: Identifiable, Hashable, Sendable {
 
     public init(ref: SpaceRef, accountDID: String) {
         self.ref = ref
+        self.accountDID = accountDID
         self.authorityDID = ref.spaceDID
         self.spaceType = ref.spaceType
         self.skey = ref.skey
         self.isOwnAuthority = (ref.spaceDID == accountDID)
     }
-
     public init(uriString: String, accountDID: String) throws {
         let ref = try SpaceRef(uriString: uriString)
         self.init(ref: ref, accountDID: accountDID)

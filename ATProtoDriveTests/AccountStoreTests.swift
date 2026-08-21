@@ -37,6 +37,26 @@ struct AccountStoreTests {
         #expect(store.activeAccountID == nil)
         #expect(store.activeAccount == nil)
     }
+    @MainActor
+    @Test("account(for:) resolves the proper account by DID regardless of activeAccountID")
+    func testAccountLookupByDID() async {
+        let store = AccountStore()
+        let dummyClient = await ATProtoClient(baseURL: URL(string: "https://bsky.social")!)
+        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: dummyClient))
+        let creds = SpaceCredentialManager(client: dummyClient, resolver: resolver)
+
+        let accountA = AccountStore.Account(id: "did:plc:alice", handle: "alice.bsky.social", client: dummyClient, credentials: creds, authMode: .cab)
+        let accountB = AccountStore.Account(id: "did:plc:bob", handle: "bob.bsky.social", client: dummyClient, credentials: creds, authMode: .cab)
+
+        store.setAccountsForTesting([accountA, accountB])
+        store.activeAccountID = accountA.id
+
+        #expect(store.activeAccount?.id == "did:plc:alice")
+        #expect(store.account(for: "did:plc:bob")?.id == "did:plc:bob")
+        #expect(store.account(for: "did:plc:bob")?.handle == "bob.bsky.social")
+        #expect(store.account(for: "did:plc:nonexistent") == nil)
+    }
+
 
     @MainActor
     @Test("AccountStore remove updates accounts and activeAccountID")

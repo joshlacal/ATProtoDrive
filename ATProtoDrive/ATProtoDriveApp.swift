@@ -31,10 +31,12 @@ struct ATProtoDriveApp: App {
                 }
             } content: {
                 if let space = selectedSpace {
+                    let owningAccount = accountStore.account(for: space.accountDID) ?? accountStore.activeAccount
                     SpaceDetailView(
                         space: space,
-                        account: accountStore.activeAccount
+                        account: owningAccount
                     )
+                    .id(space.id)
                 } else {
                     ContentUnavailableView(
                         "No Space Selected",

@@ -298,6 +298,51 @@ struct SpaceDetailModelTests {
         #expect(callCount == 2)
         #expect(result.count == 2)
     }
+    @Test("isMemberListNotReadableError correctly identifies unreadable member list vs genuine XRPC error")
+    func testIsMemberListNotReadableError() {
+        let methodNotFound = ATProtoXRPCError(
+            error: "MethodNotFound",
+            message: "Method com.atproto.simplespace.listMembers not found",
+            statusCode: 404
+        )
+        #expect(SpaceDetailModel.isMemberListNotReadableError(methodNotFound) == true)
+
+        let notImplemented = ATProtoXRPCError(
+            error: "InvalidRequest",
+            message: "Member list not implemented for this space",
+            statusCode: 400
+        )
+        #expect(SpaceDetailModel.isMemberListNotReadableError(notImplemented) == true)
+
+        let authError = ATProtoXRPCError(
+            error: "AuthError",
+            message: "Invalid token",
+            statusCode: 401
+        )
+        #expect(SpaceDetailModel.isMemberListNotReadableError(authError) == false)
+
+        let missingScope = ATProtoXRPCError(
+            error: "MissingScope",
+            message: "Scope missing",
+            statusCode: 403
+        )
+        #expect(SpaceDetailModel.isMemberListNotReadableError(missingScope) == false)
+    }
+
+    @Test("SpaceItem correctly flags own authority for arbitrary space types")
+    func testOwnAuthorityWithArbitrarySpaceType() throws {
+        let accountDID = "did:plc:alice"
+        let customTypeRef = try SpaceRef(uriString: "at://did:plc:alice/space/com.example.customtype/drive1")
+        let sharedTypeRef = try SpaceRef(uriString: "at://did:plc:bob/space/com.example.customtype/drive1")
+
+        let ownItem = SpaceItem(ref: customTypeRef, accountDID: accountDID)
+        let sharedItem = SpaceItem(ref: sharedTypeRef, accountDID: accountDID)
+
+        #expect(ownItem.isOwnAuthority == true)
+        #expect(ownItem.spaceType == "com.example.customtype")
+        #expect(sharedItem.isOwnAuthority == false)
+    }
+
 
     // MARK: - SpaceDetailModel State Tests
 

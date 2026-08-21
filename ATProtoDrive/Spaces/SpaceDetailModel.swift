@@ -90,6 +90,23 @@ public final class SpaceDetailModel {
         }
     }
 
+    /// Distinguishes an unreadable member list (e.g. endpoint not supported on this space type / PDS)
+    /// from a genuine XRPC error (auth/permission/server failure).
+    nonisolated public static func isMemberListNotReadableError(_ error: Error) -> Bool {
+        if let xrpc = error as? ATProtoXRPCError {
+            if xrpc.error == "MethodNotFound" || xrpc.error == "NotFound" {
+                return true
+            }
+            if let msg = xrpc.message?.lowercased(), msg.contains("method not found") || msg.contains("not implemented") {
+                return true
+            }
+            if xrpc.statusCode == 404 && xrpc.error == "InvalidRequest" {
+                return true
+            }
+        }
+        return false
+    }
+
     /// Classifies an error into specific UI error states (tombstone, reconsent, or general).
     nonisolated public static func classifyError(_ error: Error) -> ErrorState {
         let message: String
@@ -210,6 +227,8 @@ public final class SpaceDetailModel {
         isLoading = true
         error = nil
         errorState = nil
+        repos = []
+        members = nil
         defer { isLoading = false }
 
         do {
@@ -227,8 +246,8 @@ public final class SpaceDetailModel {
 
             self.repos = fetchedRepos
 
-            // Fetch members if own authority and simplespace type
-            if space.isOwnAuthority && space.spaceType == "simplespace" {
+            // Fetch members if own authority (any space type)
+            if space.isOwnAuthority {
                 do {
                     let fetchedMembers = try await Self.fetchAllMembers { cursor in
                         let (responseCode, output) = try await account.client.com.atproto.simplespace.listMembers(
@@ -238,7 +257,11 @@ public final class SpaceDetailModel {
                     }
                     self.members = fetchedMembers
                 } catch {
-                    self.members = nil
+                    if Self.isMemberListNotReadableError(error) {
+                        self.members = nil
+                    } else {
+                        throw error
+                    }
                 }
             } else {
                 self.members = nil
