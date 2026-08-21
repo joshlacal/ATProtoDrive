@@ -45,4 +45,24 @@ struct AccountStoreTests {
         #expect(store.accounts.isEmpty)
         #expect(store.activeAccountID == nil)
     }
+
+    @MainActor
+    @Test("handleCallback rejects unknown or missing state parameter without affecting state")
+    func testHandleCallbackRejectsInvalidState() async {
+        let store = AccountStore()
+
+        // Missing state
+        let noStateURL = URL(string: "blue.catbird.atprotodrive:/callback?code=testcode")!
+        await #expect(throws: Error.self) {
+            try await store.handleCallback(noStateURL)
+        }
+
+        // Unknown state
+        let unknownStateURL = URL(string: "blue.catbird.atprotodrive:/callback?code=testcode&state=nonexistent_state")!
+        await #expect(throws: Error.self) {
+            try await store.handleCallback(unknownStateURL)
+        }
+
+        #expect(store.accounts.isEmpty)
+    }
 }
