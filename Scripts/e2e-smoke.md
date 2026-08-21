@@ -17,10 +17,11 @@ This checklist provides a manual, step-by-step verification script for human exe
 > 4. Verify the test suite passes with `xcodebuild test -project ATProtoDrive/ATProtoDrive.xcodeproj -scheme ATProtoDrive -destination 'platform=macOS' -only-testing:ATProtoDriveTests`.
 ### Prerequisites
 - macOS 15+ Sequoia workstation with `ATProtoDrive.app` built.
-- **Account A (Swan PDS):** e.g. `alice.swan.place` (authenticates via CAB at `https://cab.swan.place`).
+- **Account A (Swan PDS):** e.g. `alice.swan.place` (authenticates via CAB at `https://atprotodrive.catbird.blue`).
 - **Account B (Hosted Spaces Alpha PDS):** A test account registered on the hosted Spaces Alpha PDS (e.g. `bob.test` or alpha PDS endpoint).
   *Note:* The hosted Spaces Alpha PDS is an isolated alpha environment; standard production `bsky.social` accounts do not support permissioned data spaces. To obtain an alpha account, follow the instructions in the [ATProto Spaces Alpha Announcement](https://atproto.com/blog/atproto-spaces-alpha) or the BPS account portal to obtain an invite code and connect to the hosted alpha PDS endpoint.
-- Network access to `https://cab.swan.place` and both PDS hosts.
+- **OAuth Redirect Scheme:** `blue.catbird.atprotodrive:/callback` (ATProto private-use scheme redirect URI is the client_id FQDN reversed).
+- Network access to `https://atprotodrive.catbird.blue` and both PDS hosts.
 
 ---
 
@@ -33,11 +34,11 @@ This checklist provides a manual, step-by-step verification script for human exe
 4. Enter Account A handle (e.g. `alice.swan.place`) and click **"Log In"** (or press Return).
 5. Default browser opens to the authorization consent page on `swan.place`.
 6. Inspect the browser URL query string:
-   - **Assertion:** URL contains `client_id=https%3A%2F%2Fcab.swan.place%2Foauth-client-metadata.json`.
+   - **Assertion:** URL contains `client_id=https%3A%2F%2Fatprotodrive.catbird.blue%2Foauth-client-metadata.json`.
 7. Inspect the browser consent UI:
    - **Assertion:** Consent page displays requested scope `atproto space:*?authority=*&collection=*&manage=create&manage=update&manage=delete` (wildcard authority warning).
 8. Authorize the application.
-9. Browser redirects to `place.swan.cab:/callback?...`.
+9. Browser redirects to `blue.catbird.atprotodrive:/callback?...`.
 10. Observe ATProtoDrive dismisses the sheet and displays Account A under the "Spaces" sidebar section.
 - **Result:** Pass [ ] / Fail [ ]
 
@@ -46,11 +47,11 @@ This checklist provides a manual, step-by-step verification script for human exe
 2. Enter Account B handle (e.g. `bob.test` on alpha PDS) and click **"Log In"**.
 3. Observe app attempts CAB flow, receives native client rejection from the PDS, automatically falls back to Public OAuth client, and opens browser authorization URL.
 4. Inspect the browser URL query string:
-   - **Assertion:** URL contains `client_id=https%3A%2F%2Fcab.swan.place%2Fpublic-client-metadata.json`.
+   - **Assertion:** URL contains `client_id=https%3A%2F%2Fatprotodrive.catbird.blue%2Fpublic-client-metadata.json`.
 5. Inspect the browser consent UI:
    - **Assertion:** Consent page displays requested scope `atproto space:*?authority=*&collection=*&manage=create&manage=update&manage=delete`.
 6. Complete authorization in browser.
-7. Browser redirects to `place.swan.cab:/callback?...`.
+7. Browser redirects to `blue.catbird.atprotodrive:/callback?...`.
 8. Observe ATProtoDrive matches OAuth state and displays Account B in the sidebar.
 - **Result:** Pass [ ] / Fail [ ]
 

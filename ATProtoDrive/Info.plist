@@ -26,10 +26,10 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>place.swan.cab</string>
+			<string>blue.catbird.atprotodrive</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>place.swan.cab</string>
+				<string>blue.catbird.atprotodrive</string>
 			</array>
 		</dict>
 	</array>

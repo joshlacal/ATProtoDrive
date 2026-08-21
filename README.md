@@ -49,17 +49,18 @@ xcodebuild test -project ATProtoDrive/ATProtoDrive.xcodeproj \
 ## Authentication & CAB Dependency
 
 ATProtoDrive uses OAuth 2.0 with DPoP for all account sessions:
-- **CAB Server (`https://cab.swan.place`):** Serves client metadata and JWKS assertions for Client Assertion Backend authentication (`AuthMode.cab`).
+- **CAB Server (`https://atprotodrive.catbird.blue`):** Serves client metadata and JWKS assertions for Client Assertion Backend authentication (`AuthMode.cab`).
+- **OAuth Redirect Scheme:** Uses `blue.catbird.atprotodrive:/callback` (ATProto specification requires the private-use URI scheme to match the client_id FQDN reversed).
 - **Dual Client Metadata:**
-  - Confidential Client Metadata: `https://cab.swan.place/oauth-client-metadata.json`
-  - Public Client Metadata: `https://cab.swan.place/public-client-metadata.json`
+  - Confidential Client Metadata: `https://atprotodrive.catbird.blue/oauth-client-metadata.json`
+  - Public Client Metadata: `https://atprotodrive.catbird.blue/public-client-metadata.json`
 
 ### Why Two Metadata Documents Exist
 Bluesky-lineage PDS implementations reject `private_key_jwt` client assertions from native application clients (requiring client authentication method `none`). In contrast, `swan.place` and CAB-aware PDSes accept confidential CAB authentication.
 
 `AccountStore` automatically manages this interoperability:
-1. Attempts `AuthMode.cab` first via `https://cab.swan.place/oauth-client-metadata.json`.
-2. If the PDS rejects native client metadata, automatically falls back to `AuthMode.publicOAuth` with `https://cab.swan.place/public-client-metadata.json`.
+1. Attempts `AuthMode.cab` first via `https://atprotodrive.catbird.blue/oauth-client-metadata.json`.
+2. If the PDS rejects native client metadata, automatically falls back to `AuthMode.publicOAuth` with `https://atprotodrive.catbird.blue/public-client-metadata.json`.
 3. Persists the negotiated auth mode per account for seamless token refresh.
 
 ---

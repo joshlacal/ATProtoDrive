@@ -22,10 +22,10 @@ struct AccountStoreTests {
 
     @Test("OAuth constants match protocol requirements")
     func testOAuthConstants() throws {
-        #expect(AccountStore.cabClientId == "https://cab.swan.place/oauth-client-metadata.json")
-        #expect(AccountStore.publicClientId == "https://cab.swan.place/public-client-metadata.json")
-        #expect(AccountStore.cabBackendURL == URL(string: "https://cab.swan.place")!)
-        #expect(AccountStore.redirectUri == "place.swan.cab:/callback")
+        #expect(AccountStore.cabClientId == "https://atprotodrive.catbird.blue/oauth-client-metadata.json")
+        #expect(AccountStore.publicClientId == "https://atprotodrive.catbird.blue/public-client-metadata.json")
+        #expect(AccountStore.cabBackendURL == URL(string: "https://atprotodrive.catbird.blue")!)
+        #expect(AccountStore.redirectUri == "blue.catbird.atprotodrive:/callback")
         #expect(AccountStore.scope == "atproto space:*?authority=*&collection=*&manage=create&manage=update&manage=delete")
 
         // Private-use URI scheme redirect URI for discoverable client metadata must be the FQDN reversed
@@ -137,7 +137,7 @@ struct AccountStoreTests {
         #expect(store.hasPendingLogin(for: legitimateState))
 
         // Act & Assert 1: Missing state parameter in callback
-        let noStateURL = URL(string: "place.swan.cab:/callback?code=testcode")!
+        let noStateURL = URL(string: "blue.catbird.atprotodrive:/callback?code=testcode")!
         await #expect(throws: Error.self) {
             try await store.handleCallback(noStateURL)
         }
@@ -145,7 +145,7 @@ struct AccountStoreTests {
         #expect(store.pendingLoginCount == 1)
 
         // Act & Assert 2: Unknown / mismatched state parameter in callback
-        let unknownStateURL = URL(string: "place.swan.cab:/callback?code=testcode&state=unknown_unrelated_state")!
+        let unknownStateURL = URL(string: "blue.catbird.atprotodrive:/callback?code=testcode&state=unknown_unrelated_state")!
         await #expect(throws: Error.self) {
             try await store.handleCallback(unknownStateURL)
         }
