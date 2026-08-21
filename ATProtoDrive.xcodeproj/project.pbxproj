@@ -14,6 +14,9 @@
 		A10000000000000000000045 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000027 /* SidebarView.swift */; };
 		A10000000000000000000043 /* AccountStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* AccountStoreTests.swift */; };
 		A10000000000000000000046 /* SpaceListModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000028 /* SpaceListModelTests.swift */; };
+		A10000000000000000000047 /* SpaceDetailModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000029 /* SpaceDetailModel.swift */; };
+		A10000000000000000000048 /* SpaceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* SpaceDetailView.swift */; };
+		A10000000000000000000049 /* SpaceDetailModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002B /* SpaceDetailModelTests.swift */; };
 		A10000000000000000000070 /* Petrel in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000060 /* Petrel */; };
 		A10000000000000000000071 /* SwanSpaces in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000061 /* SwanSpaces */; };
 /* End PBXBuildFile section */
@@ -40,6 +43,9 @@
 		A10000000000000000000027 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		A10000000000000000000025 /* AccountStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStoreTests.swift; sourceTree = "<group>"; };
 		A10000000000000000000028 /* SpaceListModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceListModelTests.swift; sourceTree = "<group>"; };
+		A10000000000000000000029 /* SpaceDetailModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceDetailModel.swift; sourceTree = "<group>"; };
+		A1000000000000000000002A /* SpaceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceDetailView.swift; sourceTree = "<group>"; };
+		A1000000000000000000002B /* SpaceDetailModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceDetailModelTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -98,6 +104,8 @@
 			children = (
 				A10000000000000000000026 /* SpaceListModel.swift */,
 				A10000000000000000000027 /* SidebarView.swift */,
+				A10000000000000000000029 /* SpaceDetailModel.swift */,
+				A1000000000000000000002A /* SpaceDetailView.swift */,
 			);
 			path = Spaces;
 			sourceTree = "<group>";
@@ -107,6 +115,7 @@
 			children = (
 				A10000000000000000000025 /* AccountStoreTests.swift */,
 				A10000000000000000000028 /* SpaceListModelTests.swift */,
+				A1000000000000000000002B /* SpaceDetailModelTests.swift */,
 			);
 			path = ATProtoDriveTests;
 			sourceTree = "<group>";
@@ -236,6 +245,8 @@
 				A10000000000000000000042 /* AddAccountView.swift in Sources */,
 				A10000000000000000000044 /* SpaceListModel.swift in Sources */,
 				A10000000000000000000045 /* SidebarView.swift in Sources */,
+				A10000000000000000000047 /* SpaceDetailModel.swift in Sources */,
+				A10000000000000000000048 /* SpaceDetailView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -245,6 +256,7 @@
 			files = (
 				A10000000000000000000043 /* AccountStoreTests.swift in Sources */,
 				A10000000000000000000046 /* SpaceListModelTests.swift in Sources */,
+				A10000000000000000000049 /* SpaceDetailModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -31,21 +31,10 @@ struct ATProtoDriveApp: App {
                 }
             } content: {
                 if let space = selectedSpace {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(space.skey)
-                            .font(.title2.bold())
-                        Text(space.spaceType)
-                            .font(.headline)
-                            .foregroundStyle(.secondary)
-                        Divider()
-                        LabeledContent("Authority", value: space.authorityDID)
-                        LabeledContent("Type", value: space.spaceType)
-                        LabeledContent("Key", value: space.skey)
-                        LabeledContent("URI", value: space.ref.uriString())
-                        LabeledContent("Ownership", value: space.isOwnAuthority ? "Owned Space" : "Shared Space")
-                        Spacer()
-                    }
-                    .padding()
+                    SpaceDetailView(
+                        space: space,
+                        account: accountStore.activeAccount
+                    )
                 } else {
                     ContentUnavailableView(
                         "No Space Selected",
