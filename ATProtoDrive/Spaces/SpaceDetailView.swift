@@ -186,7 +186,7 @@ public struct SpaceDetailView: View {
                 Spacer()
                 Menu {
                     Button {
-                        PasteboardHelper.copyString(space.ref.uriString())
+                        RecordCopyAction.copySpaceRef(space)
                     } label: {
                         Label("Copy Space Ref", systemImage: "doc.on.doc")
                     }
@@ -225,7 +225,7 @@ public struct SpaceDetailView: View {
                 LabeledContent("URI", value: space.ref.uriString())
                     .contextMenu {
                         Button {
-                            PasteboardHelper.copyString(space.ref.uriString())
+                            RecordCopyAction.copySpaceRef(space)
                         } label: {
                             Label("Copy Space Ref", systemImage: "doc.on.doc")
                         }
@@ -236,7 +236,7 @@ public struct SpaceDetailView: View {
         }
         .contextMenu {
             Button {
-                PasteboardHelper.copyString(space.ref.uriString())
+                RecordCopyAction.copySpaceRef(space)
             } label: {
                 Label("Copy Space Ref", systemImage: "doc.on.doc")
             }

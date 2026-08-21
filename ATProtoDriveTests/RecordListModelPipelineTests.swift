@@ -470,27 +470,55 @@ struct RecordListModelPipelineTests {
         #expect(readBack == testData)
     }
 
-    @Test("PasteboardHelper copies and reads back exact payload strings")
-    @MainActor
-    func testPasteboardHelperPayloads() throws {
-        let testURI = "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz"
-        let testCID = "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"
-        let testJSON = "{\n  \"text\": \"Hello ATProto\"\n}"
-        let testSpaceRef = "at://did:plc:space1/space/com.atproto.feed/main"
+    @Test("RecordCopyAction routes each menu action to the exact model field on an isolated pasteboard")
+    func testRecordCopyActionsIsolatedPasteboard() throws {
+        let spaceItem = try SpaceItem(
+            uriString: "at://did:plc:space1/space/com.atproto.feed/main",
+            accountDID: "did:plc:space1"
+        )
 
-        PasteboardHelper.copyString(testURI)
-        #expect(PasteboardHelper.readString() == testURI)
+        let blob = BlobRefEntry(
+            cid: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a",
+            mimeType: "image/png",
+            size: 12345
+        )
 
-        PasteboardHelper.copyString(testCID)
-        #expect(PasteboardHelper.readString() == testCID)
+        let record = RecordRow(
+            uri: "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz",
+            collection: "app.bsky.feed.post",
+            rkey: "3l3vbfz",
+            cid: "bafyreih321cid",
+            json: "{\n  \"text\": \"Hello ATProto\"\n}",
+            blobEntries: [blob]
+        )
 
-        PasteboardHelper.copyString(testJSON)
-        #expect(PasteboardHelper.readString() == testJSON)
+        let isolatedPasteboard = InMemoryPasteboard()
 
-        PasteboardHelper.copyString(testSpaceRef)
-        #expect(PasteboardHelper.readString() == testSpaceRef)
+        // 1. Copy at:// URI
+        RecordCopyAction.copyRecordURI(record, pasteboard: isolatedPasteboard)
+        #expect(isolatedPasteboard.readString() == "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz")
+        #expect(isolatedPasteboard.readString() == record.uri)
+
+        // 2. Copy CID
+        RecordCopyAction.copyRecordCID(record, pasteboard: isolatedPasteboard)
+        #expect(isolatedPasteboard.readString() == "bafyreih321cid")
+        #expect(isolatedPasteboard.readString() == record.cid)
+
+        // 3. Copy JSON
+        RecordCopyAction.copyRecordJSON(record, pasteboard: isolatedPasteboard)
+        #expect(isolatedPasteboard.readString() == "{\n  \"text\": \"Hello ATProto\"\n}")
+        #expect(isolatedPasteboard.readString() == record.json)
+
+        // 4. Copy Blob CID
+        RecordCopyAction.copyBlobCID(blob, pasteboard: isolatedPasteboard)
+        #expect(isolatedPasteboard.readString() == "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+        #expect(isolatedPasteboard.readString() == blob.cid)
+
+        // 5. Copy Space Ref
+        RecordCopyAction.copySpaceRef(spaceItem, pasteboard: isolatedPasteboard)
+        #expect(isolatedPasteboard.readString() == "at://did:plc:space1/space/com.atproto.feed/main")
+        #expect(isolatedPasteboard.readString() == spaceItem.ref.uriString())
     }
-
     @Test("extractBlobEntries extracts rich BlobRefEntry metadata including mimeType and size")
     func testExtractBlobEntriesRich() throws {
         let multiBlobJSON = """

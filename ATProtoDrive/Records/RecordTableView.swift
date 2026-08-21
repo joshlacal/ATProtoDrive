@@ -77,19 +77,19 @@ public struct RecordTableView: View {
                     .contextMenu(forSelectionType: RecordRow.ID.self) { selectedIDs in
                         if let targetID = selectedIDs.first, let row = model.rows.first(where: { $0.id == targetID }) {
                             Button {
-                                PasteboardHelper.copyString(row.uri)
+                                RecordCopyAction.copyRecordURI(row)
                             } label: {
                                 Label("Copy at:// URI", systemImage: "link")
                             }
 
                             Button {
-                                PasteboardHelper.copyString(row.cid)
+                                RecordCopyAction.copyRecordCID(row)
                             } label: {
                                 Label("Copy CID", systemImage: "doc.on.doc")
                             }
 
                             Button {
-                                PasteboardHelper.copyString(row.json)
+                                RecordCopyAction.copyRecordJSON(row)
                             } label: {
                                 Label("Copy JSON", systemImage: "curlybraces")
                             }

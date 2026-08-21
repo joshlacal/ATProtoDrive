@@ -113,17 +113,106 @@ public enum BlobFileHelper {
         try data.write(to: fileURL, options: .atomic)
         return fileURL
     }
+
+    /// Atomically writes blob data to a user-selected target URL while properly managing security-scoped resource access.
+    public static func saveBlobData(_ data: Data, to targetURL: URL) throws {
+        let didStartAccessing = targetURL.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccessing {
+                targetURL.stopAccessingSecurityScopedResource()
+            }
+        }
+        try data.write(to: targetURL, options: .atomic)
+    }
 }
 
-public enum PasteboardHelper {
+public protocol PasteboardWriting: Sendable {
     @discardableResult
-    public static func copyString(_ string: String, pasteboard: NSPasteboard = .general) -> Bool {
+    func copyString(_ string: String) -> Bool
+    func readString() -> String?
+}
+
+public final class AppKitPasteboard: PasteboardWriting, @unchecked Sendable {
+    private let pasteboard: NSPasteboard
+
+    public init(pasteboard: NSPasteboard = .general) {
+        self.pasteboard = pasteboard
+    }
+
+    @discardableResult
+    public func copyString(_ string: String) -> Bool {
         pasteboard.clearContents()
         return pasteboard.setString(string, forType: .string)
     }
 
-    public static func readString(pasteboard: NSPasteboard = .general) -> String? {
+    public func readString() -> String? {
         pasteboard.string(forType: .string)
+    }
+}
+
+public final class InMemoryPasteboard: PasteboardWriting, @unchecked Sendable {
+    private var contents: String?
+    private let lock = NSLock()
+
+    public init(initialContent: String? = nil) {
+        self.contents = initialContent
+    }
+
+    @discardableResult
+    public func copyString(_ string: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        self.contents = string
+        return true
+    }
+
+    public func readString() -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return contents
+    }
+}
+
+public enum PasteboardHelper {
+    @discardableResult
+    public static func copyString(_ string: String, pasteboard: any PasteboardWriting = AppKitPasteboard()) -> Bool {
+        pasteboard.copyString(string)
+    }
+
+    public static func readString(pasteboard: any PasteboardWriting = AppKitPasteboard()) -> String? {
+        pasteboard.readString()
+    }
+}
+
+public enum RecordCopyAction {
+    @discardableResult
+    public static func copyRecordURI(_ record: RecordRow, pasteboard: any PasteboardWriting = AppKitPasteboard()) -> Bool {
+        pasteboard.copyString(record.uri)
+    }
+
+    @discardableResult
+    public static func copyRecordCID(_ record: RecordRow, pasteboard: any PasteboardWriting = AppKitPasteboard()) -> Bool {
+        pasteboard.copyString(record.cid)
+    }
+
+    @discardableResult
+    public static func copyRecordJSON(_ record: RecordRow, pasteboard: any PasteboardWriting = AppKitPasteboard()) -> Bool {
+        pasteboard.copyString(record.json)
+    }
+
+    @discardableResult
+    public static func copyBlobCID(_ blob: BlobRefEntry, pasteboard: any PasteboardWriting = AppKitPasteboard()) -> Bool {
+        pasteboard.copyString(blob.cid)
+    }
+
+    @discardableResult
+    public static func copySpaceRef(_ space: SpaceItem, pasteboard: any PasteboardWriting = AppKitPasteboard()) -> Bool {
+        pasteboard.copyString(space.ref.uriString())
+    }
+
+    @discardableResult
+    public static func copySpaceRef(_ spaceRef: SpaceRef, pasteboard: any PasteboardWriting = AppKitPasteboard()) -> Bool {
+        pasteboard.copyString(spaceRef.uriString())
     }
 }
 

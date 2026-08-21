@@ -85,7 +85,7 @@ struct AccountSpacesSection: View {
                         .tag(space)
                         .contextMenu {
                             Button {
-                                PasteboardHelper.copyString(space.ref.uriString())
+                                RecordCopyAction.copySpaceRef(space)
                             } label: {
                                 Label("Copy Space Ref", systemImage: "doc.on.doc")
                             }
@@ -175,7 +175,7 @@ struct SpaceRowView: View {
         }
         .contextMenu {
             Button {
-                PasteboardHelper.copyString(space.ref.uriString())
+                RecordCopyAction.copySpaceRef(space)
             } label: {
                 Label("Copy Space Ref", systemImage: "doc.on.doc")
             }

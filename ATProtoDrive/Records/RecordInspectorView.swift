@@ -64,7 +64,7 @@ public struct RecordInspectorView: View {
                     }
                     .contextMenu {
                         Button {
-                            PasteboardHelper.copyString(record.cid)
+                            RecordCopyAction.copyRecordCID(record)
                         } label: {
                             Label("Copy CID", systemImage: "doc.on.doc")
                         }
@@ -82,7 +82,7 @@ public struct RecordInspectorView: View {
                     }
                     .contextMenu {
                         Button {
-                            PasteboardHelper.copyString(record.uri)
+                            RecordCopyAction.copyRecordURI(record)
                         } label: {
                             Label("Copy at:// URI", systemImage: "link")
                         }
@@ -169,7 +169,7 @@ public struct RecordInspectorView: View {
                                 Divider()
 
                                 Button {
-                                    PasteboardHelper.copyString(entry.cid)
+                                    RecordCopyAction.copyBlobCID(entry)
                                 } label: {
                                     Label("Copy CID", systemImage: "doc.on.doc")
                                 }
@@ -194,7 +194,7 @@ public struct RecordInspectorView: View {
                 }
                 .contextMenu {
                     Button {
-                        PasteboardHelper.copyString(record.json)
+                        RecordCopyAction.copyRecordJSON(record)
                     } label: {
                         Label("Copy JSON", systemImage: "curlybraces")
                     }
@@ -270,7 +270,7 @@ public struct RecordInspectorView: View {
                         cid: entry.cid,
                         account: account
                     )
-                    try data.write(to: targetURL)
+                    try BlobFileHelper.saveBlobData(data, to: targetURL)
                 } catch {
                     blobError = error.localizedDescription
                 }
