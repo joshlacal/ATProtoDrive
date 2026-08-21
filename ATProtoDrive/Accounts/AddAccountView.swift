@@ -19,7 +19,7 @@ struct AddAccountView: View {
             Text("Add ATProto Account")
                 .font(.headline)
 
-            Text("Enter your Bluesky or ATProto handle (e.g. josh.swan.place, alice.bsky.social):")
+            Text("Enter your Bluesky or ATProto handle (e.g. alice.bsky.social, bob.example.com):")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

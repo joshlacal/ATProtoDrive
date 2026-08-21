@@ -174,7 +174,16 @@ struct SpaceDetailModelTests {
             message: nil
         )
         let state2 = SpaceDetailModel.classifyError(credError)
-        #expect(state2 == .tokenRejected("swan.place rejected the delegation token as invalid (not an access denial). This usually means swan.place is running a different permissioned-data profile than the token issuer."))
+        #expect(state2 == .tokenRejected("swan.place rejected the delegation token as invalid (not an access denial; membership is unaffected)."))
+
+        let credErrorWithEvidence = SpaceCredentialError.tokenRejected(
+            host: "swan.place",
+            error: "InvalidDelegationToken",
+            message: nil,
+            evidence: "swanProfile=permissioned-data-0016-2026-07-30"
+        )
+        let state3 = SpaceDetailModel.classifyError(credErrorWithEvidence)
+        #expect(state3 == .tokenRejected("swan.place rejected the delegation token as invalid (not an access denial; membership is unaffected). swan.place reports: swanProfile=permissioned-data-0016-2026-07-30."))
     }
 
     @Test("classifyError identifies authorization refused errors")
@@ -728,8 +737,9 @@ struct SpaceDetailModelTests {
 
         // Assert authority host is named in message
         #expect(message.contains("swan.place"))
-        #expect(message.contains("rejected the delegation token as invalid (not an access denial)"))
-        #expect(message.contains("different permissioned-data profile"))
+        #expect(message.contains("rejected the delegation token as invalid (not an access denial; membership is unaffected)"))
+        #expect(!message.contains("usually means"))
+        #expect(!message.contains("different permissioned-data profile"))
         #expect(detailModel.error == message)
         #expect(detailModel.repos.isEmpty)
 
