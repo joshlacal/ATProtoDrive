@@ -71,16 +71,16 @@ public final class AccountStore {
 
     private struct PendingLogin: Sendable {
         let client: ATProtoClient
+        let did: String
         let requestedHandle: String
         let authMode: AuthModeType
         let stateToken: String
-        let namespace: String
     }
 
     nonisolated public static let cabClientId = "https://cab.swan.place/oauth-client-metadata.json"
     nonisolated public static let publicClientId = "https://cab.swan.place/public-client-metadata.json"
     nonisolated public static let cabBackendURL = URL(string: "https://cab.swan.place")!
-    nonisolated public static let redirectUri = "place.swan.cab:/callback"
+    nonisolated public static let redirectUri = "blue.catbird.atprotodrive:/callback"
     nonisolated public static let scope = "atproto space:*?authority=*"
 
     private static let userDefaultsKey = "blue.catbird.atprotodrive.accounts"
@@ -103,31 +103,42 @@ public final class AccountStore {
         "atprotodrive.\(did)"
     }
 
-    private static func resolveDID(for handle: String) async -> String? {
+    private static func resolveDID(for handle: String) async throws -> String {
         if handle.starts(with: "did:") {
             return handle
         }
-        do {
-            let tempClient = try await ATProtoClient(
-                oauthConfig: OAuthConfig(
-                    clientId: publicClientId,
-                    redirectUri: redirectUri,
-                    scope: scope
-                ),
-                namespace: "atprotodrive.resolver",
-                authMode: .publicOAuth
-            )
-            return try await tempClient.resolveHandleToDID(handle: handle)
-        } catch {
-            return nil
+        let resolverClient = try await ATProtoClient(
+            oauthConfig: OAuthConfig(
+                clientId: publicClientId,
+                redirectUri: redirectUri,
+                scope: scope
+            ),
+            namespace: "atprotodrive.resolver",
+            authMode: .publicOAuth
+        )
+        return try await resolverClient.resolveHandleToDID(handle: handle)
+    }
+
+    private static func isClientMetadataRejection(_ error: Error) -> Bool {
+        if let authError = error as? AuthError {
+            switch authError {
+            case .invalidClientMetadata:
+                return true
+            case let .serverError(_, message):
+                guard let msg = message?.lowercased() else { return false }
+                return msg.contains("invalid_client_metadata") || msg.contains("none method")
+            default:
+                return false
+            }
         }
+        return false
     }
 
     /// Begin OAuth for a handle; returns the authorization URL to open.
     public func beginLogin(handle: String) async throws -> URL {
         let trimmedHandle = handle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedDID = await Self.resolveDID(for: trimmedHandle)
-        let ns = resolvedDID.map { Self.namespace(for: $0) } ?? "atprotodrive.login.\(UUID().uuidString)"
+        let did = try await Self.resolveDID(for: trimmedHandle)
+        let ns = Self.namespace(for: did)
 
         // Attempt 1: CAB OAuth flow
         do {
@@ -141,19 +152,17 @@ public final class AccountStore {
                 authMode: .cab(backendURL: Self.cabBackendURL)
             )
 
-            let authURL = try await cabClient.startOAuthFlow(identifier: trimmedHandle)
-            if let state = extractState(from: authURL) {
-                pendingLogins[state] = PendingLogin(
-                    client: cabClient,
-                    requestedHandle: trimmedHandle,
-                    authMode: .cab,
-                    stateToken: state,
-                    namespace: ns
-                )
-            }
+            let (authURL, state) = try await cabClient.startOAuthFlowWithState(identifier: trimmedHandle)
+            pendingLogins[state] = PendingLogin(
+                client: cabClient,
+                did: did,
+                requestedHandle: trimmedHandle,
+                authMode: .cab,
+                stateToken: state
+            )
             return authURL
-        } catch {
-            // Attempt 2: Public OAuth fallback (for Bluesky-lineage PDSes rejecting private_key_jwt)
+        } catch let error where Self.isClientMetadataRejection(error) {
+            // Attempt 2: Public OAuth fallback (triggered ONLY on native/none client-metadata rejection)
             let publicClient = try await ATProtoClient(
                 oauthConfig: OAuthConfig(
                     clientId: Self.publicClientId,
@@ -164,30 +173,23 @@ public final class AccountStore {
                 authMode: .publicOAuth
             )
 
-            let authURL = try await publicClient.startOAuthFlow(identifier: trimmedHandle)
-            if let state = extractState(from: authURL) {
-                pendingLogins[state] = PendingLogin(
-                    client: publicClient,
-                    requestedHandle: trimmedHandle,
-                    authMode: .publicOAuth,
-                    stateToken: state,
-                    namespace: ns
-                )
-            }
+            let (authURL, state) = try await publicClient.startOAuthFlowWithState(identifier: trimmedHandle)
+            pendingLogins[state] = PendingLogin(
+                client: publicClient,
+                did: did,
+                requestedHandle: trimmedHandle,
+                authMode: .publicOAuth,
+                stateToken: state
+            )
             return authURL
         }
     }
+
 
     /// Complete OAuth from the onOpenURL callback.
     public func handleCallback(_ url: URL) async throws {
         guard let state = extractState(from: url),
               let pending = pendingLogins.removeValue(forKey: state) else {
-            // If state wasn't keyed, try any single pending login as fallback
-            if pendingLogins.count == 1, let (firstState, pending) = pendingLogins.first {
-                pendingLogins.removeValue(forKey: firstState)
-                try await completeLogin(pending: pending, url: url)
-                return
-            }
             throw AuthError.invalidCallbackURL
         }
 
@@ -197,41 +199,18 @@ public final class AccountStore {
     private func completeLogin(pending: PendingLogin, url: URL) async throws {
         try await pending.client.handleOAuthCallback(url: url)
         let (storedDID, storedHandle, _) = await pending.client.getActiveAccountInfo()
-        guard let did = storedDID else {
+        guard let did = storedDID ?? (pending.did.isEmpty ? nil : pending.did) else {
             throw AuthError.noActiveAccount
         }
 
         let resolvedHandle = storedHandle ?? pending.requestedHandle
-        let correctNamespace = Self.namespace(for: did)
-
-        let finalClient: ATProtoClient
-        if pending.namespace == correctNamespace {
-            finalClient = pending.client
-        } else {
-            // Re-instantiate client with DID-isolated namespace if temporary login namespace was used
-            let authMode: AuthMode = (pending.authMode == .cab)
-                ? .cab(backendURL: Self.cabBackendURL)
-                : .publicOAuth
-            let clientId = (pending.authMode == .cab) ? Self.cabClientId : Self.publicClientId
-
-            finalClient = try await ATProtoClient(
-                oauthConfig: OAuthConfig(
-                    clientId: clientId,
-                    redirectUri: Self.redirectUri,
-                    scope: Self.scope
-                ),
-                namespace: correctNamespace,
-                authMode: authMode
-            )
-        }
-
-        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: finalClient))
-        let credentials = SpaceCredentialManager(client: finalClient, resolver: resolver)
+        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: pending.client))
+        let credentials = SpaceCredentialManager(client: pending.client, resolver: resolver)
 
         let account = Account(
             id: did,
             handle: resolvedHandle,
-            client: finalClient,
+            client: pending.client,
             credentials: credentials,
             authMode: pending.authMode
         )

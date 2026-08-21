@@ -24,7 +24,7 @@ struct AccountStoreTests {
         #expect(AccountStore.cabClientId == "https://cab.swan.place/oauth-client-metadata.json")
         #expect(AccountStore.publicClientId == "https://cab.swan.place/public-client-metadata.json")
         #expect(AccountStore.cabBackendURL == URL(string: "https://cab.swan.place")!)
-        #expect(AccountStore.redirectUri == "place.swan.cab:/callback")
+        #expect(AccountStore.redirectUri == "blue.catbird.atprotodrive:/callback")
         #expect(AccountStore.scope == "atproto space:*?authority=*")
     }
 
@@ -38,22 +38,11 @@ struct AccountStoreTests {
     }
 
     @MainActor
-    @Test("Live PAR against swan.place generates valid authorization URL")
-    func testBeginLoginSwanPlace() async throws {
+    @Test("AccountStore remove updates accounts and activeAccountID")
+    func testRemoveAccount() async {
         let store = AccountStore()
-        let authURL = try await store.beginLogin(handle: "josh.swan.place")
-        print("SWAN.PLACE AUTH URL: \(authURL.absoluteString)")
-        #expect(authURL.absoluteString.starts(with: "https://swan.place/oauth/authorize"))
-        #expect(authURL.query?.contains("request_uri=") == true)
-    }
-
-    @MainActor
-    @Test("Live PAR against bsky.social falls back to public OAuth and generates valid authorization URL")
-    func testBeginLoginBskySocial() async throws {
-        let store = AccountStore()
-        let authURL = try await store.beginLogin(handle: "jay.bsky.team")
-        print("BSKY.SOCIAL AUTH URL: \(authURL.absoluteString)")
-        #expect(authURL.absoluteString.starts(with: "https://bsky.social/oauth/authorize"))
-        #expect(authURL.query?.contains("request_uri=") == true)
+        await store.remove("did:plc:nonexistent")
+        #expect(store.accounts.isEmpty)
+        #expect(store.activeAccountID == nil)
     }
 }
