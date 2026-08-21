@@ -469,6 +469,20 @@ struct RecordListModelPipelineTests {
         let readBack = try Data(contentsOf: tempURL)
         #expect(readBack == testData)
     }
+    @Test("BlobFileHelper saves blob data atomically and handles security-scoped access")
+    func testBlobFileHelperSaveBlobData() throws {
+        let testData = Data("verified synthesized blob content bytes".utf8)
+        let destinationURL = FileManager.default.temporaryDirectory.appendingPathComponent("atproto_save_blob_test_\(UUID().uuidString).bin")
+        defer {
+            try? FileManager.default.removeItem(at: destinationURL)
+        }
+
+        try BlobFileHelper.saveBlobData(testData, to: destinationURL)
+        #expect(FileManager.default.fileExists(atPath: destinationURL.path))
+        let readBack = try Data(contentsOf: destinationURL)
+        #expect(readBack == testData)
+        #expect(readBack.count == 39)
+    }
 
     @Test("RecordCopyAction routes each menu action to the exact model field on an isolated pasteboard")
     func testRecordCopyActionsIsolatedPasteboard() throws {
