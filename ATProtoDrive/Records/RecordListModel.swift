@@ -883,7 +883,8 @@ public final class RecordListModel {
         jsonText: String,
         account: AccountStore.Account,
         transport: (@Sendable (_ input: ComAtprotoSpaceCreateRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpaceCreateRecord.Output?))? = nil,
-        reload: (@Sendable () async -> Void)? = nil
+        clientListRecords: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListRecords.Output?))? = nil,
+        clientGetLatestCommit: (@Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetLatestCommit.Output?))? = nil
     ) async throws -> ComAtprotoSpaceCreateRecord.Output {
         let output = try await Self.performCreateRecord(
             space: space.ref,
@@ -894,8 +895,19 @@ public final class RecordListModel {
             account: account,
             transport: transport
         )
-        if let reload = reload {
-            await reload()
+        if let clientListRecords = clientListRecords, let clientGetLatestCommit = clientGetLatestCommit {
+            await load(
+                space: space,
+                repo: repo,
+                accountDID: account.id,
+                clientListRecords: clientListRecords,
+                clientGetLatestCommit: clientGetLatestCommit,
+                resolveDIDToPDS: { did in try await account.client.resolveDIDToPDSURL(did: did) },
+                credentialGet: { url, spaceRef in
+                    let (data, response) = try await account.credentials.get(url: url, space: spaceRef)
+                    return (responseCode: response.statusCode, data: data)
+                }
+            )
         } else {
             await load(space: space, repo: repo, account: account)
         }
@@ -911,7 +923,8 @@ public final class RecordListModel {
         jsonText: String,
         account: AccountStore.Account,
         transport: (@Sendable (_ input: ComAtprotoSpacePutRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpacePutRecord.Output?))? = nil,
-        reload: (@Sendable () async -> Void)? = nil
+        clientListRecords: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListRecords.Output?))? = nil,
+        clientGetLatestCommit: (@Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetLatestCommit.Output?))? = nil
     ) async throws -> ComAtprotoSpacePutRecord.Output {
         let output = try await Self.performPutRecord(
             space: space.ref,
@@ -922,8 +935,19 @@ public final class RecordListModel {
             account: account,
             transport: transport
         )
-        if let reload = reload {
-            await reload()
+        if let clientListRecords = clientListRecords, let clientGetLatestCommit = clientGetLatestCommit {
+            await load(
+                space: space,
+                repo: repo,
+                accountDID: account.id,
+                clientListRecords: clientListRecords,
+                clientGetLatestCommit: clientGetLatestCommit,
+                resolveDIDToPDS: { did in try await account.client.resolveDIDToPDSURL(did: did) },
+                credentialGet: { url, spaceRef in
+                    let (data, response) = try await account.credentials.get(url: url, space: spaceRef)
+                    return (responseCode: response.statusCode, data: data)
+                }
+            )
         } else {
             await load(space: space, repo: repo, account: account)
         }
@@ -938,7 +962,8 @@ public final class RecordListModel {
         rkey: String,
         account: AccountStore.Account,
         transport: (@Sendable (_ input: ComAtprotoSpaceDeleteRecord.Input) async throws -> (responseCode: Int, data: ComAtprotoSpaceDeleteRecord.Output?))? = nil,
-        reload: (@Sendable () async -> Void)? = nil
+        clientListRecords: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListRecords.Output?))? = nil,
+        clientGetLatestCommit: (@Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetLatestCommit.Output?))? = nil
     ) async throws -> ComAtprotoSpaceDeleteRecord.Output {
         let output = try await Self.performDeleteRecord(
             space: space.ref,
@@ -948,8 +973,19 @@ public final class RecordListModel {
             account: account,
             transport: transport
         )
-        if let reload = reload {
-            await reload()
+        if let clientListRecords = clientListRecords, let clientGetLatestCommit = clientGetLatestCommit {
+            await load(
+                space: space,
+                repo: repo,
+                accountDID: account.id,
+                clientListRecords: clientListRecords,
+                clientGetLatestCommit: clientGetLatestCommit,
+                resolveDIDToPDS: { did in try await account.client.resolveDIDToPDSURL(did: did) },
+                credentialGet: { url, spaceRef in
+                    let (data, response) = try await account.credentials.get(url: url, space: spaceRef)
+                    return (responseCode: response.statusCode, data: data)
+                }
+            )
         } else {
             await load(space: space, repo: repo, account: account)
         }
@@ -969,10 +1005,4 @@ public final class RecordListModel {
             transport: transport
         )
     }
-
-#if DEBUG
-    public func setRowsForTesting(_ rows: [RecordRow]) {
-        self.rows = rows
-    }
-#endif
 }

@@ -103,7 +103,7 @@ public final class SpaceListModel {
         policy: SpacePolicyOption,
         account: AccountStore.Account,
         transport: (@Sendable (_ input: ComAtprotoSimplespaceCreateSpace.Input) async throws -> (responseCode: Int, data: ComAtprotoSimplespaceCreateSpace.Output?))? = nil,
-        reload: (@Sendable () async -> Void)? = nil
+        listSpacesTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListSpaces.Output?))? = nil
     ) async throws -> SpaceRef {
         let ref = try await SpaceDetailModel.performCreateSpace(
             spaceType: spaceType,
@@ -112,8 +112,16 @@ public final class SpaceListModel {
             account: account,
             transport: transport
         )
-        if let reload = reload {
-            await reload()
+        if let listSpacesTransport = listSpacesTransport {
+            isLoading = true
+            error = nil
+            defer { isLoading = false }
+            do {
+                self.spaces = try await Self.fetchAllSpaces(accountDID: account.id, fetchPage: listSpacesTransport)
+                self.error = nil
+            } catch {
+                self.error = error.localizedDescription
+            }
         } else {
             await load(account: account)
         }
@@ -124,23 +132,25 @@ public final class SpaceListModel {
         space: SpaceItem,
         account: AccountStore.Account,
         transport: (@Sendable (_ input: ComAtprotoSimplespaceDeleteSpace.Input) async throws -> Int)? = nil,
-        reload: (@Sendable () async -> Void)? = nil
+        listSpacesTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListSpaces.Output?))? = nil
     ) async throws {
         try await SpaceDetailModel.performDeleteSpace(
             space: space,
             account: account,
             transport: transport
         )
-        if let reload = reload {
-            await reload()
+        if let listSpacesTransport = listSpacesTransport {
+            isLoading = true
+            error = nil
+            defer { isLoading = false }
+            do {
+                self.spaces = try await Self.fetchAllSpaces(accountDID: account.id, fetchPage: listSpacesTransport)
+                self.error = nil
+            } catch {
+                self.error = error.localizedDescription
+            }
         } else {
             await load(account: account)
         }
     }
-
-#if DEBUG
-    public func setSpacesForTesting(_ spaces: [SpaceItem]) {
-        self.spaces = spaces
-    }
-#endif
 }

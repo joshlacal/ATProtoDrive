@@ -144,6 +144,7 @@ public struct RecordEditorSheet: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .disabled(isUploadingBlob || isSubmitting)
                 }
 
                 // JSON Text Editor
@@ -157,6 +158,7 @@ public struct RecordEditorSheet: View {
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(validationError != nil ? Color.red : Color.secondary.opacity(0.2), lineWidth: 1)
                     )
+                    .disabled(isUploadingBlob || isSubmitting)
                     .frame(minHeight: 200)
 
                 // Error Displays
@@ -280,6 +282,12 @@ public struct RecordEditorSheet: View {
                 mimeType: mimeType,
                 account: account
             )
+
+            // Ensure range bounds remain valid within jsonText
+            guard replacementRange.lowerBound >= jsonText.startIndex && replacementRange.upperBound <= jsonText.endIndex else {
+                apiError = "Cursor selection is no longer valid. Please place the cursor in the JSON editor."
+                return
+            }
 
             jsonText = try RecordListModel.spliceBlobRef(into: jsonText, blob: blob, replacementRange: replacementRange)
         } catch {

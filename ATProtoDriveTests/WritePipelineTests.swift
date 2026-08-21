@@ -527,10 +527,8 @@ struct WritePipelineTests {
         #expect(model.spaces.isEmpty)
 
         let createdRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
-        let createdItem = SpaceItem(ref: createdRef, accountDID: "did:plc:alice123")
-
         let createTracker = WriteTestCallTracker()
-        let reloadTracker = WriteTestCallTracker()
+        let listTracker = WriteTestCallTracker()
 
         let ref = try await model.createSpace(
             spaceType: "space.swan.drive",
@@ -541,18 +539,17 @@ struct WritePipelineTests {
                 await createTracker.record(input)
                 return (200, ComAtprotoSimplespaceCreateSpace.Output(uri: createdRef))
             },
-            reload: {
-                await reloadTracker.record()
-                await MainActor.run {
-                    model.setSpacesForTesting([createdItem])
-                }
+            listSpacesTransport: { cursor in
+                await listTracker.record(cursor as Any)
+                return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: createdRef)]))
             }
         )
+
         #expect(ref.uriString() == createdRef.uriString())
         let createCount = await createTracker.callCount
-        let reloadCount = await reloadTracker.callCount
+        let listCount = await listTracker.callCount
         #expect(createCount == 1)
-        #expect(reloadCount == 1)
+        #expect(listCount == 1)
         #expect(model.spaces.count == 1)
         #expect(model.spaces.first?.skey == "self")
     }
@@ -568,7 +565,7 @@ struct WritePipelineTests {
         #expect(model.spaces.count == 1)
 
         let deleteTracker = WriteTestCallTracker()
-        let reloadTracker = WriteTestCallTracker()
+        let listTracker = WriteTestCallTracker()
 
         try await model.deleteSpace(
             space: spaceItem,
@@ -577,17 +574,16 @@ struct WritePipelineTests {
                 await deleteTracker.record(input)
                 return 200
             },
-            reload: {
-                await reloadTracker.record()
-                await MainActor.run {
-                    model.setSpacesForTesting([])
-                }
+            listSpacesTransport: { cursor in
+                await listTracker.record(cursor as Any)
+                return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: []))
             }
         )
+
         let deleteCount = await deleteTracker.callCount
-        let reloadCount = await reloadTracker.callCount
+        let listCount = await listTracker.callCount
         #expect(deleteCount == 1)
-        #expect(reloadCount == 1)
+        #expect(listCount == 1)
         #expect(model.spaces.isEmpty)
     }
 
@@ -606,16 +602,26 @@ struct WritePipelineTests {
 
         let expectedURI = try ATProtocolURI(uriString: "at://did:plc:alice123/app.bsky.feed.post/post1")
         let expectedCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
-        let newRow = RecordRow(
-            uri: "at://did:plc:alice123/space/space.swan.drive/self/did:plc:alice123/app.bsky.feed.post/post1",
-            collection: "app.bsky.feed.post",
-            rkey: "post1",
-            cid: expectedCID.description,
-            json: "{\"text\": \"New Post\"}"
+
+        let createdRecord = ComAtprotoSpaceListRecords.Record(
+            collection: try NSID(nsidString: "app.bsky.feed.post"),
+            rkey: try RecordKey(keyString: "post1"),
+            cid: expectedCID,
+            value: try RecordListModel.validateRecordJSON("{\"text\": \"New Post\"}")
+        )
+
+        let signedCommit = ComAtprotoSpaceDefs.SignedCommit(
+            ver: 1,
+            hash: Bytes(data: Data([1, 2, 3])),
+            ikm: Bytes(data: Data()),
+            sig: Bytes(data: Data()),
+            mac: Bytes(data: Data()),
+            rev: try TID(tidString: "3l3vbfz2zsk22")
         )
 
         let createTracker = WriteTestCallTracker()
-        let reloadTracker = WriteTestCallTracker()
+        let listTracker = WriteTestCallTracker()
+        let commitTracker = WriteTestCallTracker()
 
         let output = try await model.createRecord(
             space: spaceItem,
@@ -628,21 +634,26 @@ struct WritePipelineTests {
                 await createTracker.record(input)
                 return (200, ComAtprotoSpaceCreateRecord.Output(uri: expectedURI, cid: expectedCID))
             },
-            reload: {
-                await reloadTracker.record()
-                await MainActor.run {
-                    model.setRowsForTesting([newRow])
-                }
+            clientListRecords: { cursor in
+                await listTracker.record(cursor as Any)
+                return (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [createdRecord]))
+            },
+            clientGetLatestCommit: {
+                await commitTracker.record()
+                return (200, ComAtprotoSpaceGetLatestCommit.Output(commit: signedCommit))
             }
         )
 
         #expect(output.uri == expectedURI)
         let createCount = await createTracker.callCount
-        let reloadCount = await reloadTracker.callCount
+        let listCount = await listTracker.callCount
+        let commitCount = await commitTracker.callCount
         #expect(createCount == 1)
-        #expect(reloadCount == 1)
+        #expect(listCount == 1)
+        #expect(commitCount == 1)
         #expect(model.rows.count == 1)
         #expect(model.rows.first?.rkey == "post1")
+        #expect(model.commit?.rev == "3l3vbfz2zsk22")
     }
 
     @MainActor
@@ -666,16 +677,26 @@ struct WritePipelineTests {
 
         let expectedURI = try ATProtocolURI(uriString: "at://did:plc:alice123/app.bsky.feed.post/post1")
         let expectedCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
-        let updatedRow = RecordRow(
-            uri: "at://did:plc:alice123/space/space.swan.drive/self/did:plc:alice123/app.bsky.feed.post/post1",
-            collection: "app.bsky.feed.post",
-            rkey: "post1",
-            cid: expectedCID.description,
-            json: "{\"text\": \"Updated Post\"}"
+
+        let updatedRecord = ComAtprotoSpaceListRecords.Record(
+            collection: try NSID(nsidString: "app.bsky.feed.post"),
+            rkey: try RecordKey(keyString: "post1"),
+            cid: expectedCID,
+            value: try RecordListModel.validateRecordJSON("{\"text\": \"Updated Post\"}")
+        )
+
+        let signedCommit = ComAtprotoSpaceDefs.SignedCommit(
+            ver: 1,
+            hash: Bytes(data: Data([1, 2, 3])),
+            ikm: Bytes(data: Data()),
+            sig: Bytes(data: Data()),
+            mac: Bytes(data: Data()),
+            rev: try TID(tidString: "3l3vbfz2zsk22")
         )
 
         let putTracker = WriteTestCallTracker()
-        let reloadTracker = WriteTestCallTracker()
+        let listTracker = WriteTestCallTracker()
+        let commitTracker = WriteTestCallTracker()
 
         let output = try await model.putRecord(
             space: spaceItem,
@@ -688,19 +709,23 @@ struct WritePipelineTests {
                 await putTracker.record(input)
                 return (200, ComAtprotoSpacePutRecord.Output(uri: expectedURI, cid: expectedCID))
             },
-            reload: {
-                await reloadTracker.record()
-                await MainActor.run {
-                    model.setRowsForTesting([updatedRow])
-                }
+            clientListRecords: { cursor in
+                await listTracker.record(cursor as Any)
+                return (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [updatedRecord]))
+            },
+            clientGetLatestCommit: {
+                await commitTracker.record()
+                return (200, ComAtprotoSpaceGetLatestCommit.Output(commit: signedCommit))
             }
         )
 
         #expect(output.uri == expectedURI)
         let putCount = await putTracker.callCount
-        let reloadCount = await reloadTracker.callCount
+        let listCount = await listTracker.callCount
+        let commitCount = await commitTracker.callCount
         #expect(putCount == 1)
-        #expect(reloadCount == 1)
+        #expect(listCount == 1)
+        #expect(commitCount == 1)
         #expect(model.rows.count == 1)
         #expect(model.rows.first?.json.contains("Updated Post") == true)
     }
@@ -725,8 +750,18 @@ struct WritePipelineTests {
         let model = RecordListModel(rows: [existingRow])
         #expect(model.rows.count == 1)
 
+        let signedCommit = ComAtprotoSpaceDefs.SignedCommit(
+            ver: 1,
+            hash: Bytes(data: Data([1, 2, 3])),
+            ikm: Bytes(data: Data()),
+            sig: Bytes(data: Data()),
+            mac: Bytes(data: Data()),
+            rev: try TID(tidString: "3l3vbfz2zsk22")
+        )
+
         let deleteTracker = WriteTestCallTracker()
-        let reloadTracker = WriteTestCallTracker()
+        let listTracker = WriteTestCallTracker()
+        let commitTracker = WriteTestCallTracker()
 
         _ = try await model.deleteRecord(
             space: spaceItem,
@@ -738,17 +773,22 @@ struct WritePipelineTests {
                 await deleteTracker.record(input)
                 return (200, ComAtprotoSpaceDeleteRecord.Output())
             },
-            reload: {
-                await reloadTracker.record()
-                await MainActor.run {
-                    model.setRowsForTesting([])
-                }
+            clientListRecords: { cursor in
+                await listTracker.record(cursor as Any)
+                return (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: []))
+            },
+            clientGetLatestCommit: {
+                await commitTracker.record()
+                return (200, ComAtprotoSpaceGetLatestCommit.Output(commit: signedCommit))
             }
         )
+
         let deleteCount = await deleteTracker.callCount
-        let reloadCount = await reloadTracker.callCount
+        let listCount = await listTracker.callCount
+        let commitCount = await commitTracker.callCount
         #expect(deleteCount == 1)
-        #expect(reloadCount == 1)
+        #expect(listCount == 1)
+        #expect(commitCount == 1)
         #expect(model.rows.isEmpty)
     }
 
@@ -763,8 +803,11 @@ struct WritePipelineTests {
         let model = SpaceDetailModel(members: [])
         #expect(model.members?.isEmpty == true)
 
+        let m1 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:alice123"))
+        let m2 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:bob456"))
+
         let addTracker = WriteTestCallTracker()
-        let reloadTracker = WriteTestCallTracker()
+        let listTracker = WriteTestCallTracker()
 
         try await model.addMember(
             identifier: "did:plc:bob456",
@@ -775,17 +818,16 @@ struct WritePipelineTests {
                 await addTracker.record(input)
                 return 200
             },
-            reload: {
-                await reloadTracker.record()
-                await MainActor.run {
-                    model.setMembersForTesting(["did:plc:alice123", "did:plc:bob456"])
-                }
+            listMembersTransport: { cursor in
+                await listTracker.record(cursor as Any)
+                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [m1, m2]))
             }
         )
+
         let addCount = await addTracker.callCount
-        let reloadCount = await reloadTracker.callCount
+        let listCount = await listTracker.callCount
         #expect(addCount == 1)
-        #expect(reloadCount == 1)
+        #expect(listCount == 1)
         #expect(model.members == ["did:plc:alice123", "did:plc:bob456"])
     }
 
@@ -800,8 +842,10 @@ struct WritePipelineTests {
         let model = SpaceDetailModel(members: ["did:plc:alice123", "did:plc:bob456"])
         #expect(model.members?.count == 2)
 
+        let m1 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:alice123"))
+
         let removeTracker = WriteTestCallTracker()
-        let reloadTracker = WriteTestCallTracker()
+        let listTracker = WriteTestCallTracker()
 
         try await model.removeMember(
             did: "did:plc:bob456",
@@ -811,17 +855,16 @@ struct WritePipelineTests {
                 await removeTracker.record(input)
                 return 200
             },
-            reload: {
-                await reloadTracker.record()
-                await MainActor.run {
-                    model.setMembersForTesting(["did:plc:alice123"])
-                }
+            listMembersTransport: { cursor in
+                await listTracker.record(cursor as Any)
+                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [m1]))
             }
         )
+
         let removeCount = await removeTracker.callCount
-        let reloadCount = await reloadTracker.callCount
+        let listCount = await listTracker.callCount
         #expect(removeCount == 1)
-        #expect(reloadCount == 1)
+        #expect(listCount == 1)
         #expect(model.members == ["did:plc:alice123"])
     }
 }

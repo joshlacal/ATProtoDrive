@@ -489,7 +489,7 @@ public final class SpaceDetailModel {
         account: AccountStore.Account,
         resolveHandle: (@Sendable (_ handle: String) async throws -> String)? = nil,
         transport: (@Sendable (_ input: ComAtprotoSimplespaceAddMember.Input) async throws -> Int)? = nil,
-        reload: (@Sendable () async -> Void)? = nil
+        listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?))? = nil
     ) async throws {
         try await Self.performAddMember(
             space: space,
@@ -498,8 +498,13 @@ public final class SpaceDetailModel {
             resolveHandle: resolveHandle,
             transport: transport
         )
-        if let reload = reload {
-            await reload()
+        if let listMembersTransport = listMembersTransport {
+            do {
+                self.members = try await Self.fetchAllMembers(fetchPage: listMembersTransport)
+                self.error = nil
+            } catch {
+                self.error = error.localizedDescription
+            }
         } else {
             await load(space: space, account: account)
         }
@@ -529,7 +534,7 @@ public final class SpaceDetailModel {
         space: SpaceItem,
         account: AccountStore.Account,
         transport: (@Sendable (_ input: ComAtprotoSimplespaceRemoveMember.Input) async throws -> Int)? = nil,
-        reload: (@Sendable () async -> Void)? = nil
+        listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?))? = nil
     ) async throws {
         try await Self.performRemoveMember(
             space: space,
@@ -537,8 +542,13 @@ public final class SpaceDetailModel {
             account: account,
             transport: transport
         )
-        if let reload = reload {
-            await reload()
+        if let listMembersTransport = listMembersTransport {
+            do {
+                self.members = try await Self.fetchAllMembers(fetchPage: listMembersTransport)
+                self.error = nil
+            } catch {
+                self.error = error.localizedDescription
+            }
         } else {
             await load(space: space, account: account)
         }
@@ -556,10 +566,4 @@ public final class SpaceDetailModel {
             transport: transport
         )
     }
-
-#if DEBUG
-    public func setMembersForTesting(_ members: [String]?) {
-        self.members = members
-    }
-#endif
 }
