@@ -8,15 +8,32 @@
 
 /* Begin PBXBuildFile section */
 		A10000000000000000000040 /* ATProtoDriveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000020 /* ATProtoDriveApp.swift */; };
+		A10000000000000000000041 /* AccountStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000023 /* AccountStore.swift */; };
+		A10000000000000000000042 /* AddAccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000024 /* AddAccountView.swift */; };
+		A10000000000000000000043 /* AccountStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* AccountStoreTests.swift */; };
 		A10000000000000000000070 /* Petrel in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000060 /* Petrel */; };
 		A10000000000000000000071 /* SwanSpaces in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000061 /* SwanSpaces */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		A10000000000000000000014 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000010;
+			remoteInfo = ATProtoDrive;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		A10000000000000000000011 /* ATProtoDrive.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ATProtoDrive.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000012 /* ATProtoDriveTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ATProtoDriveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000020 /* ATProtoDriveApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ATProtoDriveApp.swift; sourceTree = "<group>"; };
 		A10000000000000000000021 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10000000000000000000022 /* ATProtoDrive.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ATProtoDrive.entitlements; sourceTree = "<group>"; };
+		A10000000000000000000023 /* AccountStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStore.swift; sourceTree = "<group>"; };
+		A10000000000000000000024 /* AddAccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddAccountView.swift; sourceTree = "<group>"; };
+		A10000000000000000000025 /* AccountStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStoreTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -29,6 +46,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A10000000000000000000034 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -36,6 +60,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000003 /* ATProtoDrive */,
+				A10000000000000000000007 /* ATProtoDriveTests */,
 				A10000000000000000000004 /* Frameworks */,
 				A10000000000000000000005 /* Products */,
 			);
@@ -44,11 +69,29 @@
 		A10000000000000000000003 /* ATProtoDrive */ = {
 			isa = PBXGroup;
 			children = (
+				A10000000000000000000006 /* Accounts */,
 				A10000000000000000000020 /* ATProtoDriveApp.swift */,
 				A10000000000000000000021 /* Info.plist */,
 				A10000000000000000000022 /* ATProtoDrive.entitlements */,
 			);
 			path = ATProtoDrive;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000006 /* Accounts */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000023 /* AccountStore.swift */,
+				A10000000000000000000024 /* AddAccountView.swift */,
+			);
+			path = Accounts;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000007 /* ATProtoDriveTests */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000025 /* AccountStoreTests.swift */,
+			);
+			path = ATProtoDriveTests;
 			sourceTree = "<group>";
 		};
 		A10000000000000000000004 /* Frameworks */ = {
@@ -62,6 +105,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000011 /* ATProtoDrive.app */,
+				A10000000000000000000012 /* ATProtoDriveTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -90,6 +134,26 @@
 			productReference = A10000000000000000000011 /* ATProtoDrive.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A10000000000000000000013 /* ATProtoDriveTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000093 /* Build configuration list for PBXNativeTarget "ATProtoDriveTests" */;
+			buildPhases = (
+				A10000000000000000000033 /* Sources */,
+				A10000000000000000000034 /* Frameworks */,
+				A10000000000000000000035 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A10000000000000000000015 /* PBXTargetDependency */,
+			);
+			name = ATProtoDriveTests;
+			packageProductDependencies = (
+			);
+			productName = ATProtoDriveTests;
+			productReference = A10000000000000000000012 /* ATProtoDriveTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -99,6 +163,11 @@
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1600;
 				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					A10000000000000000000013 = {
+						TestTargetID = A10000000000000000000010;
+					};
+				};
 			};
 			buildConfigurationList = A10000000000000000000080 /* Build configuration list for PBXProject "ATProtoDrive" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -118,12 +187,20 @@
 			projectRoot = "";
 			targets = (
 				A10000000000000000000010 /* ATProtoDrive */,
+				A10000000000000000000013 /* ATProtoDriveTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A10000000000000000000032 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000035 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -138,10 +215,28 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000040 /* ATProtoDriveApp.swift in Sources */,
+				A10000000000000000000041 /* AccountStore.swift in Sources */,
+				A10000000000000000000042 /* AddAccountView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000033 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000043 /* AccountStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A10000000000000000000015 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000010 /* ATProtoDrive */;
+			targetProxy = A10000000000000000000014 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A10000000000000000000081 /* Debug */ = {
@@ -306,6 +401,50 @@
 			};
 			name = Release;
 		};
+		A10000000000000000000094 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 44U2ZPNQPK;
+				ENABLE_TESTING_SEARCH_PATHS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = blue.catbird.atprotodrive.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ATProtoDrive.app/Contents/MacOS/ATProtoDrive";
+			};
+			name = Debug;
+		};
+		A10000000000000000000095 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 44U2ZPNQPK;
+				ENABLE_TESTING_SEARCH_PATHS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = blue.catbird.atprotodrive.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ATProtoDrive.app/Contents/MacOS/ATProtoDrive";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -323,6 +462,15 @@
 			buildConfigurations = (
 				A10000000000000000000091 /* Debug */,
 				A10000000000000000000092 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000093 /* Build configuration list for PBXNativeTarget "ATProtoDriveTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000094 /* Debug */,
+				A10000000000000000000095 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
