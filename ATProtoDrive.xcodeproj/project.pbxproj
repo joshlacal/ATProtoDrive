@@ -10,7 +10,10 @@
 		A10000000000000000000040 /* ATProtoDriveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000020 /* ATProtoDriveApp.swift */; };
 		A10000000000000000000041 /* AccountStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000023 /* AccountStore.swift */; };
 		A10000000000000000000042 /* AddAccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000024 /* AddAccountView.swift */; };
+		A10000000000000000000044 /* SpaceListModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000026 /* SpaceListModel.swift */; };
+		A10000000000000000000045 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000027 /* SidebarView.swift */; };
 		A10000000000000000000043 /* AccountStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* AccountStoreTests.swift */; };
+		A10000000000000000000046 /* SpaceListModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000028 /* SpaceListModelTests.swift */; };
 		A10000000000000000000070 /* Petrel in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000060 /* Petrel */; };
 		A10000000000000000000071 /* SwanSpaces in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000061 /* SwanSpaces */; };
 /* End PBXBuildFile section */
@@ -33,7 +36,10 @@
 		A10000000000000000000022 /* ATProtoDrive.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ATProtoDrive.entitlements; sourceTree = "<group>"; };
 		A10000000000000000000023 /* AccountStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStore.swift; sourceTree = "<group>"; };
 		A10000000000000000000024 /* AddAccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddAccountView.swift; sourceTree = "<group>"; };
+		A10000000000000000000026 /* SpaceListModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceListModel.swift; sourceTree = "<group>"; };
+		A10000000000000000000027 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		A10000000000000000000025 /* AccountStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStoreTests.swift; sourceTree = "<group>"; };
+		A10000000000000000000028 /* SpaceListModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceListModelTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,6 +76,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000006 /* Accounts */,
+				A10000000000000000000008 /* Spaces */,
 				A10000000000000000000020 /* ATProtoDriveApp.swift */,
 				A10000000000000000000021 /* Info.plist */,
 				A10000000000000000000022 /* ATProtoDrive.entitlements */,
@@ -86,10 +93,20 @@
 			path = Accounts;
 			sourceTree = "<group>";
 		};
+		A10000000000000000000008 /* Spaces */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000026 /* SpaceListModel.swift */,
+				A10000000000000000000027 /* SidebarView.swift */,
+			);
+			path = Spaces;
+			sourceTree = "<group>";
+		};
 		A10000000000000000000007 /* ATProtoDriveTests */ = {
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000025 /* AccountStoreTests.swift */,
+				A10000000000000000000028 /* SpaceListModelTests.swift */,
 			);
 			path = ATProtoDriveTests;
 			sourceTree = "<group>";
@@ -217,6 +234,8 @@
 				A10000000000000000000040 /* ATProtoDriveApp.swift in Sources */,
 				A10000000000000000000041 /* AccountStore.swift in Sources */,
 				A10000000000000000000042 /* AddAccountView.swift in Sources */,
+				A10000000000000000000044 /* SpaceListModel.swift in Sources */,
+				A10000000000000000000045 /* SidebarView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -225,6 +244,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000043 /* AccountStoreTests.swift in Sources */,
+				A10000000000000000000046 /* SpaceListModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -11,34 +11,15 @@ import SwanSpaces
 struct ATProtoDriveApp: App {
     @State private var accountStore = AccountStore()
     @State private var showingAddAccount = false
+    @State private var selectedSpace: SpaceItem?
 
     var body: some Scene {
         WindowGroup {
             NavigationSplitView {
-                List(selection: $accountStore.activeAccountID) {
-                    Section("Accounts") {
-                        ForEach(accountStore.accounts) { account in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(account.handle)
-                                    .font(.headline)
-                                Text(account.id)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .tag(account.id)
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    Task {
-                                        await accountStore.remove(account.id)
-                                    }
-                                } label: {
-                                    Label("Remove Account", systemImage: "trash")
-                                }
-                            }
-                        }
-                    }
-                }
-                .navigationTitle("Accounts")
+                SidebarView(
+                    selectedSpace: $selectedSpace,
+                    showingAddAccount: $showingAddAccount
+                )
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button {
@@ -49,16 +30,28 @@ struct ATProtoDriveApp: App {
                     }
                 }
             } content: {
-                if let active = accountStore.activeAccount {
-                    VStack(alignment: .leading) {
-                        Text("Active: \(active.handle)")
+                if let space = selectedSpace {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(space.skey)
+                            .font(.title2.bold())
+                        Text(space.spaceType)
                             .font(.headline)
-                        Text("Spaces")
                             .foregroundStyle(.secondary)
+                        Divider()
+                        LabeledContent("Authority", value: space.authorityDID)
+                        LabeledContent("Type", value: space.spaceType)
+                        LabeledContent("Key", value: space.skey)
+                        LabeledContent("URI", value: space.ref.uriString())
+                        LabeledContent("Ownership", value: space.isOwnAuthority ? "Owned Space" : "Shared Space")
+                        Spacer()
                     }
                     .padding()
                 } else {
-                    ContentUnavailableView("No Account Selected", systemImage: "person.crop.circle.badge.plus", description: Text("Add an ATProto account to browse Spaces."))
+                    ContentUnavailableView(
+                        "No Space Selected",
+                        systemImage: "square.stack.3d.up",
+                        description: Text("Select a space from the sidebar to view details.")
+                    )
                 }
             } detail: {
                 Text("Records")
