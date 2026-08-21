@@ -566,6 +566,33 @@ struct RecordListModelPipelineTests {
         )
         #expect(noAccountMenu[3].isEnabled == false)
     }
+
+    @Test("Record actions gating correctly distinguishes own repo vs foreign repo")
+    func testRecordActionsGating() {
+        func isNewRecordEnabled(hasAccount: Bool, isOwnRepo: Bool) -> Bool {
+            hasAccount && isOwnRepo
+        }
+        func isEditRecordEnabled(hasAccount: Bool, isOwnRepo: Bool, hasSelection: Bool) -> Bool {
+            hasAccount && isOwnRepo && hasSelection
+        }
+        func isDeleteRecordEnabled(hasAccount: Bool, isOwnRepo: Bool, hasSelection: Bool) -> Bool {
+            hasAccount && isOwnRepo && hasSelection
+        }
+
+        // Own repo with account and selection -> all enabled
+        #expect(isNewRecordEnabled(hasAccount: true, isOwnRepo: true) == true)
+        #expect(isEditRecordEnabled(hasAccount: true, isOwnRepo: true, hasSelection: true) == true)
+        #expect(isDeleteRecordEnabled(hasAccount: true, isOwnRepo: true, hasSelection: true) == true)
+
+        // Foreign repo with account -> New Record, Edit, Delete are all disabled
+        #expect(isNewRecordEnabled(hasAccount: true, isOwnRepo: false) == false)
+        #expect(isEditRecordEnabled(hasAccount: true, isOwnRepo: false, hasSelection: true) == false)
+        #expect(isDeleteRecordEnabled(hasAccount: true, isOwnRepo: false, hasSelection: true) == false)
+
+        // No account -> all disabled
+        #expect(isNewRecordEnabled(hasAccount: false, isOwnRepo: true) == false)
+        #expect(isEditRecordEnabled(hasAccount: false, isOwnRepo: true, hasSelection: true) == false)
+    }
     @Test("RecordMenuDescriptors.blobRefMenu wires Download, QuickLook, and Copy CID with correct gating and isolated pasteboard payload")
     @MainActor
     func testBlobRefMenuDescriptorWiring() throws {

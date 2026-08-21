@@ -219,7 +219,7 @@ struct WritePipelineTests {
 
     // MARK: - 3. Record CRUD Tests
 
-    @Test("makeCreateRecordInput constructs valid payload and parses value container")
+    @Test("makeCreateRecordInput constructs valid payload, injects $type matching collection, and sets validate to nil")
     func testMakeCreateRecordInput() throws {
         let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
         let json = """
@@ -241,14 +241,36 @@ struct WritePipelineTests {
         #expect(input.repo.description == "did:plc:alice123")
         #expect(input.collection.description == "app.bsky.feed.post")
         #expect(input.rkey?.description == "post123")
-        #expect(input.validate == true)
+        #expect(input.validate == nil)
 
         let prettyJSON = RecordListModel.formatPrettyJSON(from: input.record)
         #expect(prettyJSON.contains("Hello ATProto Space"))
         #expect(prettyJSON.contains("42"))
+        #expect(prettyJSON.contains("\"$type\" : \"app.bsky.feed.post\""))
     }
 
-    @Test("makePutRecordInput constructs valid payload and requires rkey")
+    @Test("makeCreateRecordInput rejects mismatched $type")
+    func testMakeCreateRecordInputRejectsMismatchedType() throws {
+        let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+        let json = """
+        {
+          "$type": "wrong.collection.name",
+          "text": "Hello"
+        }
+        """
+
+        #expect(throws: RecordListModel.RecordValidationError.self) {
+            _ = try RecordListModel.makeCreateRecordInput(
+                space: spaceRef,
+                repoDID: "did:plc:alice123",
+                collection: "app.bsky.feed.post",
+                rkey: "post123",
+                jsonText: json
+            )
+        }
+    }
+
+    @Test("makePutRecordInput constructs valid payload, injects $type matching collection, and requires rkey")
     func testMakePutRecordInput() throws {
         let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
         let json = """
@@ -270,11 +292,12 @@ struct WritePipelineTests {
         #expect(input.repo.description == "did:plc:alice123")
         #expect(input.collection.description == "space.swan.document")
         #expect(input.rkey.description == "doc456")
-        #expect(input.validate == true)
+        #expect(input.validate == nil)
 
         let prettyJSON = RecordListModel.formatPrettyJSON(from: input.record)
         #expect(prettyJSON.contains("Document"))
         #expect(prettyJSON.contains("true"))
+        #expect(prettyJSON.contains("\"$type\" : \"space.swan.document\""))
     }
 
     @Test("makeDeleteRecordInput constructs valid delete payload")
@@ -562,9 +585,13 @@ struct WritePipelineTests {
     @MainActor
     @Test("SpaceListModel createSpace executes transport and reloads model state from empty to populated")
     func testSpaceListModelCreateSpaceReloads() async throws {
-        let dummyAccount = await makeTestAccount()
+        let dummyAccount = await makeTestAccount(id: "did:plc:alice_reloads")
+        defer {
+            UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: dummyAccount.id))
+        }
+        UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: dummyAccount.id))
         let model = SpaceListModel()
-        let createdRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+        let createdRef = try SpaceRef(uriString: "at://did:plc:alice_reloads/space/space.swan.drive/self")
         let createTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
 
@@ -602,6 +629,43 @@ struct WritePipelineTests {
         #expect(finalListCount == 2)
         #expect(model.spaces.count == 1)
         #expect(model.spaces.first?.skey == "self")
+    }
+
+    @MainActor
+    @Test("SpaceListModel createSpace persists URI in custom spaces so it appears even if listSpaces returns empty")
+    func testSpaceListModelCreateSpacePersistsAndAppearsWhenListSpacesEmpty() async throws {
+        let dummyAccount = await makeTestAccount(id: "did:plc:alice_empty_list")
+        defer {
+            UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: dummyAccount.id))
+        }
+        UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: dummyAccount.id))
+        let model = SpaceListModel()
+        let createdRef = try SpaceRef(uriString: "at://\(dummyAccount.id)/space/space.swan.drive/new-empty-space")
+
+        // listSpaces always returns empty list (as repo host holds no repos yet)
+        let listTransport: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListSpaces.Output?) = { _ in
+            return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: []))
+        }
+
+        let ref = try await model.createSpace(
+            spaceType: "space.swan.drive",
+            skey: "new-empty-space",
+            policy: .memberList,
+            account: dummyAccount,
+            transport: { _ in
+                return (200, ComAtprotoSimplespaceCreateSpace.Output(uri: createdRef))
+            },
+            listSpacesTransport: listTransport
+        )
+
+        #expect(ref.uriString() == createdRef.uriString())
+        #expect(model.spaces.count == 1)
+        #expect(model.spaces.first?.ref.uriString() == createdRef.uriString())
+        #expect(model.spaces.first?.skey == "new-empty-space")
+
+        // Also verify custom spaces key has it
+        let persisted = SpaceListModel.loadCustomSpaceURIs(for: dummyAccount.id)
+        #expect(persisted.contains(createdRef.uriString()))
     }
 
     @MainActor

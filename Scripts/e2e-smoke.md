@@ -6,13 +6,15 @@ This checklist provides a manual, step-by-step verification script for human exe
 
 ## Preamble & Environment Notice
 
+> **⚠️ Swan Interop Status Notice:**
+> Swan is currently pinned to `permissioned-data-0016-2026-07-30` (atproto 3f6c96d) while Petrel pins 89deb9f. Wire contracts differ (createSpace field shapes; credential auth shape). End-to-end space creation/record reads between ATProtoDrive and swan.place are **BLOCKED pending a swan profile bump and migration**. Login/OAuth and local UI workflows remain fully functional.
+
 > **⚠️ Alpha PDS Reset & Lexicon Re-vendoring Notice:**
 > The Bluesky Spaces Alpha PDS is updated and reset weekly on Thursdays. If schema or lexicon breaking changes occur upstream:
 > 1. Resolve the latest commit SHA on the `permissioned-data` branch of `bluesky-social/atproto` (e.g. `git rev-parse HEAD` or via GitHub).
-> 2. Run `Petrel/Scripts/vendor-space-lexicons.sh <COMMIT_SHA>` using that explicit commit SHA (never a branch name, preserving the pinned-SHA contract).
-> 3. Run `Petrel/Scripts/regenerate-generated.sh` in the Petrel directory.
+> 2. Run `Petrel/Scripts/vendor-space-lexicons.sh <40_CHAR_COMMIT_SHA>` using that explicit full 40-character commit SHA (never a branch or tag name, preserving the pinned-SHA contract).
+> 3. Run `python3 run.py --manifest generator/manifests/petrel-core.json --language swift` in the `Petrel/` directory (or `Petrel/Scripts/regenerate-generated.sh`).
 > 4. Verify the test suite passes with `xcodebuild test -project ATProtoDrive/ATProtoDrive.xcodeproj -scheme ATProtoDrive -destination 'platform=macOS' -only-testing:ATProtoDriveTests`.
-
 ### Prerequisites
 - macOS 15+ Sequoia workstation with `ATProtoDrive.app` built.
 - **Account A (Swan PDS):** e.g. `alice.swan.place` (authenticates via CAB at `https://cab.swan.place`).
@@ -33,7 +35,7 @@ This checklist provides a manual, step-by-step verification script for human exe
 6. Inspect the browser URL query string:
    - **Assertion:** URL contains `client_id=https%3A%2F%2Fcab.swan.place%2Foauth-client-metadata.json`.
 7. Inspect the browser consent UI:
-   - **Assertion:** Consent page displays requested scope `atproto space:*?authority=*` (wildcard authority warning).
+   - **Assertion:** Consent page displays requested scope `atproto space:*?authority=*&collection=*&manage=create&manage=update&manage=delete` (wildcard authority warning).
 8. Authorize the application.
 9. Browser redirects to `blue.catbird.atprotodrive:/callback?...`.
 10. Observe ATProtoDrive dismisses the sheet and displays Account A under the "Spaces" sidebar section.
@@ -46,7 +48,7 @@ This checklist provides a manual, step-by-step verification script for human exe
 4. Inspect the browser URL query string:
    - **Assertion:** URL contains `client_id=https%3A%2F%2Fcab.swan.place%2Fpublic-client-metadata.json`.
 5. Inspect the browser consent UI:
-   - **Assertion:** Consent page displays requested scope `atproto space:*?authority=*`.
+   - **Assertion:** Consent page displays requested scope `atproto space:*?authority=*&collection=*&manage=create&manage=update&manage=delete`.
 6. Complete authorization in browser.
 7. Browser redirects to `blue.catbird.atprotodrive:/callback?...`.
 8. Observe ATProtoDrive matches OAuth state and displays Account B in the sidebar.

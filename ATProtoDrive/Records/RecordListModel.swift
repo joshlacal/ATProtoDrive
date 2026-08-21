@@ -486,6 +486,7 @@ public final class RecordListModel {
         case notJSONObject
         case serializationFailed(String)
         case decodingFailed(String)
+        case typeMismatch(expected: String, found: String)
 
         public var errorDescription: String? {
             switch self {
@@ -497,12 +498,14 @@ public final class RecordListModel {
                 return "Invalid JSON syntax: \(msg)"
             case .decodingFailed(let msg):
                 return "Failed to parse ATProtocol value: \(msg)"
+            case .typeMismatch(let expected, let found):
+                return "Record $type '\(found)' does not match collection '\(expected)'."
             }
         }
     }
 
-    /// Validates raw JSON string using JSONSerialization and decodes into ATProtocolValueContainer.
-    nonisolated public static func validateRecordJSON(_ text: String) throws -> ATProtocolValueContainer {
+    /// Validates raw JSON string using JSONSerialization, ensures/injects `$type` field consistent with `collection` if provided, and decodes into ATProtocolValueContainer.
+    nonisolated public static func validateRecordJSON(_ text: String, collection: String? = nil) throws -> ATProtocolValueContainer {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             throw RecordValidationError.empty
@@ -518,29 +521,48 @@ public final class RecordListModel {
             throw RecordValidationError.serializationFailed(error.localizedDescription)
         }
 
-        guard jsonObject is [String: Any] else {
+        guard var dict = jsonObject as? [String: Any] else {
             throw RecordValidationError.notJSONObject
         }
 
+        if let collection = collection?.trimmingCharacters(in: .whitespacesAndNewlines), !collection.isEmpty {
+            if let existingType = dict["$type"] as? String {
+                if existingType != collection {
+                    throw RecordValidationError.typeMismatch(expected: collection, found: existingType)
+                }
+            } else {
+                dict["$type"] = collection
+            }
+        }
+
+        let encodedData: Data
         do {
-            let container = try JSONDecoder().decode(ATProtocolValueContainer.self, from: data)
+            encodedData = try JSONSerialization.data(withJSONObject: dict)
+        } catch {
+            throw RecordValidationError.serializationFailed(error.localizedDescription)
+        }
+
+        do {
+            let container = try JSONDecoder().decode(ATProtocolValueContainer.self, from: encodedData)
             return container
         } catch {
             throw RecordValidationError.decodingFailed(error.localizedDescription)
         }
     }
 
-    /// Pure helper to construct `ComAtprotoSpaceCreateRecord.Input` after validating JSON.
+    /// Pure helper to construct `ComAtprotoSpaceCreateRecord.Input` after validating JSON and ensuring `$type`.
     nonisolated public static func makeCreateRecordInput(
         space: SpaceRef,
         repoDID: String,
         collection: String,
         rkey: String?,
-        jsonText: String
+        jsonText: String,
+        validate: Bool? = nil
     ) throws -> ComAtprotoSpaceCreateRecord.Input {
-        let container = try validateRecordJSON(jsonText)
+        let trimmedCol = collection.trimmingCharacters(in: .whitespacesAndNewlines)
+        let container = try validateRecordJSON(jsonText, collection: trimmedCol)
         let repo = try DID(didString: repoDID.trimmingCharacters(in: .whitespacesAndNewlines))
-        let colNSID = try NSID(nsidString: collection.trimmingCharacters(in: .whitespacesAndNewlines))
+        let colNSID = try NSID(nsidString: trimmedCol)
         let recordKey: RecordKey?
         if let rkey = rkey?.trimmingCharacters(in: .whitespacesAndNewlines), !rkey.isEmpty {
             recordKey = try RecordKey(keyString: rkey)
@@ -552,29 +574,31 @@ public final class RecordListModel {
             repo: repo,
             collection: colNSID,
             rkey: recordKey,
-            validate: true,
+            validate: validate,
             record: container
         )
     }
 
-    /// Pure helper to construct `ComAtprotoSpacePutRecord.Input` after validating JSON.
+    /// Pure helper to construct `ComAtprotoSpacePutRecord.Input` after validating JSON and ensuring `$type`.
     nonisolated public static func makePutRecordInput(
         space: SpaceRef,
         repoDID: String,
         collection: String,
         rkey: String,
-        jsonText: String
+        jsonText: String,
+        validate: Bool? = nil
     ) throws -> ComAtprotoSpacePutRecord.Input {
-        let container = try validateRecordJSON(jsonText)
+        let trimmedCol = collection.trimmingCharacters(in: .whitespacesAndNewlines)
+        let container = try validateRecordJSON(jsonText, collection: trimmedCol)
         let repo = try DID(didString: repoDID.trimmingCharacters(in: .whitespacesAndNewlines))
-        let colNSID = try NSID(nsidString: collection.trimmingCharacters(in: .whitespacesAndNewlines))
+        let colNSID = try NSID(nsidString: trimmedCol)
         let recordKey = try RecordKey(keyString: rkey.trimmingCharacters(in: .whitespacesAndNewlines))
         return ComAtprotoSpacePutRecord.Input(
             space: space,
             repo: repo,
             collection: colNSID,
             rkey: recordKey,
-            validate: true,
+            validate: validate,
             record: container
         )
     }

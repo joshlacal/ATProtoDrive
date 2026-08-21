@@ -114,8 +114,8 @@ public struct RecordTableView: View {
                 } label: {
                     Label("New Record", systemImage: "plus")
                 }
-                .disabled(account == nil)
-
+                .disabled(account == nil || !isOwnRepo)
+                .help(isOwnRepo ? "Create record in your repository" : "Cannot create records in other accounts' repositories")
                 Button {
                     if let selectedRecord {
                         editorMode = .edit(row: selectedRecord)

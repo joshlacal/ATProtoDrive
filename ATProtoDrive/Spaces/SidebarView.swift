@@ -155,9 +155,14 @@ struct AccountSpacesSection: View {
             await model.load(account: account)
         }
         .sheet(isPresented: $showingCreateSpace) {
-            CreateSpaceSheet(account: account) { _ in
+            CreateSpaceSheet(account: account) { createdRef in
                 Task {
                     await model.load(account: account)
+                    if let createdItem = model.spaces.first(where: { $0.ref.uriString() == createdRef.uriString() }) {
+                        selectedSpace = createdItem
+                    } else {
+                        selectedSpace = SpaceItem(ref: createdRef, accountDID: account.id)
+                    }
                 }
             }
         }

@@ -81,7 +81,7 @@ public final class AccountStore {
     nonisolated public static let publicClientId = "https://cab.swan.place/public-client-metadata.json"
     nonisolated public static let cabBackendURL = URL(string: "https://cab.swan.place")!
     nonisolated public static let redirectUri = "blue.catbird.atprotodrive:/callback"
-    nonisolated public static let scope = "atproto space:*?authority=*"
+    nonisolated public static let scope = "atproto space:*?authority=*&collection=*&manage=create&manage=update&manage=delete"
 
     private static let userDefaultsKey = "blue.catbird.atprotodrive.accounts"
 
@@ -210,6 +210,12 @@ public final class AccountStore {
             throw AuthError.noActiveAccount
         }
 
+        // If authorization server returned a different DID than pre-resolved and keychained, clean up and fail fast
+        if !pending.did.isEmpty && did != pending.did {
+            try? await pending.client.logout()
+            throw AuthError.authorizationFailed
+        }
+
         let resolvedHandle = storedHandle ?? pending.requestedHandle
         let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: pending.client))
         let credentials = SpaceCredentialManager(client: pending.client, resolver: resolver)
@@ -256,9 +262,8 @@ public final class AccountStore {
                     namespace: ns,
                     authMode: authMode
                 )
-
                 let (storedDID, storedHandle, _) = await client.getActiveAccountInfo()
-                guard storedDID != nil else { continue }
+                guard let activeDID = storedDID, activeDID == item.id else { continue }
 
                 let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: client))
                 let credentials = SpaceCredentialManager(client: client, resolver: resolver)

@@ -75,7 +75,7 @@ If upstream lexicons change on the `permissioned-data` branch of `bluesky-social
 
 # 2. Vendor updated space lexicons into Petrel using the resolved commit SHA
 cd Petrel
-./Scripts/vendor-space-lexicons.sh <GIT_COMMIT_SHA>
+./Scripts/vendor-space-lexicons.sh <40_CHAR_COMMIT_SHA>
 
 # 3. Regenerate Swift lexicon types
 ./Scripts/regenerate-generated.sh

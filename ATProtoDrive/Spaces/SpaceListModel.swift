@@ -178,6 +178,13 @@ public final class SpaceListModel {
             throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body from createSpace", statusCode: responseCode)
         }
 
+        // Persist the newly created space URI so it appears even before creating a repo in it
+        var customURIs = Self.loadCustomSpaceURIs(for: account.id)
+        if !customURIs.contains(output.uri.uriString()) {
+            customURIs.append(output.uri.uriString())
+            Self.saveCustomSpaceURIs(customURIs, for: account.id)
+        }
+
         let listTransport = listSpacesTransport ?? { cursor in
             let (responseCode, data) = try await account.client.com.atproto.space.listSpaces(
                 input: ComAtprotoSpaceListSpaces.Parameters(cursor: cursor)

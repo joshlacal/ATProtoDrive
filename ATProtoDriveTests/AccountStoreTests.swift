@@ -26,7 +26,7 @@ struct AccountStoreTests {
         #expect(AccountStore.publicClientId == "https://cab.swan.place/public-client-metadata.json")
         #expect(AccountStore.cabBackendURL == URL(string: "https://cab.swan.place")!)
         #expect(AccountStore.redirectUri == "blue.catbird.atprotodrive:/callback")
-        #expect(AccountStore.scope == "atproto space:*?authority=*")
+        #expect(AccountStore.scope == "atproto space:*?authority=*&collection=*&manage=create&manage=update&manage=delete")
     }
 
     @MainActor
@@ -141,5 +141,27 @@ struct AccountStoreTests {
         #expect(store.pendingLoginCount == 1)
 
         #expect(store.accounts.isEmpty)
+    }
+
+    @MainActor
+    @Test("restore discards persisted accounts if stored DID mismatches persisted entry")
+    func testRestoreValidatesActiveDID() async {
+        let userDefaultsKey = "blue.catbird.atprotodrive.accounts"
+        let mismatchedAccounts = [
+            AccountStore.PersistedAccount(id: "did:plc:alice_persisted", handle: "alice.test", authMode: .publicOAuth)
+        ]
+        if let data = try? JSONEncoder().encode(mismatchedAccounts) {
+            UserDefaults.standard.set(data, forKey: userDefaultsKey)
+        }
+        defer {
+            UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+        }
+
+        let store = AccountStore()
+        await store.restore()
+
+        // Since no actual keychain session exists for did:plc:alice_persisted, client.getActiveAccountInfo() storedDID is nil or mismatch -> accounts is empty
+        #expect(store.accounts.isEmpty)
+        #expect(store.activeAccountID == nil)
     }
 }

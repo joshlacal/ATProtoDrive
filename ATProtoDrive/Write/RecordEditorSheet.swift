@@ -237,7 +237,7 @@ public struct RecordEditorSheet: View {
     private func formatJSON() {
         validationError = nil
         do {
-            _ = try RecordListModel.validateRecordJSON(jsonText)
+            _ = try RecordListModel.validateRecordJSON(jsonText, collection: collection)
             if let data = jsonText.data(using: .utf8),
                let jsonObject = try? JSONSerialization.jsonObject(with: data),
                let prettyData = try? JSONSerialization.data(withJSONObject: jsonObject, options: [.prettyPrinted, .sortedKeys]),
@@ -309,7 +309,7 @@ public struct RecordEditorSheet: View {
 
         // Validate JSON with JSONSerialization BEFORE calling API
         do {
-            _ = try RecordListModel.validateRecordJSON(jsonText)
+            _ = try RecordListModel.validateRecordJSON(jsonText, collection: collection)
         } catch {
             validationError = error.localizedDescription
             return // DO NOT call API if JSON is invalid
