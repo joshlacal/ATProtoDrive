@@ -26,6 +26,9 @@
 		A100000000000000000000A5 /* MemberEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A1 /* MemberEditor.swift */; };
 		A100000000000000000000A6 /* RecordEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A2 /* RecordEditorSheet.swift */; };
 		A100000000000000000000A7 /* WritePipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A3 /* WritePipelineTests.swift */; };
+		A100000000000000000000B0 /* RepoVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B1 /* RepoVerifier.swift */; };
+		A100000000000000000000B3 /* RepoVerifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B4 /* RepoVerifierTests.swift */; };
+		A100000000000000000000B5 /* TestCARFixtureHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B6 /* TestCARFixtureHelper.swift */; };
 		A10000000000000000000070 /* Petrel in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000060 /* Petrel */; };
 		A10000000000000000000071 /* SwanSpaces in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000061 /* SwanSpaces */; };
 /* End PBXBuildFile section */
@@ -64,6 +67,9 @@
 		A100000000000000000000A1 /* MemberEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberEditor.swift; sourceTree = "<group>"; };
 		A100000000000000000000A2 /* RecordEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordEditorSheet.swift; sourceTree = "<group>"; };
 		A100000000000000000000A3 /* WritePipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritePipelineTests.swift; sourceTree = "<group>"; };
+		A100000000000000000000B1 /* RepoVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoVerifier.swift; sourceTree = "<group>"; };
+		A100000000000000000000B4 /* RepoVerifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoVerifierTests.swift; sourceTree = "<group>"; };
+		A100000000000000000000B6 /* TestCARFixtureHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestCARFixtureHelper.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -103,6 +109,7 @@
 				A10000000000000000000008 /* Spaces */,
 				A10000000000000000000009 /* Records */,
 				A100000000000000000000A8 /* Write */,
+				A100000000000000000000B2 /* Verify */,
 				A10000000000000000000020 /* ATProtoDriveApp.swift */,
 				A10000000000000000000021 /* Info.plist */,
 				A10000000000000000000022 /* ATProtoDrive.entitlements */,
@@ -149,6 +156,8 @@
 				A1000000000000000000002F /* RecordListModelTests.swift */,
 				A1000000000000000000003E /* RecordListModelPipelineTests.swift */,
 				A100000000000000000000A3 /* WritePipelineTests.swift */,
+				A100000000000000000000B4 /* RepoVerifierTests.swift */,
+				A100000000000000000000B6 /* TestCARFixtureHelper.swift */,
 			);
 			path = ATProtoDriveTests;
 			sourceTree = "<group>";
@@ -161,6 +170,14 @@
 				A100000000000000000000A2 /* RecordEditorSheet.swift */,
 			);
 			path = Write;
+			sourceTree = "<group>";
+		};
+		A100000000000000000000B2 /* Verify */ = {
+			isa = PBXGroup;
+			children = (
+				A100000000000000000000B1 /* RepoVerifier.swift */,
+			);
+			path = Verify;
 			sourceTree = "<group>";
 		};
 		A10000000000000000000004 /* Frameworks */ = {
@@ -296,6 +313,7 @@
 				A100000000000000000000A4 /* CreateSpaceSheet.swift in Sources */,
 				A100000000000000000000A5 /* MemberEditor.swift in Sources */,
 				A100000000000000000000A6 /* RecordEditorSheet.swift in Sources */,
+				A100000000000000000000B0 /* RepoVerifier.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -309,6 +327,8 @@
 				A1000000000000000000004D /* RecordListModelTests.swift in Sources */,
 				A1000000000000000000004E /* RecordListModelPipelineTests.swift in Sources */,
 				A100000000000000000000A7 /* WritePipelineTests.swift in Sources */,
+				A100000000000000000000B3 /* RepoVerifierTests.swift in Sources */,
+				A100000000000000000000B5 /* TestCARFixtureHelper.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

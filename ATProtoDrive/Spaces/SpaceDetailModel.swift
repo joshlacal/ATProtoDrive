@@ -94,19 +94,26 @@ public final class SpaceDetailModel {
     public private(set) var isLoading: Bool = false
     public private(set) var error: String?
     public private(set) var errorState: ErrorState?
+    public private(set) var verificationReports: [String: VerificationReport] = [:]
+    public private(set) var verifyingRepoDIDs: Set<String> = []
+
 
     public init(
         repos: [RepoEntry] = [],
         members: [String]? = nil,
         isLoading: Bool = false,
         error: String? = nil,
-        errorState: ErrorState? = nil
+        errorState: ErrorState? = nil,
+        verificationReports: [String: VerificationReport] = [:],
+        verifyingRepoDIDs: Set<String> = []
     ) {
         self.repos = repos
         self.members = members
         self.isLoading = isLoading
         self.error = error
         self.errorState = errorState
+        self.verificationReports = verificationReports
+        self.verifyingRepoDIDs = verifyingRepoDIDs
     }
 
     // MARK: - Pure Static Helpers
@@ -488,5 +495,154 @@ public final class SpaceDetailModel {
             fetchRepos: fetchRepos,
             listMembersTransport: listMembersTransport
         )
+    }
+
+    // MARK: - Verify Repo Pipeline
+
+    /// Builds the full XRPC URL for `com.atproto.space.getRepo`.
+    nonisolated public static func makeGetRepoURL(pdsHost: URL, space: SpaceRef, repoDID: String) -> URL? {
+        guard var comps = URLComponents(url: pdsHost, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        var path = comps.path
+        if path.hasSuffix("/") {
+            path += "xrpc/com.atproto.space.getRepo"
+        } else {
+            path += "/xrpc/com.atproto.space.getRepo"
+        }
+        comps.path = path
+        comps.queryItems = [
+            URLQueryItem(name: "space", value: space.uriString()),
+            URLQueryItem(name: "repo", value: repoDID),
+        ]
+        return comps.url
+    }
+
+    /// Pure verification pipeline for a repository CAR:
+    /// - Own repo (`repo.did == accountDID`): fetches CAR via `clientGetRepo`.
+    /// - Foreign repo (`repo.did != accountDID`): resolves author DID to PDS via `resolveDIDToPDS`, fetches CAR via `credentialGet`.
+    /// - Resolves author signing key from DID document via `resolveSigningKey`.
+    /// - Verifies CAR using `verifyCAR`.
+    nonisolated public static func verifyRepoPipeline(
+        space: SpaceItem,
+        repo: RepoEntry,
+        accountDID: String,
+        clientGetRepo: @Sendable (_ space: SpaceRef, _ repoDID: DID) async throws -> (responseCode: Int, data: ComAtprotoSpaceGetRepo.Output?),
+        resolveDIDToPDS: @Sendable (_ did: String) async throws -> URL,
+        resolveSigningKey: @Sendable (_ did: String) async throws -> Data,
+        credentialGet: @Sendable (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data),
+        verifyCAR: (@Sendable (_ carData: Data, _ authorDID: String, _ space: SpaceRef, _ authorSigningKey: Data) throws -> VerificationReport)? = nil
+    ) async throws -> VerificationReport {
+        let isOwnRepo = (repo.did == accountDID)
+        let carData: Data
+
+        if isOwnRepo {
+            let repoDID = try DID(didString: repo.did)
+            let (responseCode, output) = try await clientGetRepo(space.ref, repoDID)
+            guard (200...299).contains(responseCode), let data = output?.data else {
+                throw ATProtoXRPCError(
+                    error: "GetRepoFailed",
+                    message: "HTTP \(responseCode)",
+                    statusCode: responseCode
+                )
+            }
+            carData = data
+        } else {
+            let pdsHost = try await resolveDIDToPDS(repo.did)
+            guard let requestURL = makeGetRepoURL(pdsHost: pdsHost, space: space.ref, repoDID: repo.did) else {
+                throw SpaceHostResolutionError.invalidDID(repo.did)
+            }
+            let (responseCode, data) = try await credentialGet(requestURL, space.ref)
+            guard (200...299).contains(responseCode) else {
+                if let parsed = ATProtoErrorParser.parseGeneric(data: data, statusCode: responseCode) {
+                    throw parsed
+                }
+                throw ATProtoXRPCError(
+                    error: "GetRepoFailed",
+                    message: "HTTP \(responseCode)",
+                    statusCode: responseCode
+                )
+            }
+            carData = data
+        }
+
+        let signingKey = try await resolveSigningKey(repo.did)
+        let verifier = verifyCAR ?? { carData, authorDID, spaceRef, keyData in
+            try RepoVerifier.verify(carData: carData, authorDID: authorDID, space: spaceRef, authorSigningKey: keyData)
+        }
+        return try verifier(carData, repo.did, space.ref, signingKey)
+    }
+
+    /// Verifies a specific repository and stores the resulting VerificationReport.
+    public func verifyRepo(
+        repo: RepoEntry,
+        space: SpaceItem,
+        account: AccountStore.Account,
+        clientGetRepo: (@Sendable (_ space: SpaceRef, _ repoDID: DID) async throws -> (responseCode: Int, data: ComAtprotoSpaceGetRepo.Output?))? = nil,
+        resolveDIDToPDS: (@Sendable (_ did: String) async throws -> URL)? = nil,
+        resolveSigningKey: (@Sendable (_ did: String) async throws -> Data)? = nil,
+        credentialGet: (@Sendable (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data))? = nil,
+        verifyCAR: (@Sendable (_ carData: Data, _ authorDID: String, _ space: SpaceRef, _ authorSigningKey: Data) throws -> VerificationReport)? = nil
+    ) async throws -> VerificationReport {
+        verifyingRepoDIDs.insert(repo.did)
+        defer { verifyingRepoDIDs.remove(repo.did) }
+
+        let client = account.client
+        let credentials = account.credentials
+
+        let clientFetch: @Sendable (_ space: SpaceRef, _ repoDID: DID) async throws -> (responseCode: Int, data: ComAtprotoSpaceGetRepo.Output?) = clientGetRepo ?? { spaceRef, repoDID in
+            try await client.com.atproto.space.getRepo(input: .init(space: spaceRef, repo: repoDID))
+        }
+
+        let resolvePDS: @Sendable (_ did: String) async throws -> URL = resolveDIDToPDS ?? { did in
+            try await client.resolveDIDToPDSURL(did: did)
+        }
+
+        let resolveKey: @Sendable (_ did: String) async throws -> Data = resolveSigningKey ?? { did in
+            let doc = try await Self.fetchDIDDocument(for: did)
+            return try RepoVerifier.extractSigningKey(from: doc)
+        }
+
+        let foreignGet: @Sendable (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data) = credentialGet ?? { url, spaceRef in
+            let (data, response) = try await credentials.get(url: url, space: spaceRef)
+            return (response.statusCode, data)
+        }
+
+        let report = try await Self.verifyRepoPipeline(
+            space: space,
+            repo: repo,
+            accountDID: account.id,
+            clientGetRepo: clientFetch,
+            resolveDIDToPDS: resolvePDS,
+            resolveSigningKey: resolveKey,
+            credentialGet: foreignGet,
+            verifyCAR: verifyCAR
+        )
+
+        verificationReports[repo.did] = report
+        return report
+    }
+
+    private static func fetchDIDDocument(for did: String, urlSession: URLSession = .shared) async throws -> DIDDocument {
+        let endpoint: String
+        if did.starts(with: "did:plc:") {
+            endpoint = "https://plc.directory/\(did)"
+        } else if did.starts(with: "did:web:") {
+            let host = did.replacingOccurrences(of: "did:web:", with: "")
+            endpoint = "https://\(host)/.well-known/did.json"
+        } else {
+            throw SpaceHostResolutionError.invalidDID(did)
+        }
+        guard let url = URL(string: endpoint) else {
+            throw SpaceHostResolutionError.invalidDID(did)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        let (data, response) = try await urlSession.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
+            throw SpaceHostResolutionError.networkError("Failed to fetch DID document for \(did)")
+        }
+        let decoder = JSONDecoder()
+        return try decoder.decode(DIDDocument.self, from: data)
     }
 }

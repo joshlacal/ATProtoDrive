@@ -322,6 +322,23 @@ public struct SpaceDetailView: View {
                                         .font(.system(.body, design: .monospaced))
                                         .foregroundStyle(.primary)
                                     Spacer()
+                                    verificationBadge(for: repo)
+                                    if account != nil {
+                                        Button {
+                                            Task {
+                                                do {
+                                                    _ = try await model.verifyRepo(repo: repo, space: space, account: account!)
+                                                } catch {
+                                                    actionError = error.localizedDescription
+                                                }
+                                            }
+                                        } label: {
+                                            Label("Verify", systemImage: "checkmark.shield")
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.mini)
+                                        .disabled(model.verifyingRepoDIDs.contains(repo.did))
+                                    }
                                     if selectedRepo?.did == repo.did {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundStyle(Color.accentColor)
@@ -348,6 +365,78 @@ public struct SpaceDetailView: View {
                         .buttonStyle(.plain)
                     }
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func verificationBadge(for repo: RepoEntry) -> some View {
+        if model.verifyingRepoDIDs.contains(repo.did) {
+            HStack(spacing: 4) {
+                ProgressView()
+                    .controlSize(.mini)
+                Text("Verifying…")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.secondary.opacity(0.1))
+            .clipShape(Capsule())
+        } else if let report = model.verificationReports[repo.did] {
+            switch report.outcome {
+            case .verified(let count):
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(.green)
+                    Text("Verified (\(count) recs)")
+                        .font(.caption2)
+                        .foregroundStyle(.green)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.green.opacity(0.12))
+                .clipShape(Capsule())
+                .help("CAR and LtHash verified successfully for revision \(report.rev)")
+            case .signatureInvalid:
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                    Text("Invalid Signature")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.red.opacity(0.12))
+                .clipShape(Capsule())
+                .help("Author signature verification failed")
+            case .hashMismatch(let expected, let computed):
+                HStack(spacing: 4) {
+                    Image(systemName: "xmark.octagon.fill")
+                        .foregroundStyle(.red)
+                    Text("Hash Mismatch")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.red.opacity(0.12))
+                .clipShape(Capsule())
+                .help("Expected: \(expected)\nComputed: \(computed)")
+            case .malformedCAR(let errorMsg):
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(.orange)
+                    Text("Malformed CAR")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.orange.opacity(0.12))
+                .clipShape(Capsule())
+                .help(errorMsg)
             }
         }
     }
