@@ -120,6 +120,7 @@ public struct ContentBrowserView: View {
     let recentRepositoryStore: RecentRepositoryStore
     @Environment(AccountStore.self) private var accountStore
     @State private var showingAddAccountSheet = false
+    @State private var showingOpenRepoSheet = false
 
     public init(
         session: BrowserSession,
@@ -131,6 +132,21 @@ public struct ContentBrowserView: View {
         self.recentRepositoryStore = recentRepositoryStore
     }
 
+    private var currentRefreshAction: BrowserRefreshAction? {
+        if let path = session.path, path.components.count >= 2,
+           case .collection(_, let collection) = path.components[1],
+           let recordStore = publicRepositoryStore.recordStore(for: collection) {
+            return BrowserRefreshAction {
+                await recordStore.refresh()
+            }
+        } else if session.path != nil {
+            return BrowserRefreshAction {
+                await publicRepositoryStore.refresh()
+            }
+        }
+        return nil
+    }
+
     public var body: some View {
         Group {
             if let selectedSource = session.selectedSource {
@@ -140,7 +156,10 @@ public struct ContentBrowserView: View {
                     case .spaces:
                         LegacySpacesCompatibilityView(accountDID: did)
                     case .publicRecords:
-                        ProgressView("Loading public repository…")
+                        repositoryContentView(
+                            for: .connectedAccount(did: did),
+                            selectedSource: .account(did: did, destination: .publicRecords)
+                        )
                     default:
                         ContentUnavailableView(
                             destination.rawValue.capitalized,
@@ -149,21 +168,23 @@ public struct ContentBrowserView: View {
                         )
                     }
                 case .openedPublicRepository(let did):
-                    VStack {
-                        Text("Opened Public Repository")
-                            .font(.headline)
-                        Text(did)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                    repositoryContentView(
+                        for: .publicIdentifier(did),
+                        selectedSource: .openedPublicRepository(did: did)
+                    )
                 case .global(let globalDestination):
                     switch globalDestination {
                     case .openPublicRepository:
-                        ContentUnavailableView(
-                            "Open Public Repository",
-                            systemImage: "globe",
-                            description: Text("Enter a handle or DID to open a repository.")
-                        )
+                        ContentUnavailableView {
+                            Label("Open Public Repository", systemImage: "globe")
+                        } description: {
+                            Text("Enter a handle or DID to browse any public ATProto repository.")
+                        } actions: {
+                            Button("Open Repository…") {
+                                showingOpenRepoSheet = true
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
                     case .openSpace:
                         ContentUnavailableView(
                             "Open Space",
@@ -192,9 +213,111 @@ public struct ContentBrowserView: View {
             }
         }
         .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
+        .focusedSceneValue(\.browserSession, session)
+        .focusedSceneValue(\.browserRefreshAction, currentRefreshAction)
+        .toolbar {
+            ToolbarItemGroup(placement: .navigation) {
+                Button {
+                    session.goBack()
+                } label: {
+                    Label("Back", systemImage: "chevron.backward")
+                }
+                .disabled(!session.canGoBack)
+
+                Button {
+                    session.goForward()
+                } label: {
+                    Label("Forward", systemImage: "chevron.forward")
+                }
+                .disabled(!session.canGoForward)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    Task {
+                        await currentRefreshAction?.perform()
+                    }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .disabled(currentRefreshAction == nil)
+            }
+        }
         .sheet(isPresented: $showingAddAccountSheet) {
             AddAccountView()
                 .environment(accountStore)
+        }
+        .sheet(isPresented: $showingOpenRepoSheet) {
+            OpenPublicRepositorySheet(
+                session: session,
+                store: publicRepositoryStore,
+                recentRepositoryStore: recentRepositoryStore
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func repositoryContentView(
+        for target: RepositoryTarget,
+        selectedSource: BrowserSource
+    ) -> some View {
+        Group {
+            if let path = session.path, path.components.count >= 2,
+               case .collection(_, let collection) = path.components[1] {
+                if let recordStore = publicRepositoryStore.recordStore(for: collection) {
+                    BrowserTableShell(state: recordStore.state, retry: {
+                        Task { await recordStore.refresh() }
+                    }) { records in
+                        VStack(spacing: 0) {
+                            BrowserBreadcrumbView(
+                                session: session,
+                                repository: recordStore.repository,
+                                currentCollection: collection
+                            )
+                            if records.isEmpty {
+                                ContentUnavailableView(
+                                    "No Records",
+                                    systemImage: "doc.text",
+                                    description: Text("No records found in \(collection).")
+                                )
+                            } else {
+                                List(records, id: \.uri) { record in
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(record.rkey)
+                                            .font(.headline)
+                                        Text(record.uri)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .task(id: "\(collection)|\(recordStore.repository.did)") {
+                        if case .idle = recordStore.state {
+                            _ = await publicRepositoryStore.loadCollection(collection)
+                        }
+                    }
+                } else if case .failed(_, let failure) = publicRepositoryStore.state {
+                    UnavailableStateView(failure: failure, retry: {
+                        Task { await publicRepositoryStore.refresh() }
+                    })
+                } else {
+                    ProgressView("Loading collection…")
+                }
+            } else {
+                PublicRepositoryView(session: session, store: publicRepositoryStore)
+            }
+        }
+        .task(id: target) {
+            if publicRepositoryStore.state.snapshot == nil || session.path?.source != selectedSource {
+                await PublicRepositoryOpenCoordinator.open(
+                    target,
+                    store: publicRepositoryStore,
+                    session: session,
+                    recents: recentRepositoryStore,
+                    selectedSource: selectedSource
+                )
+            }
         }
     }
 }

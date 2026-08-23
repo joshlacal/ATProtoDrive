@@ -78,9 +78,13 @@ actor ScriptedPublicRepositoryService: PublicRepositoryServing {
         failure = nil
         failuresByCursor.removeAll()
     }
-    func resolve(target: RepositoryTarget) async throws -> ResolvedRepository { .fixture }
+    func resolve(target: RepositoryTarget) async throws -> ResolvedRepository {
+        if let failure { throw failure }
+        return .fixture
+    }
     func describe(_ repository: ResolvedRepository) async throws -> RepositoryDescription {
-        .fixture(collections: ["app.bsky.feed.post", "com.example.unknown"])
+        if let failure { throw failure }
+        return .fixture(collections: ["app.bsky.feed.post", "com.example.unknown"])
     }
     func listRecords(
         in repository: ResolvedRepository,
@@ -102,7 +106,10 @@ actor ScriptedPublicRepositoryService: PublicRepositoryServing {
         collection: String,
         rkey: String,
         cid: String?
-    ) async throws -> RecordRow { throw BrowserFailure.notFound(resource: rkey) }
+    ) async throws -> RecordRow {
+        if let failure { throw failure }
+        throw BrowserFailure.notFound(resource: rkey)
+    }
 }
 
 actor DeferredPublicRepositoryService: PublicRepositoryServing {
