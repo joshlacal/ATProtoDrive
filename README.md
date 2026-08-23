@@ -34,12 +34,12 @@ Open `ATProtoDrive.xcodeproj` in Xcode, select the `ATProtoDrive` scheme with th
 ### Command Line
 ```bash
 # Build app
-xcodebuild -project ATProtoDrive/ATProtoDrive.xcodeproj \
+xcodebuild -project ATProtoDrive.xcodeproj \
   -scheme ATProtoDrive \
   -destination 'platform=macOS' build
 
 # Run unit and integration tests
-xcodebuild test -project ATProtoDrive/ATProtoDrive.xcodeproj \
+xcodebuild test -project ATProtoDrive.xcodeproj \
   -scheme ATProtoDrive \
   -destination 'platform=macOS' -only-testing:ATProtoDriveTests
 ```
@@ -71,12 +71,17 @@ The Bluesky permissioned data spaces alpha is under active development. The host
 
 If upstream lexicons change on the `permissioned-data` branch of `bluesky-social/atproto`:
 ```bash
-# 1. Resolve the latest commit SHA from the permissioned-data branch of bluesky-social/atproto
-# (Vendoring requires an explicit commit SHA to maintain reproducibility; never pass a branch name)
+# 1. Resolve and validate the current permissioned-data commit SHA.
+# Record this value in the vendoring change so regeneration remains reproducible.
+ATPROTO_PERMISSIONED_DATA_SHA="$(
+  git ls-remote https://github.com/bluesky-social/atproto.git \
+    refs/heads/permissioned-data | awk 'NR == 1 { print $1 }'
+)"
+test "${#ATPROTO_PERMISSIONED_DATA_SHA}" -eq 40
 
 # 2. Vendor updated space lexicons into Petrel using the resolved commit SHA
-cd Petrel
-./Scripts/vendor-space-lexicons.sh <40_CHAR_COMMIT_SHA>
+cd ../Petrel
+./Scripts/vendor-space-lexicons.sh "$ATPROTO_PERMISSIONED_DATA_SHA"
 
 # 3. Regenerate Swift lexicon types
 ./Scripts/regenerate-generated.sh
@@ -91,6 +96,6 @@ xcodebuild test -project ATProtoDrive.xcodeproj -scheme ATProtoDrive -destinatio
 ## Documentation & References
 
 - **Architecture & Design Specification:** `docs/superpowers/specs/2026-08-23-atprotodrive-v1-design.md`
-- **Implementation Plan:** `docs/superpowers/plans/2026-08-20-atprotodrive.md`
-- **Manual E2E Smoke Checklist:** `ATProtoDrive/Scripts/e2e-smoke.md`
-- **ATProto Proposal 0016:** [Permissioned Data Spaces](https://github.com/bluesky-social/proposals/tree/main/proposals/0016-permissioned-data)
+- **Implementation Plan Index:** `docs/superpowers/plans/2026-08-23-atprotodrive-v1.md`
+- **Manual E2E Smoke Checklist:** `Scripts/e2e-smoke.md`
+- **ATProto Proposal 0016:** [Permissioned Data Spaces](https://github.com/bluesky-social/proposals/blob/main/0016-permissioned-data/README.md)

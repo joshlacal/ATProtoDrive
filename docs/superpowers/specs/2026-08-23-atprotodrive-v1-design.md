@@ -1,6 +1,6 @@
 # ATProtoDrive v1 Design
 
-**Status:** Design approved in chat; written specification ready for review
+**Status:** Approved for implementation
 
 **Product:** ATProtoDrive for macOS
 
@@ -75,9 +75,15 @@ Public repository browsing uses the standard public APIs:
 
 Public reads do not require an account session. Mutations use `com.atproto.repo.createRecord`, `putRecord`, `deleteRecord`, and, for single-repository batches, `applyWrites`.
 
+Opening a public repository resolves the handle when supplied, then resolves and validates the resulting DID document directly. PDS discovery uses the document's `AtprotoPersonalDataServer` service independently of `alsoKnownAs`, so a valid DID with no advertised handle remains browseable. The returned `describeRepo` DID and DID-document ID must match the resolved identity before any records are shown. ATProtoDrive accepts `did:plc` and hostname-level `did:web`; it rejects path-form `did:web`, non-development port forms, and PDS service endpoints containing user information, a path prefix, query, or fragment.
+
 ### 5.2 ATProto Spaces
 
 Space browsing and mutation use `com.atproto.space.*` and `com.atproto.simplespace.*`. A Space is an authorization and synchronization boundary containing one permissioned repository per writer. The app labels this section **Spaces — Experimental** and displays its access policy without describing the content as encrypted.
+
+A Space record is identified by the full permissioned URI `at://{spaceDid}/space/{spaceType}/{skey}/{authorDid}/{collection}/{rkey}`. The app derives and validates that URI through `SpaceRef`; it never substitutes the public-repository form rooted at the writer DID.
+
+Authority routing validates the exact authority DID document and an exact `#atproto_space_host` service with the supported profile's service type and an origin-only HTTPS endpoint. ATProtoDrive fails closed instead of falling back to `#atproto_pds` when the dedicated authority service is absent or malformed. Credential exchange and ordinary authority requests use the same validated host provider.
 
 `listSpaces` supplies only Spaces in which the user holds a writer repository. Known, readable Spaces that are not discoverable remain accessible through **Open Space by URI**, bookmarks, and recents. Whole-Space browsing requires a valid Space credential and writer enumeration; without that capability, the UI clearly falls back to the authenticated user's own Space repository.
 
@@ -257,7 +263,7 @@ There is no standalone durable upload operation. **Attach File** runs this stage
 4. Commit through the public compare-and-swap path or the explicitly warned Space-alpha preflight path defined below.
 5. Refetch the record and blob to verify reachability.
 
-If the record write fails after upload, Activity reports a temporary unreferenced upload and offers retrying the record step. The app does not claim that it rolled the upload back.
+If the record write is confirmed to have failed after upload, Activity reports a temporary unreferenced upload and offers retrying the record step. If submission has an uncertain remote outcome, Activity does not call the blob unreferenced or resubmit blindly: it first refetches the record and reconciles the exact JSON Pointer, original CID, and uploaded blob reference. The app does not claim that it rolled the upload back.
 
 There is no generic **Delete Blob** action. Users remove an attachment by updating or deleting referring records after seeing every known reference and consequence.
 
@@ -282,7 +288,7 @@ Every update shares this preparation:
 
 Public repository updates use `swapRecord` and `swapCommit`. A stale public precondition produces a conflict UI containing the original, edited, and current remote values.
 
-The current Spaces alpha update and delete schemas do not expose compare-and-swap inputs. For Space records, the immediate preflight comparison aborts a write when a change is already observable, but it cannot close the race with an external writer between that comparison and submission. The confirmation UI states this limitation; Space deletes require **Back Up First**. If a future supported Space profile adds conditional mutation, the service uses it and removes the warning for that profile.
+The current Spaces alpha update and delete schemas do not expose compare-and-swap inputs. For Space records, the app refetches the exact record and the writer-host `com.atproto.space.getLatestCommit` signed revision/hash immediately before submission. That comparison aborts a write when a change is already observable, but the read-only latest-commit endpoint cannot close the race with an external writer between comparison and submission. The confirmation UI states this limitation; Space deletes require **Back Up First**. If a future supported Space profile adds conditional mutation, the service uses it and removes the warning for that profile.
 
 The app never silently overwrites an already detected change or automatically retries a non-idempotent mutation after an uncertain outcome.
 
@@ -292,7 +298,7 @@ Create validates the collection NSID, record key, `$type`, and repository owners
 
 Delete refetches the record, shows the URI and CID, and lists affected blob references. A public delete uses the freshest available conflict precondition and offers **Back Up First**. A Space delete requires **Back Up First**, repeats the non-atomic alpha warning, and performs the immediate preflight comparison described above. A deleted public record is described as effectively permanent; the UI does not imply retained remote history.
 
-Space deletion, member removal, record deletion, and removing an account from ATProtoDrive use separate actions, grants, and confirmation language. Space deletion explains that conforming syncers are expected to discard synchronized copies, but deletion does not erase writer-owned Space repository data, exports, backups, or copies retained by nonconforming applications. Successful deletion purges the app's active Space credential, record cache, blob cache, and temporary previews while preserving explicit local backups.
+Space deletion, member removal, record deletion, and removing an account from ATProtoDrive use separate actions, grants, and confirmation language. Space deletion explains that conforming syncers are expected to discard synchronized copies, but deletion does not erase writer-owned Space repository data, exports, backups, or copies retained by nonconforming applications. **Back Up First** evidence for whole-Space deletion is bound to the fully paginated authority claim, each observed writer revision/hash, the manifest digest, and a freshness window; stale or mismatched evidence cannot authorize deletion. Successful deletion purges the app's active Space credential, record cache, blob cache, and temporary previews while preserving explicit local backups.
 
 ### 10.4 Batch operations
 
