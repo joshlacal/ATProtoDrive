@@ -114,8 +114,8 @@ public enum TestCARFixtureHelper {
             carData: car.data,
             publicKey: key.publicKey,
             spaceRef: spaceRef,
-            expectedHex: Hex.encode(tamperedCommitment),
-            computedHex: Hex.encode(actualCommitment)
+            expectedHex: SwanCore.Hex.encode(tamperedCommitment),
+            computedHex: SwanCore.Hex.encode(actualCommitment)
         )
     }
 }

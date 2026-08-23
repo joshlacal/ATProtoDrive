@@ -1,16 +1,22 @@
 import Foundation
+import Petrel
 
 public enum RepositoryTarget: Hashable, Sendable {
     case connectedAccount(did: String)
     case publicIdentifier(String)
 }
 
-public struct ResolvedRepository: Hashable, Sendable {
+public struct ResolvedRepository: Identifiable, Hashable, Sendable {
+    public var id: String { scope.stableID }
     public let did: String
     public let handle: String?
     public let pdsURL: URL
     public let connectedAccountDID: String?
     public let handleIsCorrect: Bool?
+
+    public var scope: RepositoryScope {
+        .publicRepository(did: did, pdsURL: pdsURL)
+    }
 
     public init(
         did: String,

@@ -85,7 +85,7 @@ public enum AuthorSigningKey: Sendable, Equatable {
         }
         switch self {
         case .p256(let publicKey):
-            guard let canonicalSignature = try? P256WireSignature.decodeCanonical(signature) else {
+            guard let canonicalSignature = try? SwanCore.P256WireSignature.decodeCanonical(signature) else {
                 return false
             }
             return publicKey.isValidSignature(canonicalSignature, for: signingInput)
@@ -200,9 +200,9 @@ public enum RepoVerifier {
             case .commitDidNotVerify:
                 return VerificationReport(outcome: .signatureInvalid, rev: rev)
             case .commitmentMismatch:
-                let expectedCommitment = envelope.map { Hex.encode($0.commitment) }
+                let expectedCommitment = envelope.map { SwanCore.Hex.encode($0.commitment) }
                     ?? (extractCommitInfo(from: carData, space: spaceURI, author: authorDID).commitment ?? "expected")
-                let computedCommitment = await Hex.encode(recoveryIndex.ltHash.commitment)
+                let computedCommitment = await SwanCore.Hex.encode(recoveryIndex.ltHash.commitment)
                 return VerificationReport(
                     outcome: .hashMismatch(
                         expected: expectedCommitment,
@@ -243,7 +243,7 @@ public enum RepoVerifier {
         guard let envelope = try? SpaceCARCodec.structurallyValidateRecoveryCommit(commitBlock, space: space, author: author) else {
             return (nil, nil)
         }
-        return (envelope.context.rev, Hex.encode(envelope.commitment))
+        return (envelope.context.rev, SwanCore.Hex.encode(envelope.commitment))
     }
 
     private static func extractRevision(from carData: Data, space: SpaceURI, author: String) -> String? {
