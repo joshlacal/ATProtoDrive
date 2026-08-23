@@ -90,7 +90,7 @@ xcodebuild test -project ATProtoDrive.xcodeproj -scheme ATProtoDrive -destinatio
 
 ## Documentation & References
 
-- **Architecture & Design Specification:** `docs/superpowers/specs/2026-08-20-atprotodrive-design.md`
+- **Architecture & Design Specification:** `docs/superpowers/specs/2026-08-23-atprotodrive-v1-design.md`
 - **Implementation Plan:** `docs/superpowers/plans/2026-08-20-atprotodrive.md`
 - **Manual E2E Smoke Checklist:** `ATProtoDrive/Scripts/e2e-smoke.md`
 - **ATProto Proposal 0016:** [Permissioned Data Spaces](https://github.com/bluesky-social/proposals/tree/main/proposals/0016-permissioned-data)
