@@ -38,6 +38,7 @@ public final class PublicRepositoryStore {
     }
 
     private func load(target requestedTarget: RepositoryTarget, preserveSnapshot: Bool) async {
+        let preRequestState = state
         generation &+= 1
         let requestGeneration = generation
         activeLoad?.cancel()
@@ -55,12 +56,16 @@ public final class PublicRepositoryStore {
             }
         }
         activeLoad = task
-        let outcome = await task.value
+        let outcome = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
         guard generation == requestGeneration, target == requestedTarget else { return }
         switch outcome {
         case .success(let description): state = .loaded(description)
         case .failure(let failure): state = .failed(previous: previous, failure: failure)
-        case .cancelled: break
+        case .cancelled: state = preRequestState
         }
     }
 
