@@ -32,6 +32,38 @@
 		A100000000000000000000B5 /* TestCARFixtureHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B6 /* TestCARFixtureHelper.swift */; };
 		A10000000000000000000070 /* Petrel in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000060 /* Petrel */; };
 		A10000000000000000000071 /* SwanSpaces in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000061 /* SwanSpaces */; };
+		B10000000000000000000021 /* AccessClassification.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* AccessClassification.swift */; };
+		B10000000000000000000022 /* ResourceReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* ResourceReference.swift */; };
+		B10000000000000000000023 /* BrowserModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* BrowserModels.swift */; };
+		B10000000000000000000024 /* BrowserSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* BrowserSession.swift */; };
+		B10000000000000000000025 /* RecentRepositoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000015 /* RecentRepositoryStore.swift */; };
+		B10000000000000000000026 /* SearchQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000016 /* SearchQuery.swift */; };
+		B10000000000000000000027 /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000017 /* MainWindowView.swift */; };
+		B10000000000000000000028 /* DriveSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000018 /* DriveSidebarView.swift */; };
+		B10000000000000000000029 /* ContentBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000019 /* ContentBrowserView.swift */; };
+		B1000000000000000000002A /* BrowserCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001A /* BrowserCommands.swift */; };
+		B1000000000000000000002B /* BrowserTableShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001B /* BrowserTableShell.swift */; };
+		B1000000000000000000002C /* BrowserInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001C /* BrowserInspectorView.swift */; };
+		B1000000000000000000002D /* OpenPublicRepositorySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001D /* OpenPublicRepositorySheet.swift */; };
+		B1000000000000000000002E /* LoadState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001E /* LoadState.swift */; };
+		B1000000000000000000002F /* BrowserFailure.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001F /* BrowserFailure.swift */; };
+		B10000000000000000000041 /* DIDDocumentPDSResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000031 /* DIDDocumentPDSResolver.swift */; };
+		B10000000000000000000042 /* PublicRepositoryTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000032 /* PublicRepositoryTypes.swift */; };
+		B10000000000000000000043 /* PublicRepositoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000033 /* PublicRepositoryService.swift */; };
+		B10000000000000000000044 /* PublicRepositoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000034 /* PublicRepositoryStore.swift */; };
+		B10000000000000000000045 /* PublicRecordStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000035 /* PublicRecordStore.swift */; };
+		B10000000000000000000046 /* PublicRepositoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000036 /* PublicRepositoryView.swift */; };
+		B10000000000000000000047 /* PublicRecordTable.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000037 /* PublicRecordTable.swift */; };
+		B10000000000000000000048 /* PublicBrowserFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000038 /* PublicBrowserFixture.swift */; };
+		B10000000000000000000061 /* BrowserDomainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000051 /* BrowserDomainTests.swift */; };
+		B10000000000000000000062 /* DIDDocumentPDSResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000052 /* DIDDocumentPDSResolverTests.swift */; };
+		B10000000000000000000063 /* PublicRepositoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000053 /* PublicRepositoryServiceTests.swift */; };
+		B10000000000000000000064 /* PublicRepositoryServiceTestDouble.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000054 /* PublicRepositoryServiceTestDouble.swift */; };
+		B10000000000000000000065 /* PublicRecordStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000055 /* PublicRecordStoreTests.swift */; };
+		B10000000000000000000066 /* DriveSidebarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000056 /* DriveSidebarTests.swift */; };
+		B10000000000000000000067 /* RecentRepositoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000057 /* RecentRepositoryStoreTests.swift */; };
+		B10000000000000000000068 /* PublicBrowserPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000058 /* PublicBrowserPresentationTests.swift */; };
+		B10000000000000000000069 /* PublicBrowserFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000059 /* PublicBrowserFixtureTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,6 +104,38 @@
 		A100000000000000000000C0 /* OpenSpaceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenSpaceSheet.swift; sourceTree = "<group>"; };
 		A100000000000000000000B4 /* RepoVerifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoVerifierTests.swift; sourceTree = "<group>"; };
 		A100000000000000000000B6 /* TestCARFixtureHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestCARFixtureHelper.swift; sourceTree = "<group>"; };
+		B10000000000000000000011 /* AccessClassification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessClassification.swift; sourceTree = "<group>"; };
+		B10000000000000000000012 /* ResourceReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceReference.swift; sourceTree = "<group>"; };
+		B10000000000000000000013 /* BrowserModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserModels.swift; sourceTree = "<group>"; };
+		B10000000000000000000014 /* BrowserSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserSession.swift; sourceTree = "<group>"; };
+		B10000000000000000000015 /* RecentRepositoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentRepositoryStore.swift; sourceTree = "<group>"; };
+		B10000000000000000000016 /* SearchQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchQuery.swift; sourceTree = "<group>"; };
+		B10000000000000000000017 /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowView.swift; sourceTree = "<group>"; };
+		B10000000000000000000018 /* DriveSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveSidebarView.swift; sourceTree = "<group>"; };
+		B10000000000000000000019 /* ContentBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentBrowserView.swift; sourceTree = "<group>"; };
+		B1000000000000000000001A /* BrowserCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserCommands.swift; sourceTree = "<group>"; };
+		B1000000000000000000001B /* BrowserTableShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserTableShell.swift; sourceTree = "<group>"; };
+		B1000000000000000000001C /* BrowserInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserInspectorView.swift; sourceTree = "<group>"; };
+		B1000000000000000000001D /* OpenPublicRepositorySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenPublicRepositorySheet.swift; sourceTree = "<group>"; };
+		B1000000000000000000001E /* LoadState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadState.swift; sourceTree = "<group>"; };
+		B1000000000000000000001F /* BrowserFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserFailure.swift; sourceTree = "<group>"; };
+		B10000000000000000000031 /* DIDDocumentPDSResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DIDDocumentPDSResolver.swift; sourceTree = "<group>"; };
+		B10000000000000000000032 /* PublicRepositoryTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicRepositoryTypes.swift; sourceTree = "<group>"; };
+		B10000000000000000000033 /* PublicRepositoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicRepositoryService.swift; sourceTree = "<group>"; };
+		B10000000000000000000034 /* PublicRepositoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicRepositoryStore.swift; sourceTree = "<group>"; };
+		B10000000000000000000035 /* PublicRecordStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicRecordStore.swift; sourceTree = "<group>"; };
+		B10000000000000000000036 /* PublicRepositoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicRepositoryView.swift; sourceTree = "<group>"; };
+		B10000000000000000000037 /* PublicRecordTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicRecordTable.swift; sourceTree = "<group>"; };
+		B10000000000000000000038 /* PublicBrowserFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicBrowserFixture.swift; sourceTree = "<group>"; };
+		B10000000000000000000051 /* BrowserDomainTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserDomainTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000052 /* DIDDocumentPDSResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DIDDocumentPDSResolverTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000053 /* PublicRepositoryServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicRepositoryServiceTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000054 /* PublicRepositoryServiceTestDouble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicRepositoryServiceTestDouble.swift; sourceTree = "<group>"; };
+		B10000000000000000000055 /* PublicRecordStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicRecordStoreTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000056 /* DriveSidebarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveSidebarTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000057 /* RecentRepositoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentRepositoryStoreTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000058 /* PublicBrowserPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicBrowserPresentationTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000059 /* PublicBrowserFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicBrowserFixtureTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -112,6 +176,12 @@
 				A10000000000000000000009 /* Records */,
 				A100000000000000000000A8 /* Write */,
 				A100000000000000000000B2 /* Verify */,
+				B10000000000000000000001 /* Domain */,
+				B10000000000000000000002 /* Browser */,
+				B10000000000000000000003 /* Support */,
+				B10000000000000000000004 /* Resolution */,
+				B10000000000000000000005 /* PublicRepo */,
+				B10000000000000000000006 /* Debug */,
 				A10000000000000000000020 /* ATProtoDriveApp.swift */,
 				A10000000000000000000021 /* Info.plist */,
 				A10000000000000000000022 /* ATProtoDrive.entitlements */,
@@ -160,6 +230,15 @@
 				A100000000000000000000A3 /* WritePipelineTests.swift */,
 				A100000000000000000000B4 /* RepoVerifierTests.swift */,
 				A100000000000000000000B6 /* TestCARFixtureHelper.swift */,
+				B10000000000000000000051 /* BrowserDomainTests.swift */,
+				B10000000000000000000052 /* DIDDocumentPDSResolverTests.swift */,
+				B10000000000000000000053 /* PublicRepositoryServiceTests.swift */,
+				B10000000000000000000054 /* PublicRepositoryServiceTestDouble.swift */,
+				B10000000000000000000055 /* PublicRecordStoreTests.swift */,
+				B10000000000000000000056 /* DriveSidebarTests.swift */,
+				B10000000000000000000057 /* RecentRepositoryStoreTests.swift */,
+				B10000000000000000000058 /* PublicBrowserPresentationTests.swift */,
+				B10000000000000000000059 /* PublicBrowserFixtureTests.swift */,
 			);
 			path = ATProtoDriveTests;
 			sourceTree = "<group>";
@@ -181,6 +260,71 @@
 				A100000000000000000000B1 /* RepoVerifier.swift */,
 			);
 			path = Verify;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000001 /* Domain */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000011 /* AccessClassification.swift */,
+				B10000000000000000000012 /* ResourceReference.swift */,
+			);
+			path = Domain;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000002 /* Browser */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000013 /* BrowserModels.swift */,
+				B10000000000000000000014 /* BrowserSession.swift */,
+				B10000000000000000000015 /* RecentRepositoryStore.swift */,
+				B10000000000000000000016 /* SearchQuery.swift */,
+				B10000000000000000000017 /* MainWindowView.swift */,
+				B10000000000000000000018 /* DriveSidebarView.swift */,
+				B10000000000000000000019 /* ContentBrowserView.swift */,
+				B1000000000000000000001A /* BrowserCommands.swift */,
+				B1000000000000000000001B /* BrowserTableShell.swift */,
+				B1000000000000000000001C /* BrowserInspectorView.swift */,
+				B1000000000000000000001D /* OpenPublicRepositorySheet.swift */,
+			);
+			path = Browser;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000003 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				B1000000000000000000001E /* LoadState.swift */,
+				B1000000000000000000001F /* BrowserFailure.swift */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000004 /* Resolution */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000031 /* DIDDocumentPDSResolver.swift */,
+			);
+			path = Resolution;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000005 /* PublicRepo */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000032 /* PublicRepositoryTypes.swift */,
+				B10000000000000000000033 /* PublicRepositoryService.swift */,
+				B10000000000000000000034 /* PublicRepositoryStore.swift */,
+				B10000000000000000000035 /* PublicRecordStore.swift */,
+				B10000000000000000000036 /* PublicRepositoryView.swift */,
+				B10000000000000000000037 /* PublicRecordTable.swift */,
+			);
+			path = PublicRepo;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000006 /* Debug */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000038 /* PublicBrowserFixture.swift */,
+			);
+			path = Debug;
 			sourceTree = "<group>";
 		};
 		A10000000000000000000004 /* Frameworks */ = {
@@ -318,6 +462,29 @@
 				A100000000000000000000A6 /* RecordEditorSheet.swift in Sources */,
 				A100000000000000000000B0 /* RepoVerifier.swift in Sources */,
 				A100000000000000000000C1 /* OpenSpaceSheet.swift in Sources */,
+				B10000000000000000000021 /* AccessClassification.swift in Sources */,
+				B10000000000000000000022 /* ResourceReference.swift in Sources */,
+				B10000000000000000000023 /* BrowserModels.swift in Sources */,
+				B10000000000000000000024 /* BrowserSession.swift in Sources */,
+				B10000000000000000000025 /* RecentRepositoryStore.swift in Sources */,
+				B10000000000000000000026 /* SearchQuery.swift in Sources */,
+				B10000000000000000000027 /* MainWindowView.swift in Sources */,
+				B10000000000000000000028 /* DriveSidebarView.swift in Sources */,
+				B10000000000000000000029 /* ContentBrowserView.swift in Sources */,
+				B1000000000000000000002A /* BrowserCommands.swift in Sources */,
+				B1000000000000000000002B /* BrowserTableShell.swift in Sources */,
+				B1000000000000000000002C /* BrowserInspectorView.swift in Sources */,
+				B1000000000000000000002D /* OpenPublicRepositorySheet.swift in Sources */,
+				B1000000000000000000002E /* LoadState.swift in Sources */,
+				B1000000000000000000002F /* BrowserFailure.swift in Sources */,
+				B10000000000000000000041 /* DIDDocumentPDSResolver.swift in Sources */,
+				B10000000000000000000042 /* PublicRepositoryTypes.swift in Sources */,
+				B10000000000000000000043 /* PublicRepositoryService.swift in Sources */,
+				B10000000000000000000044 /* PublicRepositoryStore.swift in Sources */,
+				B10000000000000000000045 /* PublicRecordStore.swift in Sources */,
+				B10000000000000000000046 /* PublicRepositoryView.swift in Sources */,
+				B10000000000000000000047 /* PublicRecordTable.swift in Sources */,
+				B10000000000000000000048 /* PublicBrowserFixture.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -333,6 +500,15 @@
 				A100000000000000000000A7 /* WritePipelineTests.swift in Sources */,
 				A100000000000000000000B3 /* RepoVerifierTests.swift in Sources */,
 				A100000000000000000000B5 /* TestCARFixtureHelper.swift in Sources */,
+				B10000000000000000000061 /* BrowserDomainTests.swift in Sources */,
+				B10000000000000000000062 /* DIDDocumentPDSResolverTests.swift in Sources */,
+				B10000000000000000000063 /* PublicRepositoryServiceTests.swift in Sources */,
+				B10000000000000000000064 /* PublicRepositoryServiceTestDouble.swift in Sources */,
+				B10000000000000000000065 /* PublicRecordStoreTests.swift in Sources */,
+				B10000000000000000000066 /* DriveSidebarTests.swift in Sources */,
+				B10000000000000000000067 /* RecentRepositoryStoreTests.swift in Sources */,
+				B10000000000000000000068 /* PublicBrowserPresentationTests.swift in Sources */,
+				B10000000000000000000069 /* PublicBrowserFixtureTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -9,6 +9,7 @@ import Observation
 import Petrel
 import UniformTypeIdentifiers
 import SwiftUI
+import SwanSpaces
 
 public struct BlobRefEntry: Identifiable, Hashable, Sendable {
     public var id: String { cid }
@@ -26,6 +27,12 @@ public struct BlobRefEntry: Identifiable, Hashable, Sendable {
         self.size = size
     }
 }
+public enum RecordOrigin: Hashable, Sendable {
+    case unknown
+    case publicRepository(did: String)
+    case space(space: SpaceRef, repoDID: String)
+}
+
 
 public struct RecordRow: Identifiable, Hashable, Sendable {
     public var id: String { uri }
@@ -36,6 +43,7 @@ public struct RecordRow: Identifiable, Hashable, Sendable {
     public let json: String       // pretty-printed record value
     public let blobRefs: [String] // extracted blob cids or links if any
     public let blobEntries: [BlobRefEntry]
+    public let origin: RecordOrigin
 
     public init(
         uri: String,
@@ -44,7 +52,8 @@ public struct RecordRow: Identifiable, Hashable, Sendable {
         cid: String,
         json: String,
         blobRefs: [String] = [],
-        blobEntries: [BlobRefEntry]? = nil
+        blobEntries: [BlobRefEntry]? = nil,
+        origin: RecordOrigin = .unknown
     ) {
         self.uri = uri
         self.collection = collection
@@ -58,6 +67,7 @@ public struct RecordRow: Identifiable, Hashable, Sendable {
             self.blobRefs = blobRefs
             self.blobEntries = blobRefs.map { BlobRefEntry(cid: $0) }
         }
+        self.origin = origin
     }
 }
 

@@ -23,7 +23,7 @@ public enum TestCARFixtureHelper {
         let uri1 = try SpaceRecordURI(space: space, author: authorDID, collection: "app.bsky.feed.post", rkey: "one")
         let uri2 = try SpaceRecordURI(space: space, author: authorDID, collection: "app.bsky.feed.post", rkey: "two")
         let repository = try SpaceRepository(space: space, author: authorDID)
-        let authorization = AuthorizationContext.accountOAuth(
+        let authorization = AuthorizationContext.accountOAuthForTesting(
             subject: authorDID,
             scopes: [
                 "space:app.bsky.bookmarks?authority=did:plc:alice&skey=shared&action=create&collection=app.bsky.feed.post",
@@ -49,7 +49,7 @@ public enum TestCARFixtureHelper {
         let uri1 = try SpaceRecordURI(space: space, author: authorDID, collection: "app.bsky.feed.post", rkey: "one")
         let uri2 = try SpaceRecordURI(space: space, author: authorDID, collection: "app.bsky.feed.post", rkey: "two")
         let repository = try SpaceRepository(space: space, author: authorDID)
-        let authorization = AuthorizationContext.accountOAuth(
+        let authorization = AuthorizationContext.accountOAuthForTesting(
             subject: authorDID,
             scopes: [
                 "space:app.bsky.bookmarks?authority=did:plc:alice&skey=shared&action=create&collection=app.bsky.feed.post",
@@ -92,7 +92,7 @@ public enum TestCARFixtureHelper {
         let spaceRef = try SpaceRef(uriString: spaceRefString)
         let uri1 = try SpaceRecordURI(space: space, author: authorDID, collection: "app.bsky.feed.post", rkey: "one")
         let repository = try SpaceRepository(space: space, author: authorDID)
-        let authorization = AuthorizationContext.accountOAuth(
+        let authorization = AuthorizationContext.accountOAuthForTesting(
             subject: authorDID,
             scopes: [
                 "space:app.bsky.bookmarks?authority=did:plc:alice&skey=shared&action=create&collection=app.bsky.feed.post",
