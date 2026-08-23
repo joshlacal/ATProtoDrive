@@ -63,9 +63,20 @@ actor ScriptedPublicRepositoryService: PublicRepositoryServing {
         .init(pages: [nil: .init(records: [], cursor: nil)])
     }
 
+    func setPages(_ pages: [String?: RepositoryRecordPage]) {
+        firstPage = pages[nil]
+        self.pages = Dictionary(uniqueKeysWithValues: pages.compactMap { entry in
+            entry.key.map { ($0, entry.value) }
+        })
+    }
+
     func fail(with failure: BrowserFailure) { self.failure = failure }
     func failNextPage(cursor: String, with failure: BrowserFailure) {
         failuresByCursor[cursor] = failure
+    }
+    func clearFailure() {
+        failure = nil
+        failuresByCursor.removeAll()
     }
     func resolve(target: RepositoryTarget) async throws -> ResolvedRepository { .fixture }
     func describe(_ repository: ResolvedRepository) async throws -> RepositoryDescription {
@@ -92,4 +103,62 @@ actor ScriptedPublicRepositoryService: PublicRepositoryServing {
         rkey: String,
         cid: String?
     ) async throws -> RecordRow { throw BrowserFailure.notFound(resource: rkey) }
+}
+
+actor DeferredPublicRepositoryService: PublicRepositoryServing {
+    private var resolveWaiters: [RepositoryTarget: [CheckedContinuation<Void, Never>]] = [:]
+    private var resolveStarted: Set<RepositoryTarget> = []
+    private var resolveContinuations: [RepositoryTarget: CheckedContinuation<ResolvedRepository, any Error>] = [:]
+
+    func waitUntilResolveStarted(for target: RepositoryTarget) async {
+        if resolveStarted.contains(target) { return }
+        await withCheckedContinuation { continuation in
+            resolveWaiters[target, default: []].append(continuation)
+        }
+    }
+
+    func resolve(target: RepositoryTarget) async throws -> ResolvedRepository {
+        resolveStarted.insert(target)
+        if let waiters = resolveWaiters.removeValue(forKey: target) {
+            for waiter in waiters { waiter.resume() }
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            resolveContinuations[target] = continuation
+        }
+    }
+
+    func complete(target: RepositoryTarget, with repository: ResolvedRepository) {
+        if let continuation = resolveContinuations.removeValue(forKey: target) {
+            continuation.resume(returning: repository)
+        }
+    }
+
+    func completeIgnoringCancellation(target: RepositoryTarget, with repository: ResolvedRepository) {
+        if let continuation = resolveContinuations.removeValue(forKey: target) {
+            continuation.resume(returning: repository)
+        }
+    }
+
+    func describe(_ repository: ResolvedRepository) async throws -> RepositoryDescription {
+        .init(repository: repository, collections: [])
+    }
+
+    func listRecords(
+        in repository: ResolvedRepository,
+        collection: String,
+        cursor: String?,
+        limit: Int,
+        reverse: Bool
+    ) async throws -> RepositoryRecordPage {
+        .init(records: [], cursor: nil)
+    }
+
+    func getRecord(
+        in repository: ResolvedRepository,
+        collection: String,
+        rkey: String,
+        cid: String?
+    ) async throws -> RecordRow {
+        throw BrowserFailure.notFound(resource: rkey)
+    }
 }
