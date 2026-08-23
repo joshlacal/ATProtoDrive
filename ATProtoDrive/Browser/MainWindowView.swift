@@ -1,2 +1,78 @@
-// Stub for Browser/MainWindowView.swift
 import SwiftUI
+import Petrel
+import SwanSpaces
+
+@MainActor
+@Observable
+public final class WindowSelectionModel {
+    public var selectedSpace: SpaceItem? {
+        didSet {
+            if selectedSpace?.id != oldValue?.id {
+                selectedRepo = nil
+            }
+        }
+    }
+    public var selectedRepo: RepoEntry?
+    public var showingAddAccount: Bool = false
+
+    public init(
+        selectedSpace: SpaceItem? = nil,
+        selectedRepo: RepoEntry? = nil,
+        showingAddAccount: Bool = false
+    ) {
+        self.selectedSpace = selectedSpace
+        self.selectedRepo = selectedRepo
+        self.showingAddAccount = showingAddAccount
+    }
+
+    public func selectSpace(_ space: SpaceItem?) {
+        self.selectedSpace = space
+    }
+
+    public func selectRepo(_ repo: RepoEntry?) {
+        self.selectedRepo = repo
+    }
+
+    public func clearSelection() {
+        self.selectedSpace = nil
+        self.selectedRepo = nil
+    }
+}
+
+public struct MainWindowView: View {
+    @Bindable var session: BrowserSession
+    let publicRepositoryStore: PublicRepositoryStore
+    let recentRepositoryStore: RecentRepositoryStore
+
+    public init(
+        session: BrowserSession,
+        publicRepositoryStore: PublicRepositoryStore,
+        recentRepositoryStore: RecentRepositoryStore
+    ) {
+        self.session = session
+        self.publicRepositoryStore = publicRepositoryStore
+        self.recentRepositoryStore = recentRepositoryStore
+    }
+
+    public var body: some View {
+        @Bindable var bindableSession = session
+        NavigationSplitView(columnVisibility: $bindableSession.columnVisibility) {
+            DriveSidebarView(session: bindableSession, recentRepositoryStore: recentRepositoryStore)
+                .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 300)
+        } detail: {
+            ContentBrowserView(
+                session: bindableSession,
+                publicRepositoryStore: publicRepositoryStore,
+                recentRepositoryStore: recentRepositoryStore
+            )
+        }
+        .inspector(isPresented: $bindableSession.isInspectorPresented) {
+            ContentUnavailableView(
+                "No Selection",
+                systemImage: "sidebar.right",
+                description: Text("Select an item to inspect its details.")
+            )
+            .inspectorColumnWidth(min: 260, ideal: 340, max: 480)
+        }
+    }
+}

@@ -8,131 +8,69 @@ import Petrel
 import SwanSpaces
 
 @MainActor
-@Observable
-public final class WindowSelectionModel {
-    public var selectedSpace: SpaceItem? {
-        didSet {
-            if selectedSpace?.id != oldValue?.id {
-                selectedRepo = nil
-            }
-        }
-    }
-    public var selectedRepo: RepoEntry?
-    public var showingAddAccount: Bool = false
+private struct BrowserSceneRoot: View {
+    @State private var session: BrowserSession
+    @State private var publicRepositoryStore: PublicRepositoryStore
+    private let recentRepositoryStore: RecentRepositoryStore
 
-    public init(
-        selectedSpace: SpaceItem? = nil,
-        selectedRepo: RepoEntry? = nil,
-        showingAddAccount: Bool = false
+    init(
+        publicRepositoryService: any PublicRepositoryServing,
+        recentRepositoryStore: RecentRepositoryStore
     ) {
-        self.selectedSpace = selectedSpace
-        self.selectedRepo = selectedRepo
-        self.showingAddAccount = showingAddAccount
+        _session = State(initialValue: BrowserSession())
+        _publicRepositoryStore = State(initialValue: PublicRepositoryStore(
+            service: publicRepositoryService
+        ))
+        self.recentRepositoryStore = recentRepositoryStore
     }
 
-    public func selectSpace(_ space: SpaceItem?) {
-        self.selectedSpace = space
-    }
-
-    public func selectRepo(_ repo: RepoEntry?) {
-        self.selectedRepo = repo
-    }
-
-    public func clearSelection() {
-        self.selectedSpace = nil
-        self.selectedRepo = nil
-    }
-}
-
-public struct MainWindowView: View {
-    @Environment(AccountStore.self) private var accountStore
-    @State private var selection: WindowSelectionModel
-
-    public init(selection: WindowSelectionModel = WindowSelectionModel()) {
-        self._selection = State(initialValue: selection)
-    }
-
-    public var body: some View {
-        @Bindable var bindableSelection = selection
-        NavigationSplitView {
-            SidebarView(
-                selectedSpace: $bindableSelection.selectedSpace,
-                showingAddAccount: $bindableSelection.showingAddAccount
-            )
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        bindableSelection.showingAddAccount = true
-                    } label: {
-                        Label("Add Account", systemImage: "plus")
-                    }
-                }
-            }
-        } content: {
-            if let space = bindableSelection.selectedSpace {
-                let owningAccount = AccountStore.resolveDetailAccount(for: space, in: accountStore.accounts)
-                SpaceDetailView(
-                    space: space,
-                    account: owningAccount,
-                    selectedRepo: $bindableSelection.selectedRepo,
-                    onDelete: {
-                        bindableSelection.clearSelection()
-                    }
-                )
-                .id(space.id)
-            } else {
-                ContentUnavailableView(
-                    "No Space Selected",
-                    systemImage: "square.stack.3d.up",
-                    description: Text("Select a space from the sidebar to view details.")
-                )
-            }
-        } detail: {
-            if let space = bindableSelection.selectedSpace, let repo = bindableSelection.selectedRepo {
-                let owningAccount = AccountStore.resolveDetailAccount(for: space, in: accountStore.accounts)
-                RecordTableView(
-                    space: space,
-                    repo: repo,
-                    account: owningAccount
-                )
-                .id("\(space.id)-\(repo.did)-\(repo.rev)-\(repo.hash)")
-            } else if bindableSelection.selectedSpace != nil {
-                ContentUnavailableView(
-                    "No Repository Selected",
-                    systemImage: "tablecells",
-                    description: Text("Select a writer repo from the space details to browse its records.")
-                )
-            } else {
-                ContentUnavailableView(
-                    "No Space Selected",
-                    systemImage: "square.stack.3d.up",
-                    description: Text("Select a space from the sidebar.")
-                )
-            }
-        }
-        .sheet(isPresented: $bindableSelection.showingAddAccount) {
-            AddAccountView()
-                .environment(accountStore)
-        }
+    var body: some View {
+        MainWindowView(
+            session: session,
+            publicRepositoryStore: publicRepositoryStore,
+            recentRepositoryStore: recentRepositoryStore
+        )
     }
 }
 
 @main
 struct ATProtoDriveApp: App {
     @State private var accountStore = AccountStore()
+    private let publicRepositoryService: any PublicRepositoryServing
+    private let recentRepositoryStore: RecentRepositoryStore
+
+    init() {
+        self.publicRepositoryService = PublicRepositoryService()
+        do {
+            self.recentRepositoryStore = RecentRepositoryStore(
+                persistence: try FileRecentRepositoryPersistence.live()
+            )
+        } catch {
+            self.recentRepositoryStore = RecentRepositoryStore(
+                persistence: MemoryRecentRepositoryPersistence()
+            )
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
-            MainWindowView()
-                .environment(accountStore)
-                .task {
-                    await accountStore.restore()
+            BrowserSceneRoot(
+                publicRepositoryService: publicRepositoryService,
+                recentRepositoryStore: recentRepositoryStore
+            )
+            .environment(accountStore)
+            .task {
+                await accountStore.restore()
+                await recentRepositoryStore.restore()
+            }
+            .onOpenURL { url in
+                Task {
+                    try? await accountStore.handleCallback(url)
                 }
-                .onOpenURL { url in
-                    Task {
-                        try? await accountStore.handleCallback(url)
-                    }
-                }
+            }
+        }
+        .commands {
+            BrowserCommands()
         }
     }
 }

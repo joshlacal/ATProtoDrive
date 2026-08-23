@@ -13,6 +13,17 @@ public enum BrowserSource: Hashable, Sendable, Codable {
     case account(did: String, destination: AccountDestination)
     case openedPublicRepository(did: String)
     case global(GlobalDestination)
+
+    public var stableID: String {
+        switch self {
+        case .account(let did, let destination):
+            return "account|\(did)|\(destination.rawValue)"
+        case .openedPublicRepository(let did):
+            return "public|\(did)"
+        case .global(let destination):
+            return "global|\(destination.rawValue)"
+        }
+    }
 }
 
 public struct OpenedRepositorySummary: Identifiable, Hashable, Codable, Sendable {
