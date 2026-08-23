@@ -9,14 +9,25 @@ public struct BrowserRefreshAction: Sendable {
     }
 }
 
+@MainActor
+public struct BrowserFocusSearchAction: Sendable {
+    public let perform: @MainActor @Sendable () -> Void
+
+    public init(perform: @escaping @MainActor @Sendable () -> Void) {
+        self.perform = perform
+    }
+}
+
 public extension FocusedValues {
     @Entry var browserRefreshAction: BrowserRefreshAction?
     @Entry var browserSession: BrowserSession?
+    @Entry var browserFocusSearchAction: BrowserFocusSearchAction?
 }
 
 public struct BrowserCommands: Commands {
     @FocusedValue(\.browserRefreshAction) private var refreshAction
     @FocusedValue(\.browserSession) private var session
+    @FocusedValue(\.browserFocusSearchAction) private var focusSearchAction
 
     public init() {}
 
@@ -46,6 +57,14 @@ public struct BrowserCommands: Commands {
             }
             .keyboardShortcut("r", modifiers: .command)
             .disabled(refreshAction == nil)
+        }
+
+        CommandGroup(after: .textEditing) {
+            Button("Find…") {
+                focusSearchAction?.perform()
+            }
+            .keyboardShortcut("f", modifiers: .command)
+            .disabled(focusSearchAction == nil)
         }
     }
 }

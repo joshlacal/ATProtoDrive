@@ -67,10 +67,9 @@ public struct MainWindowView: View {
             )
         }
         .inspector(isPresented: $bindableSession.isInspectorPresented) {
-            ContentUnavailableView(
-                "No Selection",
-                systemImage: "sidebar.right",
-                description: Text("Select an item to inspect its details.")
+            BrowserInspectorView(
+                references: Array(session.selectedReferences.values),
+                primaryRecord: session.primarySelection.flatMap(publicRepositoryStore.record(for:))
             )
             .inspectorColumnWidth(min: 260, ideal: 340, max: 480)
         }

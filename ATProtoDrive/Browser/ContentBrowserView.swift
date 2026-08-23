@@ -241,6 +241,14 @@ public struct ContentBrowserView: View {
                 }
                 .disabled(currentRefreshAction == nil)
             }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    session.isInspectorPresented.toggle()
+                } label: {
+                    Label("Toggle Inspector", systemImage: "sidebar.right")
+                }
+                .help("Toggle Inspector (⌥⌘I)")
+            }
         }
         .sheet(isPresented: $showingAddAccountSheet) {
             AddAccountView()
@@ -266,30 +274,17 @@ public struct ContentBrowserView: View {
                 if let recordStore = publicRepositoryStore.recordStore(for: collection) {
                     BrowserTableShell(state: recordStore.state, retry: {
                         Task { await recordStore.refresh() }
-                    }) { records in
+                    }) { _ in
                         VStack(spacing: 0) {
                             BrowserBreadcrumbView(
                                 session: session,
                                 repository: recordStore.repository,
                                 currentCollection: collection
                             )
-                            if records.isEmpty {
-                                ContentUnavailableView(
-                                    "No Records",
-                                    systemImage: "doc.text",
-                                    description: Text("No records found in \(collection).")
-                                )
-                            } else {
-                                List(records, id: \.uri) { record in
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(record.rkey)
-                                            .font(.headline)
-                                        Text(record.uri)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
+                            PublicRecordTable(
+                                store: recordStore,
+                                session: session
+                            )
                         }
                     }
                     .task(id: "\(collection)|\(recordStore.repository.did)") {
