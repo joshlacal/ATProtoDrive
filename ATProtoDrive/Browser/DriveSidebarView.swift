@@ -176,7 +176,16 @@ public struct DriveSidebarView: View {
     }
 
     public var body: some View {
-        List(selection: $session.selectedSource) {
+        List(selection: Binding(
+            get: { session.selectedSource },
+            set: { newSource in
+                if let newSource {
+                    session.selectSource(newSource)
+                } else {
+                    session.selectedSource = nil
+                }
+            }
+        )) {
             // Group by account if any
             ForEach(accountSummaries, id: \.did) { account in
                 let accountRows = rows.filter { $0.section == .account(account.did) }

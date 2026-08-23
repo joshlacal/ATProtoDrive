@@ -148,4 +148,93 @@ struct BrowserDomainTests {
         #expect(session.openedPublicRepositories[0].id == anonymousSummary.id)
         #expect(session.openedPublicRepositories[1].id == accountSummary.id)
     }
+
+    @MainActor
+    @Test("selectSource clears path, history, and selection only when source changes")
+    func selectSourceResetsStateOnChange() {
+        let session = BrowserSession()
+        let didA = "did:plc:alice"
+        let didB = "did:plc:bob"
+        let sourceA = BrowserSource.openedPublicRepository(did: didA)
+        let sourceB = BrowserSource.openedPublicRepository(did: didB)
+        let scopeA = RepositoryScope.publicRepository(did: didA, pdsURL: URL(string: "https://alice.example")!)
+        let locatorA = RecordLocator(
+            scope: scopeA,
+            uri: "at://\(didA)/app.test/1",
+            collection: "app.test",
+            rkey: "1",
+            cid: "bafytest"
+        )
+        let refA = ResourceReference.record(locatorA)
+
+        session.selectSource(sourceA)
+        session.navigate(to: BrowserPath(source: sourceA, components: [.repository(scopeA)]))
+        session.replaceSelection(with: [refA])
+
+        #expect(session.selectedSource == sourceA)
+        #expect(session.path != nil)
+        #expect(!session.history.isEmpty)
+        #expect(!session.selectedItemIDs.isEmpty)
+
+        // Re-selecting same source does NOT clear
+        session.selectSource(sourceA)
+        #expect(session.selectedSource == sourceA)
+        #expect(session.path != nil)
+        #expect(!session.history.isEmpty)
+        #expect(!session.selectedItemIDs.isEmpty)
+
+        // Selecting new source clears path, history, and selection
+        session.selectSource(sourceB)
+        #expect(session.selectedSource == sourceB)
+        #expect(session.path == nil)
+        #expect(session.history.isEmpty)
+        #expect(session.historyIndex == nil)
+        #expect(session.selectedItemIDs.isEmpty)
+        #expect(session.selectedReferences.isEmpty)
+    }
+
+    @MainActor
+    @Test("select source A, navigate, deselect, reselect A leaves path and history intact")
+    func deselectAndReselectSourcePreservesPathAndHistory() {
+        let session = BrowserSession()
+        let didA = "did:plc:alice"
+        let sourceA = BrowserSource.openedPublicRepository(did: didA)
+        let scopeA = RepositoryScope.publicRepository(did: didA, pdsURL: URL(string: "https://alice.example")!)
+        let pathA = BrowserPath(source: sourceA, components: [.repository(scopeA)])
+        let locatorA = RecordLocator(
+            scope: scopeA,
+            uri: "at://\(didA)/app.test/1",
+            collection: "app.test",
+            rkey: "1",
+            cid: "bafytest"
+        )
+        let refA = ResourceReference.record(locatorA)
+
+        // 1. Select source A, navigate to pathA, set selection
+        session.selectSource(sourceA)
+        session.navigate(to: pathA)
+        session.replaceSelection(with: [refA])
+
+        #expect(session.selectedSource == sourceA)
+        #expect(session.path == pathA)
+        #expect(session.history == [pathA])
+        #expect(session.historyIndex == 0)
+        #expect(session.selectedReferences[refA.stableID] == refA)
+
+        // 2. Deselect (nil) — only selectedSource is blanked, path/history/selection remain intact
+        session.selectSource(nil)
+        #expect(session.selectedSource == nil)
+        #expect(session.path == pathA)
+        #expect(session.history == [pathA])
+        #expect(session.historyIndex == 0)
+        #expect(session.selectedReferences[refA.stableID] == refA)
+
+        // 3. Reselect A — path, history, and selection remain intact
+        session.selectSource(sourceA)
+        #expect(session.selectedSource == sourceA)
+        #expect(session.path == pathA)
+        #expect(session.history == [pathA])
+        #expect(session.historyIndex == 0)
+        #expect(session.selectedReferences[refA.stableID] == refA)
+    }
 }

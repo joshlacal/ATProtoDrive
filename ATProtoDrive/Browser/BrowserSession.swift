@@ -90,6 +90,14 @@ public final class BrowserSession {
 
     public func selectSource(_ source: BrowserSource?) {
         guard selectedSource != source else { return }
+        guard let source else {
+            selectedSource = nil
+            return
+        }
+        if path?.source == source {
+            selectedSource = source
+            return
+        }
         selectedSource = source
         path = nil
         history = []

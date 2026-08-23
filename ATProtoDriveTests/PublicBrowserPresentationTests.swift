@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 @testable import ATProtoDrive
 
@@ -142,21 +143,44 @@ struct PublicBrowserPresentationTests {
         #expect(store.recordStore(for: "app.bsky.feed.post")?.state.snapshot != nil)
     }
 
-    private actor RefreshCallRecorder {
-        private(set) var count = 0
-        func record() { count += 1 }
-    }
-
     @MainActor
-    @Test("focused refresh invokes only the active window action")
+    @Test("focused refresh invokes only the active window action without cross-window crosstalk")
     func focusedRefreshIsWindowLocal() async {
-        let first = RefreshCallRecorder()
-        let second = RefreshCallRecorder()
-        let firstAction = BrowserRefreshAction(perform: { await first.record() })
-        _ = BrowserRefreshAction(perform: { await second.record() })
-        await firstAction.perform()
-        #expect(await first.count == 1)
-        #expect(await second.count == 0)
+        let service = ScriptedPublicRepositoryService.successfulFixture()
+        let store1 = PublicRepositoryStore(service: service)
+        let store2 = PublicRepositoryStore(service: service)
+        let session1 = BrowserSession()
+        let session2 = BrowserSession()
+        let recents = RecentRepositoryStore(persistence: MemoryRecentRepositoryPersistence())
+
+        await PublicRepositoryOpenCoordinator.open(
+            .publicIdentifier("alice.test"), store: store1, session: session1, recents: recents
+        )
+        await PublicRepositoryOpenCoordinator.open(
+            .publicIdentifier("bob.test"), store: store2, session: session2, recents: recents
+        )
+
+        var window1Refreshed = false
+        let window1Action = BrowserRefreshAction {
+            window1Refreshed = true
+            await store1.refresh()
+        }
+
+        var window2Refreshed = false
+        let window2Action = BrowserRefreshAction {
+            window2Refreshed = true
+            await store2.refresh()
+        }
+
+        // Window 1 refresh action only executes window 1 closure
+        await window1Action.perform()
+        #expect(window1Refreshed == true)
+        #expect(window2Refreshed == false)
+
+        // Window 2 refresh action executes window 2 closure
+        await window2Action.perform()
+        #expect(window1Refreshed == true)
+        #expect(window2Refreshed == true)
     }
 
     @Test("record search combines text and collection token")
@@ -360,22 +384,45 @@ struct PublicBrowserPresentationTests {
         #expect(retainedAfterFilterAway == [item1.reference])
         selectedRefs = Dictionary(uniqueKeysWithValues: retainedAfterFilterAway.map { ($0.stableID, $0) })
 
-        // 2. Filter-back: both items visible again; item1 is still selected in session
+        // 2. Filter-back: both items visible again; table selection reflects visible item1
         let restoredVisible = [item1, item2]
-        let visibleSelectedIDs = Set(restoredVisible.map(\.id)).intersection(Set(selectedRefs.keys))
-        #expect(visibleSelectedIDs == [item1.id])
+        let retainedAfterFilterBack = PublicRecordPresentation.updatedSelection(
+            currentSelectedReferences: selectedRefs,
+            visibleItems: restoredVisible,
+            newSelectedIDs: [item1.id]
+        )
+        #expect(retainedAfterFilterBack == [item1.reference])
+        selectedRefs = Dictionary(uniqueKeysWithValues: retainedAfterFilterBack.map { ($0.stableID, $0) })
 
-        // 3. Sort: change sort order of items; selection remains identical
-        let sortedItems = [item2, item1]
-        let sortedVisibleSelected = Set(sortedItems.map(\.id)).intersection(Set(selectedRefs.keys))
-        #expect(sortedVisibleSelected == [item1.id])
+        // 3. Sort: change sort order using production sorted(by:); selection remains identical
+        let sortedItems = [item1, item2].sorted(by: BrowserSort(field: "rkey", ascending: false))
+        #expect(sortedItems.map(\.id) == [item2.id, item1.id])
+        let retainedAfterSort = PublicRecordPresentation.updatedSelection(
+            currentSelectedReferences: selectedRefs,
+            visibleItems: sortedItems,
+            newSelectedIDs: [item1.id]
+        )
+        #expect(retainedAfterSort == [item1.reference])
+        selectedRefs = Dictionary(uniqueKeysWithValues: retainedAfterSort.map { ($0.stableID, $0) })
 
-        // 4. Append: new page row arrives; existing selection unchanged
+        // 4. Append: new page row arrives; existing selection retained
         let r3 = RecordRow.fixture(uri: "at://\(repo.did)/app.test/3", rkey: "3", cid: "cid-3")
         let item3 = PublicRecordItem(record: r3, repository: repo)
         let appendedVisible = [item1, item2, item3]
-        let appendedVisibleSelected = Set(appendedVisible.map(\.id)).intersection(Set(selectedRefs.keys))
-        #expect(appendedVisibleSelected == [item1.id])
+        let retainedAfterAppend = PublicRecordPresentation.updatedSelection(
+            currentSelectedReferences: selectedRefs,
+            visibleItems: appendedVisible,
+            newSelectedIDs: [item1.id]
+        )
+        #expect(retainedAfterAppend == [item1.reference])
+
+        // Multi-selection with newly appended item
+        let multiSelected = PublicRecordPresentation.updatedSelection(
+            currentSelectedReferences: selectedRefs,
+            visibleItems: appendedVisible,
+            newSelectedIDs: [item1.id, item3.id]
+        )
+        #expect(multiSelected == [item1.reference, item3.reference])
     }
     @Test("selection pruning retains unchanged refresh and prunes same-URI new-CID")
     func selectionPruningOnRefresh() {
