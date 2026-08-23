@@ -2661,3 +2661,10 @@ The next plans consume this one as follows:
 3. `2026-08-23-atprotodrive-v1-account-acceptance.md` supplies `AccountConnectionStatus`, deterministic full-app UI tests, commands, and final screenshots; its local account cleaner calls `RecentRepositoryStore.removeEntries(sourceAccountDID:)`, preserves anonymous recents, and must preserve per-window `BrowserSession` ownership plus the no-account public path proven here.
 
 If a later plan needs a new source kind or search token, add a case while preserving the names and meaning above. Do not merge public and Space services behind a mode flag.
+
+## Acceptance evidence (2026-08-23)
+
+- Step 1 deterministic matrix: TEST SUCCEEDED — 131 tests, 11 suites, 0 failures (fresh DerivedData, unsigned).
+- Step 3 code-boundary audit: 10/10 claims verified against sources.
+- Step 4 final build: BUILD SUCCEEDED; delta contains only the Tasks 1–7 seals.
+- Step 2 and runtime screenshots: parked. Observed behavior change — fixture-mode launch raises a Keychain consent (AccountStore reads the current-DID item at init), and AppleScript UI driving raises a TCC consent; automated acceptance does not grant security consents. Live public browsing, offline/stale-banner proof, and UI screenshots require a consented manual session; Plan 4's signed runtime gate re-covers these surfaces.
