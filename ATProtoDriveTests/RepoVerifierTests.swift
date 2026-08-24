@@ -7,7 +7,7 @@ import CryptoKit
 import Foundation
 import Petrel
 import secp256k1
-import SwanCore
+import PetrelCrypto
 import SwanSpaces
 import Testing
 @testable import ATProtoDrive

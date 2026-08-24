@@ -7,7 +7,7 @@ import CryptoKit
 import Foundation
 import Petrel
 import secp256k1
-import SwanCore
+import PetrelCrypto
 import SwanSpaces
 
 public enum TestCARFixtureHelper {
@@ -114,8 +114,8 @@ public enum TestCARFixtureHelper {
             carData: car.data,
             publicKey: key.publicKey,
             spaceRef: spaceRef,
-            expectedHex: SwanCore.Hex.encode(tamperedCommitment),
-            computedHex: SwanCore.Hex.encode(actualCommitment)
+            expectedHex: Hex.encode(tamperedCommitment),
+            computedHex: Hex.encode(actualCommitment)
         )
     }
 }

@@ -64,6 +64,11 @@
 		B10000000000000000000067 /* RecentRepositoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000057 /* RecentRepositoryStoreTests.swift */; };
 		B10000000000000000000068 /* PublicBrowserPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000058 /* PublicBrowserPresentationTests.swift */; };
 		B10000000000000000000069 /* PublicBrowserFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000059 /* PublicBrowserFixtureTests.swift */; };
+		C10000000000000000000021 /* BlobTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000011 /* BlobTypes.swift */; };
+		C10000000000000000000022 /* BlobReferenceScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000012 /* BlobReferenceScanner.swift */; };
+		C10000000000000000000023 /* BlobReferenceIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000013 /* BlobReferenceIndex.swift */; };
+		C10000000000000000000024 /* BlobFixtureSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000014 /* BlobFixtureSupport.swift */; };
+		C10000000000000000000025 /* BlobReferenceIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000015 /* BlobReferenceIndexTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -136,6 +141,11 @@
 		B10000000000000000000057 /* RecentRepositoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentRepositoryStoreTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000058 /* PublicBrowserPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicBrowserPresentationTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000059 /* PublicBrowserFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicBrowserFixtureTests.swift; sourceTree = "<group>"; };
+		C10000000000000000000011 /* BlobTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobTypes.swift; sourceTree = "<group>"; };
+		C10000000000000000000012 /* BlobReferenceScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobReferenceScanner.swift; sourceTree = "<group>"; };
+		C10000000000000000000013 /* BlobReferenceIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobReferenceIndex.swift; sourceTree = "<group>"; };
+		C10000000000000000000014 /* BlobFixtureSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobFixtureSupport.swift; sourceTree = "<group>"; };
+		C10000000000000000000015 /* BlobReferenceIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobReferenceIndexTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -182,6 +192,7 @@
 				B10000000000000000000004 /* Resolution */,
 				B10000000000000000000005 /* PublicRepo */,
 				B10000000000000000000006 /* Debug */,
+				C10000000000000000000001 /* Blobs */,
 				A10000000000000000000020 /* ATProtoDriveApp.swift */,
 				A10000000000000000000021 /* Info.plist */,
 				A10000000000000000000022 /* ATProtoDrive.entitlements */,
@@ -239,6 +250,8 @@
 				B10000000000000000000057 /* RecentRepositoryStoreTests.swift */,
 				B10000000000000000000058 /* PublicBrowserPresentationTests.swift */,
 				B10000000000000000000059 /* PublicBrowserFixtureTests.swift */,
+				C10000000000000000000014 /* BlobFixtureSupport.swift */,
+				C10000000000000000000015 /* BlobReferenceIndexTests.swift */,
 			);
 			path = ATProtoDriveTests;
 			sourceTree = "<group>";
@@ -325,6 +338,16 @@
 				B10000000000000000000038 /* PublicBrowserFixture.swift */,
 			);
 			path = Debug;
+			sourceTree = "<group>";
+		};
+		C10000000000000000000001 /* Blobs */ = {
+			isa = PBXGroup;
+			children = (
+				C10000000000000000000011 /* BlobTypes.swift */,
+				C10000000000000000000012 /* BlobReferenceScanner.swift */,
+				C10000000000000000000013 /* BlobReferenceIndex.swift */,
+			);
+			path = Blobs;
 			sourceTree = "<group>";
 		};
 		A10000000000000000000004 /* Frameworks */ = {
@@ -485,6 +508,9 @@
 				B10000000000000000000046 /* PublicRepositoryView.swift in Sources */,
 				B10000000000000000000047 /* PublicRecordTable.swift in Sources */,
 				B10000000000000000000048 /* PublicBrowserFixture.swift in Sources */,
+				C10000000000000000000021 /* BlobTypes.swift in Sources */,
+				C10000000000000000000022 /* BlobReferenceScanner.swift in Sources */,
+				C10000000000000000000023 /* BlobReferenceIndex.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -509,6 +535,8 @@
 				B10000000000000000000067 /* RecentRepositoryStoreTests.swift in Sources */,
 				B10000000000000000000068 /* PublicBrowserPresentationTests.swift in Sources */,
 				B10000000000000000000069 /* PublicBrowserFixtureTests.swift in Sources */,
+				C10000000000000000000024 /* BlobFixtureSupport.swift in Sources */,
+				C10000000000000000000025 /* BlobReferenceIndexTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
