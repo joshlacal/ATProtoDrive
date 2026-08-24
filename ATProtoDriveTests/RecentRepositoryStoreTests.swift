@@ -11,7 +11,7 @@ struct RecentRepositoryStoreTests {
         let first = RecentRepositoryStore(persistence: persistence, maximumCount: 2)
         let summary = OpenedRepositorySummary(
             did: ResolvedRepository.fixture.did,
-            handle: "alice.test.blue",
+            handle: "alice.test",
             pdsURL: ResolvedRepository.fixture.pdsURL,
             sourceAccountDID: ResolvedRepository.fixture.did,
             lastOpenedAt: .distantPast
@@ -44,14 +44,14 @@ struct RecentRepositoryStoreTests {
         let did = ResolvedRepository.fixture.did
         let anonymous = OpenedRepositorySummary(
             did: did,
-            handle: "alice.test.blue",
+            handle: "alice.test",
             pdsURL: ResolvedRepository.fixture.pdsURL,
             sourceAccountDID: nil,
             lastOpenedAt: Date(timeIntervalSince1970: 30)
         )
         let accountQualified = OpenedRepositorySummary(
             did: did,
-            handle: "alice.test.blue",
+            handle: "alice.test",
             pdsURL: ResolvedRepository.fixture.pdsURL,
             sourceAccountDID: did,
             lastOpenedAt: Date(timeIntervalSince1970: 20)
@@ -108,7 +108,7 @@ struct RecentRepositoryStoreTests {
         let store = await RecentRepositoryStore(persistence: persistence, maximumCount: 5)
         let summary = OpenedRepositorySummary(
             did: ResolvedRepository.fixture.did,
-            handle: "alice.test.blue",
+            handle: "alice.test",
             pdsURL: ResolvedRepository.fixture.pdsURL,
             sourceAccountDID: nil,
             lastOpenedAt: Date()

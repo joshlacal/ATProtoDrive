@@ -65,8 +65,8 @@ struct PublicRecordStoreTests {
     func targetGenerationWins() async {
         let service = DeferredPublicRepositoryService()
         let store = PublicRepositoryStore(service: service)
-        let first = RepositoryTarget.publicIdentifier("first.test.blue")
-        let second = RepositoryTarget.publicIdentifier("second.test.blue")
+        let first = RepositoryTarget.publicIdentifier("first.test")
+        let second = RepositoryTarget.publicIdentifier("second.test")
         let firstOpen = Task { @MainActor in await store.open(target: first) }
         await service.waitUntilResolveStarted(for: first)
         let secondOpen = Task { @MainActor in await store.open(target: second) }
@@ -85,8 +85,8 @@ struct PublicRecordStoreTests {
         let service = ScriptedPublicRepositoryService.successfulFixture()
         let store1 = PublicRepositoryStore(service: service)
         let store2 = PublicRepositoryStore(service: service)
-        await store1.open(target: .publicIdentifier("alice.test.blue"))
-        #expect(store1.target == .publicIdentifier("alice.test.blue"))
+        await store1.open(target: .publicIdentifier("alice.test"))
+        #expect(store1.target == .publicIdentifier("alice.test"))
         #expect(store2.target == nil)
         _ = store1.recordStore(for: "app.test.item")
         #expect(store1.cachedCollectionCount == 1)
@@ -283,7 +283,7 @@ struct PublicRecordStoreTests {
             nil: .init(records: [.fixture(uri: "at://\(ResolvedRepository.fixture.did)/app.test.item/1", cid: "cid1")], cursor: nil)
         ])
         let repoStore = PublicRepositoryStore(service: service)
-        await repoStore.open(target: .publicIdentifier("alice.test.blue"))
+        await repoStore.open(target: .publicIdentifier("alice.test"))
 
         // Simulate transient network failure on collection load
         await service.fail(with: .offline)
@@ -345,7 +345,7 @@ struct PublicRecordStoreTests {
             nil: .init(records: [row], cursor: nil)
         ])
         let store = PublicRepositoryStore(service: service)
-        await store.open(target: .publicIdentifier("alice.test.blue"))
+        await store.open(target: .publicIdentifier("alice.test"))
         _ = await store.loadCollection("app.test.item")
         let reference = ResourceReference.record(RecordLocator(
             scope: ResolvedRepository.fixture.scope,

@@ -88,7 +88,7 @@ public actor FixturePublicRepositoryService: PublicRepositoryServing {
     public func resolve(target: RepositoryTarget) async throws -> ResolvedRepository {
         .init(
             did: PublicBrowserFixture.did,
-            handle: "fixture.test.blue",
+            handle: "fixture.test",
             pdsURL: URL(string: "https://fixture.invalid")!,
             connectedAccountDID: nil,
             handleIsCorrect: true

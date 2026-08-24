@@ -94,10 +94,10 @@ struct DIDDocumentPDSResolverTests {
     @Test("document with alsoKnownAs handle extracts valid handle")
     func handleExtraction() async throws {
         let resolver = DIDDocumentPDSResolver(fetchDocument: { _ in
-            return (200, Data(##"{"id":"did:plc:4hqjfn7m6n5hno3doamuhgef","alsoKnownAs":["invalid-entry","at://alice.test.blue","at://second.test.blue"],"service":[{"id":"#atproto_pds","type":"AtprotoPersonalDataServer","serviceEndpoint":"https://alice.example"}]}"##.utf8))
+            return (200, Data(##"{"id":"did:plc:4hqjfn7m6n5hno3doamuhgef","alsoKnownAs":["invalid-entry","at://alice.test","at://second.test"],"service":[{"id":"#atproto_pds","type":"AtprotoPersonalDataServer","serviceEndpoint":"https://alice.example"}]}"##.utf8))
         })
         let result = try await resolver.resolvePDS(for: fixtureDID)
-        #expect(result.declaredHandle == "alice.test.blue")
+        #expect(result.declaredHandle == "alice.test")
     }
 
     @Test("identity mismatch and wrong service are rejected")

@@ -5,7 +5,7 @@ import Petrel
 extension ResolvedRepository {
     static let fixture = ResolvedRepository(
         did: "did:plc:4hqjfn7m6n5hno3doamuhgef",
-        handle: "alice.test.blue",
+        handle: "alice.test",
         pdsURL: URL(string: "https://alice.example")!,
         connectedAccountDID: nil,
         handleIsCorrect: true

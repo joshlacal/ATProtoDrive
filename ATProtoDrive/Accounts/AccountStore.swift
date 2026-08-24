@@ -241,10 +241,14 @@ public final class AccountStore {
     public func restore() async {
         let env = ProcessInfo.processInfo.environment
         if env["XCTestConfigurationFilePath"] != nil
-            || env["XCTestSessionIdentifier"] != nil
-            || env["ATPROTODRIVE_FIXTURE_MODE"] == "public-browser" {
+            || env["XCTestSessionIdentifier"] != nil {
             return
         }
+        #if DEBUG
+        if env["ATPROTODRIVE_FIXTURE_MODE"] == "public-browser" {
+            return
+        }
+        #endif
         guard let data = UserDefaults.standard.data(forKey: Self.userDefaultsKey),
               let persistedList = try? JSONDecoder().decode([PersistedAccount].self, from: data) else {
             return
