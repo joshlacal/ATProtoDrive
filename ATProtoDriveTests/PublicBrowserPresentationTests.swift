@@ -23,7 +23,7 @@ struct PublicBrowserPresentationTests {
     }
 
     @MainActor
-    @Test(arguments: ["alice.test", ResolvedRepository.fixture.did])
+    @Test(arguments: ["alice.test.blue", ResolvedRepository.fixture.did])
     func openByHandleOrDIDSelectsResolvedSource(identifier: String) async {
         let service = ScriptedPublicRepositoryService.successfulFixture()
         let store = PublicRepositoryStore(service: service)
@@ -66,7 +66,7 @@ struct PublicBrowserPresentationTests {
         let recents = RecentRepositoryStore(persistence: MemoryRecentRepositoryPersistence())
         let session = BrowserSession()
         await PublicRepositoryOpenCoordinator.open(
-            .publicIdentifier("alice.test"), store: store, session: session, recents: recents
+            .publicIdentifier("alice.test.blue"), store: store, session: session, recents: recents
         )
         await PublicRepositoryOpenCoordinator.openCollection(
             "app.bsky.feed.post", store: store, session: session
@@ -89,14 +89,14 @@ struct PublicBrowserPresentationTests {
 
         // 1. Open initial repository successfully
         await PublicRepositoryOpenCoordinator.open(
-            .publicIdentifier("alice.test"), store: store, session: session, recents: recents
+            .publicIdentifier("alice.test.blue"), store: store, session: session, recents: recents
         )
         #expect(store.state.snapshot != nil)
         let initialTarget = store.target
 
         // 2. Attempt failed open
         await service.fail(with: .offline)
-        await store.open(target: .publicIdentifier("bad.test"))
+        await store.open(target: .publicIdentifier("bad.test.blue"))
         #expect(store.state.snapshot == nil)
 
         // 3. Restore previous target
@@ -118,7 +118,7 @@ struct PublicBrowserPresentationTests {
 
         // 1. Open initial repository and navigate to collection
         await PublicRepositoryOpenCoordinator.open(
-            .publicIdentifier("alice.test"), store: store, session: session, recents: recents
+            .publicIdentifier("alice.test.blue"), store: store, session: session, recents: recents
         )
         await PublicRepositoryOpenCoordinator.openCollection(
             "app.bsky.feed.post", store: store, session: session
@@ -129,7 +129,7 @@ struct PublicBrowserPresentationTests {
 
         // 2. Failing open wipes recordStores
         await service.fail(with: .offline)
-        await store.open(target: .publicIdentifier("bad.test"))
+        await store.open(target: .publicIdentifier("bad.test.blue"))
         #expect(store.state.snapshot == nil)
 
         // 3. Restore previous target through coordinator
@@ -154,10 +154,10 @@ struct PublicBrowserPresentationTests {
         let recents = RecentRepositoryStore(persistence: MemoryRecentRepositoryPersistence())
 
         await PublicRepositoryOpenCoordinator.open(
-            .publicIdentifier("alice.test"), store: store1, session: session1, recents: recents
+            .publicIdentifier("alice.test.blue"), store: store1, session: session1, recents: recents
         )
         await PublicRepositoryOpenCoordinator.open(
-            .publicIdentifier("bob.test"), store: store2, session: session2, recents: recents
+            .publicIdentifier("bob.test.blue"), store: store2, session: session2, recents: recents
         )
 
         var window1Refreshed = false

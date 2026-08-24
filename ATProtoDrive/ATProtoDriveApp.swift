@@ -144,7 +144,9 @@ struct ATProtoDriveApp: App {
             )
             .environment(accountStore)
             .task {
-                if !isFixtureMode {
+                let env = ProcessInfo.processInfo.environment
+                let isTesting = env["XCTestConfigurationFilePath"] != nil || env["XCTestSessionIdentifier"] != nil
+                if !isFixtureMode && !isTesting {
                     await accountStore.restore()
                 }
                 await recentRepositoryStore.restore()

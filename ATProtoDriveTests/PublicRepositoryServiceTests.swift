@@ -20,7 +20,7 @@ struct PublicRepositoryServiceTests {
             pdsResolver: resolver
         )
 
-        for target in [RepositoryTarget.publicIdentifier("alice.test"), .publicIdentifier(fixtureDID)] {
+        for target in [RepositoryTarget.publicIdentifier("alice.test.blue"), .publicIdentifier(fixtureDID)] {
             let resolved = try await service.resolve(target: target)
             _ = try await service.describe(resolved)
         }
@@ -29,7 +29,7 @@ struct PublicRepositoryServiceTests {
             URL(string: "https://alice.example")!,
             URL(string: "https://alice.example")!
         ])
-        #expect(await calls.resolvedHandles == ["alice.test"])
+        #expect(await calls.resolvedHandles == ["alice.test.blue"])
     }
 
     @Test("2xx nil output is a decode failure")
@@ -59,7 +59,7 @@ struct PublicRepositoryServiceTests {
         let resolver = StubPDSResolver(result: .init(
             did: fixtureDID,
             pdsURL: URL(string: "https://alice.example")!,
-            declaredHandle: "alice.test"
+            declaredHandle: "alice.test.blue"
         ))
         let service = PublicRepositoryService(
             operations: try .fixture(calls: PublicCallRecorder(), did: fixtureDID),
@@ -68,14 +68,14 @@ struct PublicRepositoryServiceTests {
         let resolved = try await service.resolve(target: .connectedAccount(did: fixtureDID))
         #expect(resolved.did == fixtureDID)
         #expect(resolved.connectedAccountDID == fixtureDID)
-        #expect(resolved.handle == "alice.test")
+        #expect(resolved.handle == "alice.test.blue")
         #expect(resolved.pdsURL.absoluteString == "https://alice.example")
     }
 
     @Test(arguments: ["", "   ", "not-a-valid handle with spaces", "@invalid", "did:bad"])
-    func resolveRejectsInvalidIdentifiers(invalidIdentifier: String) async {
+    func resolveRejectsInvalidIdentifiers(invalidIdentifier: String) async throws {
         let service = PublicRepositoryService(
-            operations: try! .fixture(calls: PublicCallRecorder(), did: fixtureDID),
+            operations: try .fixture(calls: PublicCallRecorder(), did: fixtureDID),
             pdsResolver: StubPDSResolver.fixture
         )
         await #expect(throws: BrowserFailure.self) {
@@ -98,7 +98,7 @@ struct PublicRepositoryServiceTests {
             endpoint: "com.atproto.identity.resolveHandle",
             statusCode: statusCode
         )) {
-            _ = try await service.resolve(target: .publicIdentifier("alice.test"))
+            _ = try await service.resolve(target: .publicIdentifier("alice.test.blue"))
         }
     }
 
@@ -149,7 +149,7 @@ struct PublicRepositoryServiceTests {
 
         // DID mismatch
         let mismatchedDIDOutput = ComAtprotoRepoDescribeRepo.Output(
-            handle: try Handle(handleString: "alice.test"),
+            handle: try Handle(handleString: "alice.test.blue"),
             did: otherDID,
             didDoc: DIDDocument(
                 id: fixtureDID,
@@ -180,7 +180,7 @@ struct PublicRepositoryServiceTests {
 
         // didDoc.id mismatch
         let mismatchedDocOutput = ComAtprotoRepoDescribeRepo.Output(
-            handle: try Handle(handleString: "alice.test"),
+            handle: try Handle(handleString: "alice.test.blue"),
             did: didValue,
             didDoc: DIDDocument(
                 id: "did:plc:z72i7hdynmk6r22z27h6tvur",
@@ -214,7 +214,7 @@ struct PublicRepositoryServiceTests {
     func describeDeduplicatesCollections() async throws {
         let didValue = try DID(didString: fixtureDID)
         let output = ComAtprotoRepoDescribeRepo.Output(
-            handle: try Handle(handleString: "alice.test"),
+            handle: try Handle(handleString: "alice.test.blue"),
             did: didValue,
             didDoc: DIDDocument(
                 id: fixtureDID,
@@ -405,9 +405,9 @@ struct PublicRepositoryServiceTests {
     // MARK: - GetRecord Tests
 
     @Test("getRecord validates inputs before operation")
-    func getRecordInputValidation() async {
+    func getRecordInputValidation() async throws {
         let service = PublicRepositoryService(
-            operations: try! .fixture(calls: PublicCallRecorder(), did: fixtureDID),
+            operations: try .fixture(calls: PublicCallRecorder(), did: fixtureDID),
             pdsResolver: StubPDSResolver.fixture
         )
         // Invalid NSID
@@ -552,7 +552,7 @@ extension PublicRepositoryService.Operations {
     static func fixture(calls: PublicCallRecorder, did: String) throws -> Self {
         let didValue = try DID(didString: did)
         let output = ComAtprotoRepoDescribeRepo.Output(
-            handle: try Handle(handleString: "alice.test"),
+            handle: try Handle(handleString: "alice.test.blue"),
             did: didValue,
             didDoc: DIDDocument(
                 id: did,

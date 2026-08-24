@@ -129,7 +129,7 @@ struct PublicBrowserFixtureTests {
             Issue.record("Expected store state to be idle initially")
         }
         let task = Task { @MainActor in
-            await store.open(target: .publicIdentifier("fixture.test"))
+            await store.open(target: .publicIdentifier("fixture.test.blue"))
         }
         task.cancel()
         await task.value

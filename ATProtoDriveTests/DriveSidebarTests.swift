@@ -16,7 +16,7 @@ struct DriveSidebarTests {
     func accountDestinations() {
         let did = ResolvedRepository.fixture.did
         let rows = DriveSidebarProjection.rows(
-            accounts: [.init(did: did, handle: "alice.test")],
+            accounts: [.init(did: did, handle: "alice.test.blue")],
             openedRepositories: []
         )
         let accountRows = rows.filter { $0.accountDID == did }
@@ -36,7 +36,7 @@ struct DriveSidebarTests {
         let rows = DriveSidebarProjection.rows(accounts: [], openedRepositories: [recent])
         let row = rows.first { $0.source == .openedPublicRepository(did: recent.did) }
         #expect(row?.section == .openedAndRecent)
-        #expect(row?.title == "alice.test")
+        #expect(row?.title == "alice.test.blue")
         #expect(row?.subtitle == recent.did)
     }
 
@@ -45,7 +45,7 @@ struct DriveSidebarTests {
         let selectedDID = ResolvedRepository.fixture.did
         let projection = LegacySpacesCompatibilityProjection(
             selectedAccountDID: selectedDID,
-            accounts: [.init(did: selectedDID, handle: "alice.test")]
+            accounts: [.init(did: selectedDID, handle: "alice.test.blue")]
         )
         #expect(projection.accountDID == selectedDID)
         #expect(projection.capabilities == .readOnly)

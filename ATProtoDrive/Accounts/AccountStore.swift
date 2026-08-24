@@ -239,6 +239,12 @@ public final class AccountStore {
 
     /// Restore persisted sessions on launch (namespace per DID: "atprotodrive.<did>").
     public func restore() async {
+        let env = ProcessInfo.processInfo.environment
+        if env["XCTestConfigurationFilePath"] != nil
+            || env["XCTestSessionIdentifier"] != nil
+            || env["ATPROTODRIVE_FIXTURE_MODE"] == "public-browser" {
+            return
+        }
         guard let data = UserDefaults.standard.data(forKey: Self.userDefaultsKey),
               let persistedList = try? JSONDecoder().decode([PersistedAccount].self, from: data) else {
             return
