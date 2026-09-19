@@ -1,22 +1,16 @@
 # ATProtoDrive
 
-ATProtoDrive is a native macOS file-browser-style explorer for ATProto permissioned data spaces (`com.atproto.space.*` and `com.atproto.simplespace.*`), announced in the [ATProto Spaces Alpha](https://atproto.com/blog/atproto-spaces-alpha).
+ATProtoDrive is a native macOS browser for AT Protocol repositories, records and files. Open a public repository by handle or DID without signing in, or connect an account. Public reads use the repository's resolved PDS anonymously.
 
-Built with SwiftUI on top of [Petrel](https://github.com/joshlacal/Petrel) (Swift ATProto SDK) and SwanSpaces (Swift PDS & Space CAR verifier), ATProtoDrive allows multi-account browsing, space management, record CRUD, blob inspection, and repository cryptographic verification.
+## Available now
 
----
+- **Public Records:** collection browsing, paginated record tables, search, sorting and a JSON inspector.
+- **Public Files:** paginated blob inventory for opened repositories and connected accounts, file-type and CID search, sorting and a metadata inspector.
+- **Reference scans:** an explicit, cancellable scan of every public collection and record page, showing each reference's record URI and JSON Pointer. File enumeration and reference-scan completion are reported separately. File type and size come from record declarations; listed files have not been downloaded or hash-verified.
+- **Browser navigation:** per-window Records / Public Files destinations, back/forward history and qualified selection.
+- **Spaces:** legacy read-only Space metadata browsing. The new Space authorization and content browsing architecture is still pending.
 
-## Features
-
-- **Multi-Account Sidebar:** Sign in to multiple ATProto accounts simultaneously (e.g. `swan.place` and Bluesky alpha PDS) with side-by-side space browsing.
-- **Space Management:** Create spaces with member-list or public write policies; open spaces by URI reference (`at://authority/space/type/skey`).
-- **Member Management:** Add and remove authorized writer members on owned spaces.
-- **Record Table & Inspector:** Browse writer repos and records; inspect canonical `at://` URIs, CIDs, pretty-printed JSON records, and blob attachments.
-- **Record CRUD & Blob Upload:** Create, edit, and delete space records; upload blobs directly into records with automatic JSON reference insertion.
-- **Blob Actions:** QuickLook previews, copy CID/URI, and native `NSSavePanel` file downloads.
-- **Cryptographic Repo Verification:** Verify space writer repositories against author signing keys (P-256 and secp256k1) and streaming CAR LtHash commitments using `SwanSpaces`.
-
----
+File previews/downloads, verified backup packages, durable transfer jobs, and the new Space mutation workflows remain planned work. See the [v1 plan index](docs/superpowers/plans/2026-08-23-atprotodrive-v1.md) and [Public Files continuation](docs/superpowers/plans/2026-09-19-public-files-continuation.md).
 
 ## Prerequisites
 
@@ -31,18 +25,42 @@ Built with SwiftUI on top of [Petrel](https://github.com/joshlacal/Petrel) (Swif
 ### Xcode
 Open `ATProtoDrive.xcodeproj` in Xcode, select the `ATProtoDrive` scheme with the **My Mac** destination, and press **Cmd+R** to build and run.
 
-### Command Line
+### Codex Run / Command Line
+
+The Codex Run action uses the same script as a local terminal:
+
+```bash
+./script/build_and_run.sh
+./script/build_and_run.sh --verify
+
+# Offline sample repository; no account restore or live network services
+ATD_CODE_SIGNING_ALLOWED=NO ./script/build_and_run.sh --fixture --verify
+```
+
+In the sample repository, choose **Public Files**, load the next page and select **Scan References** to populate file metadata and record links. This fixture validates presentation and navigation, not a live server or payload integrity. Build output defaults to `.build/DerivedData`; override it with `ATD_DERIVED_DATA` if needed.
+
+Direct Xcode commands:
+
 ```bash
 # Build app
 xcodebuild -project ATProtoDrive.xcodeproj \
   -scheme ATProtoDrive \
   -destination 'platform=macOS' build
 
-# Run unit and integration tests
+# Run the offline Public Files regression suites
 xcodebuild test -project ATProtoDrive.xcodeproj \
   -scheme ATProtoDrive \
-  -destination 'platform=macOS' -only-testing:ATProtoDriveTests
+  -destination 'platform=macOS' \
+  -only-testing:ATProtoDriveTests/BlobServiceTests \
+  -only-testing:ATProtoDriveTests/BlobInventoryStoreTests \
+  -only-testing:ATProtoDriveTests/BlobReferenceIndexTests \
+  -only-testing:ATProtoDriveTests/RecordInventoryScannerTests \
+  -only-testing:ATProtoDriveTests/PublicBrowserPresentationTests \
+  -only-testing:ATProtoDriveTests/PublicFilesNavigationTests \
+  -only-testing:ATProtoDriveTests/PublicFilesNavigationRaceTests
 ```
+
+The live public enumeration smoke test is opt-in: prefix the test command with `TEST_RUNNER_ATPROTODRIVE_LIVE_PUBLIC_SMOKE=1`. It only resolves `bsky.app` and lists up to five public blob identifiers. The legacy `AccountStoreTests` suite contains interactive OAuth and account-persistence tests; it is deliberately excluded from the offline command.
 
 ---
 

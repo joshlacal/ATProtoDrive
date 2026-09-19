@@ -46,7 +46,8 @@ public enum PublicRepositoryOpenCoordinator {
         selectedSource: BrowserSource? = nil
     ) async {
         await store.open(target: target)
-        guard case .loaded(let description) = store.state else { return }
+        guard !Task.isCancelled, store.target == target,
+              case .loaded(let description) = store.state else { return }
         let source = selectedSource ?? .openedPublicRepository(did: description.repository.did)
         session.selectSource(source)
         session.navigate(to: BrowserPath(
@@ -67,15 +68,25 @@ public enum PublicRepositoryOpenCoordinator {
         await recents.remember(summary)
     }
 
+    @discardableResult
     public static func openCollection(
         _ collection: String,
         store: PublicRepositoryStore,
         session: BrowserSession
-    ) async {
+    ) async -> Bool {
+        let originalPath = session.path
         guard let description = store.state.snapshot,
               description.collections.contains(collection),
-              await store.loadCollection(collection) != nil,
-              let source = session.selectedSource else { return }
+              let originalSource = session.selectedSource else { return false }
+        guard await store.loadCollection(collection) != nil,
+              !Task.isCancelled,
+              session.selectedSource == originalSource,
+              session.path == originalPath,
+              store.state.snapshot?.repository.scope == description.repository.scope else { return false }
+        let source: BrowserSource
+        if case .account(let did, .publicBlobs) = originalSource {
+            source = .account(did: did, destination: .publicRecords)
+        } else { source = originalSource }
         session.navigate(to: BrowserPath(
             source: source,
             components: [
@@ -83,6 +94,7 @@ public enum PublicRepositoryOpenCoordinator {
                 .collection(scope: description.repository.scope, collection: collection)
             ]
         ))
+        return true
     }
 
     public static func restorePreviousTarget(

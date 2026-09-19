@@ -325,13 +325,13 @@ actor MemoryRecordSink: SpaceCARRecoveryRecordSink {
 
 /// Linear-time in-memory DRISL index conforming to SwanSpaces' `SpaceCARRecoveryIndex`.
 ///
-/// Uses O(1) keyed lookups for insertions, CID-to-path index, and a forward cursor over
-/// a lazily sorted path list to ensure high performance even for 100,000+ repository records.
+/// Uses O(1) keyed lookups for insertions and consumed-CID checks, plus a forward cursor
+/// over a lazily sorted path list to ensure high performance even for 100,000+ records.
 actor InMemorySpaceRecoveryIndex: SpaceCARRecoveryIndex {
     private var seenPaths = Set<String>()
     private var entriesByPath: [String: SpaceCARRecoveryIndexEntry] = [:]
-    private var pathsByCID: [CID: [String]] = [:]
     private var consumedPaths = Set<String>()
+    private var consumedCIDs = Set<CID>()
     private var sortedPaths: [String]? = nil
     private var cursor: Int = 0
     private(set) var ltHash = LtHash()
@@ -341,14 +341,13 @@ actor InMemorySpaceRecoveryIndex: SpaceCARRecoveryIndex {
             throw SpaceCARStreamingError.duplicateIndexEntry
         }
         entriesByPath[entry.path] = entry
-        pathsByCID[entry.cid, default: []].append(entry.path)
         ltHash.add(element: "\(entry.path)/\(entry.cid.string)")
         sortedPaths = nil
     }
 
-    func nextUnconsumedLexicographicEntry() -> SpaceCARRecoveryIndexEntry? {
+    func nextUnconsumedCanonicalEntry() -> SpaceCARRecoveryIndexEntry? {
         if sortedPaths == nil {
-            sortedPaths = entriesByPath.keys.sorted { $0.utf8.lexicographicallyPrecedes($1.utf8) }
+            sortedPaths = entriesByPath.keys.sorted(by: SpaceCARCodec.canonicalRecordPathPrecedes)
             cursor = 0
         }
         guard let sorted = sortedPaths else { return nil }
@@ -362,20 +361,18 @@ actor InMemorySpaceRecoveryIndex: SpaceCARRecoveryIndex {
         return nil
     }
 
-    func consumeEntries(forCID cid: CID) throws -> Int {
-        guard let paths = pathsByCID[cid] else {
+    func hasConsumedCID(_ cid: CID) -> Bool {
+        consumedCIDs.contains(cid)
+    }
+
+    func consumeEntry(_ entry: SpaceCARRecoveryIndexEntry) throws {
+        guard nextUnconsumedCanonicalEntry() == entry,
+              consumedPaths.insert(entry.path).inserted
+        else {
             throw SpaceCARStreamingError.invalidRecordOrder
         }
-        var count = 0
-        for path in paths {
-            if consumedPaths.insert(path).inserted {
-                count += 1
-            }
-        }
-        guard count > 0 else {
-            throw SpaceCARStreamingError.invalidRecordOrder
-        }
-        return count
+        consumedCIDs.insert(entry.cid)
+        cursor += 1
     }
 }
 

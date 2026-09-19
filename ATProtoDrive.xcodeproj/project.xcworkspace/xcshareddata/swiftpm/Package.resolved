@@ -20,15 +20,6 @@
       }
     },
     {
-      "identity" : "cryptoswift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/krzyzanowskim/CryptoSwift.git",
-      "state" : {
-        "revision" : "e45a26384239e028ec87fbcc788f513b67e10d8f",
-        "version" : "1.9.0"
-      }
-    },
-    {
       "identity" : "hummingbird",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/hummingbird-project/hummingbird.git",
@@ -44,15 +35,6 @@
       "state" : {
         "revision" : "89c66b8d6655209268c44f619afcf771d8d83ec9",
         "version" : "2.7.0"
-      }
-    },
-    {
-      "identity" : "jose-swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/beatt83/jose-swift.git",
-      "state" : {
-        "revision" : "b7d3ef55660fefd045641293bc95d4cdc07a15d8",
-        "version" : "6.0.4"
       }
     },
     {
@@ -299,21 +281,21 @@
       }
     },
     {
-      "identity" : "swift-zlib",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/beatt83/swift-zlib.git",
-      "state" : {
-        "revision" : "8cf51bfdf81c46702dac496d16397d92ac392532",
-        "version" : "1.0.2"
-      }
-    },
-    {
       "identity" : "swiftcbor",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/valpackett/SwiftCBOR.git",
       "state" : {
         "revision" : "fd929a6d8f7651ce0f63fc99397fd5762358cc29",
         "version" : "0.6.0"
+      }
+    },
+    {
+      "identity" : "zstd",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/facebook/zstd.git",
+      "state" : {
+        "revision" : "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+        "version" : "1.5.7"
       }
     }
   ],

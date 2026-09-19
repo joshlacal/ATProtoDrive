@@ -472,12 +472,15 @@ public final class SpaceDetailModel {
             recordKey = nil
         }
 
-        let policyUnion: ComAtprotoSimplespaceCreateSpace.InputPolicyUnion
+        let readPolicy: ComAtprotoSimplespaceCreateSpace.InputReadPolicyUnion
+        let writePolicy: ComAtprotoSimplespaceCreateSpace.InputWritePolicyUnion
         switch policy {
         case .memberList:
-            policyUnion = .comAtprotoSimplespaceDefsMemberListPolicy(ComAtprotoSimplespaceDefs.MemberListPolicy())
+            readPolicy = .comAtprotoSimplespaceDefsMemberListPolicy(ComAtprotoSimplespaceDefs.MemberListPolicy())
+            writePolicy = .comAtprotoSimplespaceDefsMemberListPolicy(ComAtprotoSimplespaceDefs.MemberListPolicy())
         case .public:
-            policyUnion = .comAtprotoSimplespaceDefsPublicPolicy(ComAtprotoSimplespaceDefs.PublicPolicy())
+            readPolicy = .comAtprotoSimplespaceDefsPublicPolicy(ComAtprotoSimplespaceDefs.PublicPolicy())
+            writePolicy = .comAtprotoSimplespaceDefsPublicPolicy(ComAtprotoSimplespaceDefs.PublicPolicy())
         }
 
         let appAccessUnion: ComAtprotoSimplespaceCreateSpace.InputAppAccessUnion = .comAtprotoSimplespaceDefsOpen(ComAtprotoSimplespaceDefs.Open())
@@ -485,7 +488,8 @@ public final class SpaceDetailModel {
         return ComAtprotoSimplespaceCreateSpace.Input(
             type: nsid,
             skey: recordKey,
-            policy: policyUnion,
+            readPolicy: readPolicy,
+            writePolicy: writePolicy,
             appAccess: appAccessUnion
         )
     }
@@ -516,7 +520,7 @@ public final class SpaceDetailModel {
         space: SpaceItem,
         account: AccountStore.Account,
         resolveHandle: (@Sendable (_ handle: String) async throws -> String)? = nil,
-        transport: (@Sendable (_ input: ComAtprotoSimplespaceAddMember.Input) async throws -> Int)? = nil,
+        transport: (@Sendable (_ input: ComAtprotoSimplespacePutMember.Input) async throws -> Int)? = nil,
         fetchRepos: (@Sendable () async throws -> [RepoEntry])? = nil,
         listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?))? = nil
     ) async throws {
@@ -524,9 +528,9 @@ public final class SpaceDetailModel {
             try await account.client.resolveHandleToDID(handle: handle)
         }
         let did = try await Self.resolveIdentifierToDID(identifier, resolveHandle: resolver)
-        let input = ComAtprotoSimplespaceAddMember.Input(space: space.ref, did: did)
+        let input = ComAtprotoSimplespacePutMember.Input(space: space.ref, did: did, read: true, write: true)
         let execute = transport ?? { input in
-            try await account.client.com.atproto.simplespace.addMember(input: input)
+            try await account.client.com.atproto.simplespace.putMember(input: input)
         }
         let responseCode = try await execute(input)
         guard (200...299).contains(responseCode) else {

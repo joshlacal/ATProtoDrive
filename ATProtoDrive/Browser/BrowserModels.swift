@@ -51,13 +51,23 @@ public struct OpenedRepositorySummary: Identifiable, Hashable, Codable, Sendable
     }
 }
 
+public enum RepositoryBrowserDestination: String, Hashable, Sendable, Codable {
+    case records, files
+}
+
 public struct BrowserPath: Hashable, Sendable, Codable {
     public let source: BrowserSource
     public var components: [ResourceReference]
+    public var repositoryDestination: RepositoryBrowserDestination
 
-    public init(source: BrowserSource, components: [ResourceReference] = []) {
+    public init(
+        source: BrowserSource,
+        components: [ResourceReference] = [],
+        repositoryDestination: RepositoryBrowserDestination = .records
+    ) {
         self.source = source
         self.components = components
+        self.repositoryDestination = repositoryDestination
     }
 }
 

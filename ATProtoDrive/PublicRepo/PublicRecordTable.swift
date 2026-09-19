@@ -502,6 +502,7 @@ public struct PublicRecordTable: View {
         case .kind(let v): "kind:\(v)"
         case .mimeType(let v): "mime:\(v)"
         case .transferState(let v): "state:\(v)"
+        case .verification(let v): "verification:\(v)"
         }
     }
 }

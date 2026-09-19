@@ -56,6 +56,26 @@ public actor BlobReferenceIndex {
         occurrencesByBlob.mapValues(Array.init)
     }
 
+    /// Replaces one repository scope as a single actor-isolated mutation.
+    /// Callers can build and validate a complete scan off to the side before publishing it.
+    public func replace(
+        scope: RepositoryScope,
+        with occurrences: [BlobReferenceOccurrence]
+    ) throws {
+        guard occurrences.allSatisfy({ $0.blob.scope == scope && $0.record.scope == scope }) else {
+            throw BrowserFailure.identityMismatch(expected: scope.stableID, actual: "mixed reference scope")
+        }
+        try Task.checkCancellation()
+        let records = blobsByRecord.keys.filter { $0.scope == scope }
+        for record in records { removeRecord(key: record) }
+
+        for occurrence in occurrences {
+            let recordKey = RecordReferenceKey(scope: scope, uri: occurrence.record.uri)
+            occurrencesByBlob[occurrence.blob, default: []].insert(occurrence)
+            blobsByRecord[recordKey, default: []].insert(occurrence.blob)
+        }
+    }
+
     public func removeSpace(spaceURI: String, accountDID: String) {
         let matchingRecords = blobsByRecord.keys.filter { key in
             guard case .permissionedSpace(let candidateSpace, _, let candidateAccount) = key.scope else {

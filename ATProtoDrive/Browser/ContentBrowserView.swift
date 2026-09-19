@@ -133,6 +133,9 @@ public struct ContentBrowserView: View {
     }
 
     private var currentRefreshAction: BrowserRefreshAction? {
+        if session.path?.repositoryDestination == .files, let store = publicRepositoryStore.blobStore() {
+            return BrowserRefreshAction { await store.reload() }
+        }
         if let path = session.path, path.components.count >= 2,
            case .collection(_, let collection) = path.components[1],
            let recordStore = publicRepositoryStore.recordStore(for: collection) {
@@ -155,10 +158,10 @@ public struct ContentBrowserView: View {
                     switch destination {
                     case .spaces:
                         LegacySpacesCompatibilityView(accountDID: did)
-                    case .publicRecords:
+                    case .publicRecords, .publicBlobs:
                         repositoryContentView(
                             for: .connectedAccount(did: did),
-                            selectedSource: .account(did: did, destination: .publicRecords)
+                            selectedSource: .account(did: did, destination: destination)
                         )
                     default:
                         ContentUnavailableView(
@@ -268,8 +271,46 @@ public struct ContentBrowserView: View {
         for target: RepositoryTarget,
         selectedSource: BrowserSource
     ) -> some View {
+        VStack(spacing: 0) {
+            if let repository = publicRepositoryStore.state.snapshot?.repository {
+                repositoryDestinationPicker(repository: repository)
+            }
+            repositoryDetail
+        }
+        .task(id: selectedSource) {
+            if publicRepositoryStore.state.snapshot == nil || session.path?.source != selectedSource {
+                await PublicRepositoryOpenCoordinator.open(
+                    target,
+                    store: publicRepositoryStore,
+                    session: session,
+                    recents: recentRepositoryStore,
+                    selectedSource: selectedSource
+                )
+                if case .account(_, .publicBlobs) = selectedSource,
+                   let repository = publicRepositoryStore.state.snapshot?.repository,
+                   session.selectedSource == selectedSource {
+                    session.navigate(to: BrowserPath(
+                        source: selectedSource,
+                        components: [.repository(repository.scope)],
+                        repositoryDestination: .files
+                    ))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var repositoryDetail: some View {
         Group {
-            if let path = session.path, path.components.count >= 2,
+            if session.path?.repositoryDestination == .files,
+               let store = publicRepositoryStore.blobStore() {
+                BlobBrowserView(store: store, session: session)
+                    .id(store.repository.scope)
+                    .task(id: store.repository.scope) {
+                        if case .idle = store.loadState { await store.reload() }
+                    }
+                    .onDisappear { store.cancelReferenceScan() }
+            } else if let path = session.path, path.components.count >= 2,
                case .collection(_, let collection) = path.components[1] {
                 if let recordStore = publicRepositoryStore.recordStore(for: collection) {
                     BrowserTableShell(state: recordStore.state, retry: {
@@ -303,16 +344,38 @@ public struct ContentBrowserView: View {
                 PublicRepositoryView(session: session, store: publicRepositoryStore)
             }
         }
-        .task(id: target) {
-            if publicRepositoryStore.state.snapshot == nil || session.path?.source != selectedSource {
-                await PublicRepositoryOpenCoordinator.open(
-                    target,
-                    store: publicRepositoryStore,
-                    session: session,
-                    recents: recentRepositoryStore,
-                    selectedSource: selectedSource
-                )
+    }
+
+    private func repositoryDestinationPicker(repository: ResolvedRepository) -> some View {
+        HStack {
+            Label(repository.handle ?? repository.did, systemImage: "externaldrive.connected.to.line.below")
+                .font(.headline)
+                .lineLimit(1)
+            Spacer()
+            Picker("Repository content", selection: Binding(
+                get: { session.path?.repositoryDestination ?? .records },
+                set: { destination in
+                    guard let currentSource = session.selectedSource else { return }
+                    let source: BrowserSource
+                    if case .account(let did, _) = currentSource {
+                        source = .account(did: did, destination: destination == .files ? .publicBlobs : .publicRecords)
+                    } else { source = currentSource }
+                    session.navigate(to: BrowserPath(
+                        source: source,
+                        components: [.repository(repository.scope)],
+                        repositoryDestination: destination
+                    ))
+                }
+            )) {
+                Text("Records").tag(RepositoryBrowserDestination.records)
+                Text("Public Files").tag(RepositoryBrowserDestination.files)
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 220)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.bar)
     }
 }

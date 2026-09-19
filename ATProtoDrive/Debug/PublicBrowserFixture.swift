@@ -14,6 +14,11 @@ public enum FixtureReadiness: Equatable, Sendable {
 
 public enum PublicBrowserFixture {
     public static let did = "did:plc:4hqjfn7m6n5hno3doamuhgef"
+    public static let blobCIDs = [
+        "bafkreia5it24rzqq7qa26p3asvp23gvbk5rfvckl65hnj4gj62aa3lomvy",
+        "bafkreibm6jg3ux5qumhcn2n3a5e7xi66rcogxyqa4nnai4odzqgxap6nii",
+        "bafkreidj7vpdsxgxpjtpptvjvyueqwwcsic6pikpnmq3pr3pkbrp3fex5m"
+    ]
     public static let accounts: [SidebarAccountSummary] = []
 
     @MainActor
@@ -151,14 +156,39 @@ private extension RecordRow {
             "third": "bafyreid7qjxf7f4pszgnjj6x7v7dcxpehbxvqfxvlazmnhp26g5qbgzxqe",
             "unknown": "bafyreiblkecirw3zwuqmm7hru77pgxzn2wexvi2kkqbpicrqrqhri7ne2u"
         ]
+        let blobIndex = ["first": 0, "second": 1, "third": 0, "unknown": 2][rkey] ?? 0
+        let mime = ["image/jpeg", "video/mp4", "application/pdf"][blobIndex]
+        let size = [245760, 5242880, 98304][blobIndex]
+        let blobCID = PublicBrowserFixture.blobCIDs[blobIndex]
+        let blobJSON = "{\"$type\":\"blob\",\"ref\":{\"$link\":\"\(blobCID)\"},\"mimeType\":\"\(mime)\",\"size\":\(size)}"
         return .init(
             uri: "at://\(repository.did)/\(collection)/\(rkey)",
             collection: collection,
             rkey: rkey,
             cid: cidByKey[rkey] ?? "bafyreifxe4xz3d6bcj47ctgoq7tnifjzrcqsnfcqghzcte7pfssbhzuoee",
-            json: "{\n  \"$type\": \"\(type)\",\n  \"name\": \"\(rkey.capitalized)\"\n}",
+            json: "{\n  \"$type\": \"\(type)\",\n  \"name\": \"\(rkey.capitalized)\",\n  \"attachment\": \(blobJSON)\n}",
+            blobEntries: [.init(cid: blobCID, mimeType: mime, size: size)],
             origin: .publicRepository(did: repository.did)
         )
+    }
+}
+
+public actor FixturePublicBlobService: PublicBlobServing {
+    public init() {}
+
+    public func listBlobs(in repository: ResolvedRepository, cursor: String?, limit: Int) async throws -> BlobCIDPage {
+        guard repository.did == PublicBrowserFixture.did,
+              repository.pdsURL == URL(string: "https://fixture.invalid") else {
+            throw BrowserFailure.unsupported("Only the fixture repository is available in demo mode.")
+        }
+        switch cursor {
+        case nil:
+            return .init(cids: Array(PublicBrowserFixture.blobCIDs.prefix(2)), cursor: "files-page-2+/=")
+        case "files-page-2+/=":
+            return .init(cids: Array(PublicBrowserFixture.blobCIDs.suffix(2)))
+        default:
+            throw BrowserFailure.invalidIdentifier(cursor ?? "")
+        }
     }
 }
 #endif

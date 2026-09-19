@@ -238,22 +238,52 @@ struct RepoVerifierTests {
             try await recoveryIndex.insert(entry)
         }
 
-        // Sequentially inspect and consume each of the 3,000 distinct CIDs
+        // Sequentially inspect and consume each of the 3,000 canonical entries.
         for expectedEntry in entries {
-            let next = await recoveryIndex.nextUnconsumedLexicographicEntry()
+            let next = try await recoveryIndex.nextUnconsumedCanonicalEntry()
             #expect(next?.path == expectedEntry.path)
             #expect(next?.cid == expectedEntry.cid)
-            let consumed = try await recoveryIndex.consumeEntries(forCID: expectedEntry.cid)
-            #expect(consumed == 1)
+            #expect(try await recoveryIndex.hasConsumedCID(expectedEntry.cid) == false)
+            try await recoveryIndex.consumeEntry(expectedEntry)
+            #expect(try await recoveryIndex.hasConsumedCID(expectedEntry.cid) == true)
         }
 
-        let afterConsume = await recoveryIndex.nextUnconsumedLexicographicEntry()
+        let afterConsume = try await recoveryIndex.nextUnconsumedCanonicalEntry()
         #expect(afterConsume == nil)
 
         let elapsedTime = ContinuousClock.now - startTime
         // 3,000 distinct insertions + 3,000 distinct lookups + 3,000 distinct consumptions
         // In linear time this takes ~0.05s; quadratic would take >10s and fail this bound
         #expect(elapsedTime < .milliseconds(500))
+    }
+
+    @Test("InMemorySpaceRecoveryIndex uses DAG-CBOR path order and consumes shared-CID paths individually")
+    func testRecoveryIndexCanonicalOrderAndSharedCIDConsumption() async throws {
+        let sharedCID = CID.fromDAGCBOR(Data([0xa1, 0x61, 0x61, 0x01]))
+        let distinctCID = CID.fromDAGCBOR(Data([0xa1, 0x61, 0x62, 0x02]))
+        let recoveryIndex = InMemorySpaceRecoveryIndex()
+        let longerShared = SpaceCARRecoveryIndexEntry(path: "aa", cid: sharedCID)
+        let laterSameLength = SpaceCARRecoveryIndexEntry(path: "z", cid: distinctCID)
+        let shorterShared = SpaceCARRecoveryIndexEntry(path: "b", cid: sharedCID)
+
+        try await recoveryIndex.insert(longerShared)
+        try await recoveryIndex.insert(laterSameLength)
+        try await recoveryIndex.insert(shorterShared)
+
+        #expect(try await recoveryIndex.nextUnconsumedCanonicalEntry() == shorterShared)
+        #expect(try await recoveryIndex.hasConsumedCID(sharedCID) == false)
+        try await recoveryIndex.consumeEntry(shorterShared)
+        #expect(try await recoveryIndex.hasConsumedCID(sharedCID) == true)
+
+        #expect(try await recoveryIndex.nextUnconsumedCanonicalEntry() == laterSameLength)
+        await #expect(throws: SpaceCARStreamingError.invalidRecordOrder) {
+            try await recoveryIndex.consumeEntry(longerShared)
+        }
+        try await recoveryIndex.consumeEntry(laterSameLength)
+
+        #expect(try await recoveryIndex.nextUnconsumedCanonicalEntry() == longerShared)
+        try await recoveryIndex.consumeEntry(longerShared)
+        #expect(try await recoveryIndex.nextUnconsumedCanonicalEntry() == nil)
     }
 
     // MARK: - Public Key Format Support (P-256 and secp256k1)

@@ -305,11 +305,11 @@ struct SpaceDetailModelTests {
 
         let page1 = ComAtprotoSimplespaceListMembers.Output(
             cursor: "member_cursor_2",
-            members: [ComAtprotoSimplespaceListMembers.Member(did: did1)]
+            members: [ComAtprotoSimplespaceListMembers.Member(did: did1, read: true, write: true)]
         )
         let page2 = ComAtprotoSimplespaceListMembers.Output(
             cursor: nil,
-            members: [ComAtprotoSimplespaceListMembers.Member(did: did2)]
+            members: [ComAtprotoSimplespaceListMembers.Member(did: did2, read: true, write: true)]
         )
 
         let tracker = TestCallTracker()
@@ -335,7 +335,7 @@ struct SpaceDetailModelTests {
         let did = try DID(didString: "did:plc:member1")
         let loopingPage = ComAtprotoSimplespaceListMembers.Output(
             cursor: "member_loop_cursor",
-            members: [ComAtprotoSimplespaceListMembers.Member(did: did)]
+            members: [ComAtprotoSimplespaceListMembers.Member(did: did, read: true, write: true)]
         )
 
         let tracker = TestCallTracker()

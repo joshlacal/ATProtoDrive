@@ -118,7 +118,7 @@ public enum DriveSidebarProjection {
         case .publicRecords:
             ("Public Records", "doc.text")
         case .publicBlobs:
-            ("Public Blobs", "photo")
+            ("Public Files", "doc.on.doc")
         case .spaces:
             ("Spaces", "square.stack.3d.up")
         case .privateAppState:

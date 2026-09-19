@@ -14,17 +14,22 @@ public final class PublicRepositoryStore {
     public var cachedCollectionCount: Int { recordStores.count }
 
     private let service: any PublicRepositoryServing
+    private let blobService: any PublicBlobServing
+    private var blobStores: [RepositoryScope: BlobInventoryStore] = [:]
     private var recordStores: [String: PublicRecordStore] = [:]
     private var generation: UInt64 = 0
     private var activeLoad: Task<LoadOutcome, Never>?
 
-    public init(service: any PublicRepositoryServing) {
+    public init(service: any PublicRepositoryServing, blobService: any PublicBlobServing = PublicBlobService()) {
         self.service = service
+        self.blobService = blobService
     }
 
     public func open(target newTarget: RepositoryTarget) async {
         let changed = target != newTarget
         if changed {
+            for store in blobStores.values { store.cancelReferenceScan() }
+            blobStores.removeAll()
             target = newTarget
             recordStores.removeAll()
             state = .idle
@@ -99,5 +104,14 @@ public final class PublicRepositoryStore {
         return recordStores[key]?.rows.first {
             $0.uri == locator.uri && $0.cid == locator.cid
         }
+    }
+
+    public func blobStore(for scope: RepositoryScope? = nil) -> BlobInventoryStore? {
+        guard let repository = state.snapshot?.repository,
+              scope == nil || scope == repository.scope else { return nil }
+        if let existing = blobStores[repository.scope] { return existing }
+        let store = BlobInventoryStore(repository: repository, blobService: blobService, recordService: service)
+        blobStores[repository.scope] = store
+        return store
     }
 }

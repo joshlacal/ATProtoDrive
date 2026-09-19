@@ -9,6 +9,7 @@ public enum SearchToken: Hashable, Sendable, Identifiable {
     case kind(String)
     case mimeType(String)
     case transferState(String)
+    case verification(String)
 
     public var id: String {
         switch self {
@@ -20,12 +21,14 @@ public enum SearchToken: Hashable, Sendable, Identifiable {
         case .kind(let v): "kind:\(v)"
         case .mimeType(let v): "mime:\(v)"
         case .transferState(let v): "state:\(v)"
+        case .verification(let v): "verification:\(v)"
         }
     }
 }
 
 public enum SearchSurface: Hashable, Sendable {
     case publicRecord
+    case publicBlob
 }
 
 public struct SearchQuery: Hashable, Sendable {
@@ -50,7 +53,22 @@ public struct SearchQuery: Hashable, Sendable {
                     return value.caseInsensitiveCompare("record") != .orderedSame
                 case .account:
                     return false
-                case .space, .mimeType, .transferState:
+                case .space, .mimeType, .transferState, .verification:
+                    return true
+                }
+            }
+        case .publicBlob:
+            return tokens.filter { token in
+                switch token {
+                case .source(let value):
+                    return value.caseInsensitiveCompare("public") != .orderedSame
+                case .kind(let value):
+                    return value.caseInsensitiveCompare("file") != .orderedSame
+                case .owner, .mimeType:
+                    return false
+                case .verification(let value):
+                    return value.caseInsensitiveCompare("not-verified") != .orderedSame
+                case .account, .space, .collection, .transferState:
                     return true
                 }
             }
@@ -83,7 +101,33 @@ public extension SearchQuery {
                 return value.caseInsensitiveCompare("record") == .orderedSame
             case .account(let value):
                 return repository?.connectedAccountDID?.caseInsensitiveCompare(value) == .orderedSame
-            case .space, .mimeType, .transferState:
+            case .space, .mimeType, .transferState, .verification:
+                return false
+            }
+        }
+    }
+
+    func matches(blob: BlobDescriptor) -> Bool {
+        guard unsupportedTokens(for: .publicBlob).isEmpty else { return false }
+        let needle = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let textMatches = needle.isEmpty || [
+            blob.locator.cid, blob.suggestedFilename, blob.displayMIMEType, blob.ownerDID
+        ].contains { $0.lowercased().contains(needle) }
+        guard textMatches else { return false }
+        return tokens.allSatisfy { token in
+            switch token {
+            case .source(let value):
+                return value.caseInsensitiveCompare("public") == .orderedSame
+            case .owner(let value):
+                return blob.ownerDID.caseInsensitiveCompare(value) == .orderedSame
+            case .mimeType(let value):
+                return blob.mimeType?.caseInsensitiveCompare(value) == .orderedSame
+            case .kind(let value):
+                return value.caseInsensitiveCompare("file") == .orderedSame
+            case .verification(let value):
+                return value.caseInsensitiveCompare("not-verified") == .orderedSame
+                    && blob.verification == .notVerified
+            case .account, .space, .collection, .transferState:
                 return false
             }
         }
@@ -128,7 +172,8 @@ public enum SearchQueryParser {
             ("collection:", { .collection($0) }),
             ("kind:", { .kind($0) }),
             ("mime:", { .mimeType($0) }),
-            ("state:", { .transferState($0) })
+            ("state:", { .transferState($0) }),
+            ("verification:", { .verification($0) })
         ]
 
         for (prefix, makeToken) in prefixes {

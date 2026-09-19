@@ -69,6 +69,17 @@
 		C10000000000000000000023 /* BlobReferenceIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000013 /* BlobReferenceIndex.swift */; };
 		C10000000000000000000024 /* BlobFixtureSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000014 /* BlobFixtureSupport.swift */; };
 		C10000000000000000000025 /* BlobReferenceIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000015 /* BlobReferenceIndexTests.swift */; };
+		AAD78BD3A1349C0B14E7170F /* BlobInventoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4797A8060A9C8B9197378187 /* BlobInventoryStore.swift */; };
+		1C1110E707409A719D1A589F /* PublicBlobService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8760A3ABFF97C727C713922B /* PublicBlobService.swift */; };
+		72A66D261919148E8BF0A2F1 /* RecordInventoryScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D404B0B90C6D5EE5EA3B4AB5 /* RecordInventoryScanner.swift */; };
+		E9DC4EA9E87EEE78B68CE4E7 /* BlobInventoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02596E06C76235C65F1F9178 /* BlobInventoryStoreTests.swift */; };
+		CF5F5FD4DCB149C6E7D5AD46 /* BlobServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 007FED251AC7036B99443ECE /* BlobServiceTests.swift */; };
+		5106B0D75A55143A1E34D608 /* PublicFilesNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6243E96157C69A060DF68397 /* PublicFilesNavigationTests.swift */; };
+		4ECAA69630D6CEABEF75EF67 /* RecordInventoryScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABDE00ADC35159DF0F42E155 /* RecordInventoryScannerTests.swift */; };
+		617F8B54C334FD7C4F280F9D /* BlobBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8593B4EE2B39FA1FB61857C6 /* BlobBrowserView.swift */; };
+		44E8CCA03036E0A0BFB98730 /* BlobInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118B45487EC4F0D53E0F52C9 /* BlobInspectorView.swift */; };
+		3928F4B5520CB129204D2847 /* BlobTableProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF240E089BCBD466CB86CEE0 /* BlobTableProjection.swift */; };
+		0380A2C67E18EEC7AA7F9EA9 /* PublicFilesNavigationRaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A286521D48C1E45C4BED8907 /* PublicFilesNavigationRaceTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -146,6 +157,17 @@
 		C10000000000000000000013 /* BlobReferenceIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobReferenceIndex.swift; sourceTree = "<group>"; };
 		C10000000000000000000014 /* BlobFixtureSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobFixtureSupport.swift; sourceTree = "<group>"; };
 		C10000000000000000000015 /* BlobReferenceIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobReferenceIndexTests.swift; sourceTree = "<group>"; };
+		4797A8060A9C8B9197378187 /* BlobInventoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobInventoryStore.swift; sourceTree = "<group>"; };
+		8760A3ABFF97C727C713922B /* PublicBlobService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicBlobService.swift; sourceTree = "<group>"; };
+		D404B0B90C6D5EE5EA3B4AB5 /* RecordInventoryScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordInventoryScanner.swift; sourceTree = "<group>"; };
+		02596E06C76235C65F1F9178 /* BlobInventoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobInventoryStoreTests.swift; sourceTree = "<group>"; };
+		007FED251AC7036B99443ECE /* BlobServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobServiceTests.swift; sourceTree = "<group>"; };
+		6243E96157C69A060DF68397 /* PublicFilesNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicFilesNavigationTests.swift; sourceTree = "<group>"; };
+		ABDE00ADC35159DF0F42E155 /* RecordInventoryScannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordInventoryScannerTests.swift; sourceTree = "<group>"; };
+		8593B4EE2B39FA1FB61857C6 /* BlobBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobBrowserView.swift; sourceTree = "<group>"; };
+		118B45487EC4F0D53E0F52C9 /* BlobInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobInspectorView.swift; sourceTree = "<group>"; };
+		EF240E089BCBD466CB86CEE0 /* BlobTableProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobTableProjection.swift; sourceTree = "<group>"; };
+		A286521D48C1E45C4BED8907 /* PublicFilesNavigationRaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicFilesNavigationRaceTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -233,6 +255,11 @@
 		A10000000000000000000007 /* ATProtoDriveTests */ = {
 			isa = PBXGroup;
 			children = (
+				A286521D48C1E45C4BED8907 /* PublicFilesNavigationRaceTests.swift */,
+				ABDE00ADC35159DF0F42E155 /* RecordInventoryScannerTests.swift */,
+				6243E96157C69A060DF68397 /* PublicFilesNavigationTests.swift */,
+				007FED251AC7036B99443ECE /* BlobServiceTests.swift */,
+				02596E06C76235C65F1F9178 /* BlobInventoryStoreTests.swift */,
 				A10000000000000000000025 /* AccountStoreTests.swift */,
 				A10000000000000000000028 /* SpaceListModelTests.swift */,
 				A1000000000000000000002B /* SpaceDetailModelTests.swift */,
@@ -343,6 +370,12 @@
 		C10000000000000000000001 /* Blobs */ = {
 			isa = PBXGroup;
 			children = (
+				EF240E089BCBD466CB86CEE0 /* BlobTableProjection.swift */,
+				118B45487EC4F0D53E0F52C9 /* BlobInspectorView.swift */,
+				8593B4EE2B39FA1FB61857C6 /* BlobBrowserView.swift */,
+				D404B0B90C6D5EE5EA3B4AB5 /* RecordInventoryScanner.swift */,
+				8760A3ABFF97C727C713922B /* PublicBlobService.swift */,
+				4797A8060A9C8B9197378187 /* BlobInventoryStore.swift */,
 				C10000000000000000000011 /* BlobTypes.swift */,
 				C10000000000000000000012 /* BlobReferenceScanner.swift */,
 				C10000000000000000000013 /* BlobReferenceIndex.swift */,
@@ -470,6 +503,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3928F4B5520CB129204D2847 /* BlobTableProjection.swift in Sources */,
+				44E8CCA03036E0A0BFB98730 /* BlobInspectorView.swift in Sources */,
+				617F8B54C334FD7C4F280F9D /* BlobBrowserView.swift in Sources */,
+				72A66D261919148E8BF0A2F1 /* RecordInventoryScanner.swift in Sources */,
+				1C1110E707409A719D1A589F /* PublicBlobService.swift in Sources */,
+				AAD78BD3A1349C0B14E7170F /* BlobInventoryStore.swift in Sources */,
 				A10000000000000000000040 /* ATProtoDriveApp.swift in Sources */,
 				A10000000000000000000041 /* AccountStore.swift in Sources */,
 				A10000000000000000000042 /* AddAccountView.swift in Sources */,
@@ -518,6 +557,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0380A2C67E18EEC7AA7F9EA9 /* PublicFilesNavigationRaceTests.swift in Sources */,
+				4ECAA69630D6CEABEF75EF67 /* RecordInventoryScannerTests.swift in Sources */,
+				5106B0D75A55143A1E34D608 /* PublicFilesNavigationTests.swift in Sources */,
+				CF5F5FD4DCB149C6E7D5AD46 /* BlobServiceTests.swift in Sources */,
+				E9DC4EA9E87EEE78B68CE4E7 /* BlobInventoryStoreTests.swift in Sources */,
 				A10000000000000000000043 /* AccountStoreTests.swift in Sources */,
 				A10000000000000000000046 /* SpaceListModelTests.swift in Sources */,
 				A10000000000000000000049 /* SpaceDetailModelTests.swift in Sources */,

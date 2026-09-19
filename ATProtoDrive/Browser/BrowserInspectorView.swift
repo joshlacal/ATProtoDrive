@@ -41,21 +41,26 @@ public enum BrowserInspectorProjection {
 public struct BrowserInspectorView: View {
     public let references: [ResourceReference]
     public let primaryRecord: RecordRow?
+    public let referenceScanComplete: Bool
 
     public init(
         references: [ResourceReference] = [],
-        primaryRecord: RecordRow? = nil
+        primaryRecord: RecordRow? = nil,
+        referenceScanComplete: Bool = false
     ) {
         self.references = references
         self.primaryRecord = primaryRecord
+        self.referenceScanComplete = referenceScanComplete
     }
 
     public init(
         reference: ResourceReference?,
-        record: RecordRow? = nil
+        record: RecordRow? = nil,
+        referenceScanComplete: Bool = false
     ) {
         self.references = reference.map { [$0] } ?? []
         self.primaryRecord = record
+        self.referenceScanComplete = referenceScanComplete
     }
 
     public var body: some View {
@@ -206,7 +211,7 @@ public struct BrowserInspectorView: View {
                             .textSelection(.enabled)
                     }
                 }
-                Text("Blob index is incomplete")
+                Text(referenceScanComplete ? "Reference scan complete" : "Reference scan incomplete")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }

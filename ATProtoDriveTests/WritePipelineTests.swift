@@ -41,10 +41,16 @@ struct WritePipelineTests {
         #expect(input.type.description == "space.swan.drive")
         #expect(input.skey?.description == "self")
 
-        if case .comAtprotoSimplespaceDefsMemberListPolicy = input.policy {
+        if case .comAtprotoSimplespaceDefsMemberListPolicy = input.readPolicy {
             // expected
         } else {
-            Issue.record("Expected comAtprotoSimplespaceDefsMemberListPolicy")
+            Issue.record("Expected member-list read policy")
+        }
+
+        if case .comAtprotoSimplespaceDefsMemberListPolicy = input.writePolicy {
+            // expected
+        } else {
+            Issue.record("Expected member-list write policy")
         }
 
         if case .comAtprotoSimplespaceDefsOpen = input.appAccess {
@@ -65,10 +71,16 @@ struct WritePipelineTests {
         #expect(input.type.description == "space.swan.notes")
         #expect(input.skey == nil)
 
-        if case .comAtprotoSimplespaceDefsPublicPolicy = input.policy {
+        if case .comAtprotoSimplespaceDefsPublicPolicy = input.readPolicy {
             // expected
         } else {
-            Issue.record("Expected comAtprotoSimplespaceDefsPublicPolicy")
+            Issue.record("Expected public read policy")
+        }
+
+        if case .comAtprotoSimplespaceDefsPublicPolicy = input.writePolicy {
+            // expected
+        } else {
+            Issue.record("Expected public write policy")
         }
 
         if case .comAtprotoSimplespaceDefsOpen = input.appAccess {
@@ -174,11 +186,13 @@ struct WritePipelineTests {
                 await tracker.record(input)
                 #expect(input.space.uriString() == spaceItem.ref.uriString())
                 #expect(input.did.description == "did:plc:carol789")
+                #expect(input.read == true)
+                #expect(input.write == true)
                 return 200
             },
             fetchRepos: { [] },
             listMembersTransport: { cursor in
-                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:carol789"))]))
+                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:carol789"), read: true, write: true)]))
             }
         )
 
@@ -341,7 +355,7 @@ struct WritePipelineTests {
                 return (200, ComAtprotoSpaceCreateRecord.Output(uri: expectedURI, cid: expectedCID))
             },
             clientListRecords: { _ in (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [])) },
-            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.SignedCommit(ver: 1, hash: Bytes(data: Data([1])), ikm: Bytes(data: Data()), sig: Bytes(data: Data()), mac: Bytes(data: Data()), rev: try TID(tidString: "3l3vbfz2zsk22")))) }
+            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.SignedCommit(ver: 1, rev: try TID(tidString: "3l3vbfz2zsk22"), hash: Bytes(data: Data([1])), sig: Bytes(data: Data()), ikm: Bytes(data: Data()), mac: Bytes(data: Data())))) }
         )
 
         #expect(output.cid == expectedCID)
@@ -374,7 +388,7 @@ struct WritePipelineTests {
                 return (200, ComAtprotoSpacePutRecord.Output(uri: expectedURI, cid: expectedCID))
             },
             clientListRecords: { _ in (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [])) },
-            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.SignedCommit(ver: 1, hash: Bytes(data: Data([1])), ikm: Bytes(data: Data()), sig: Bytes(data: Data()), mac: Bytes(data: Data()), rev: try TID(tidString: "3l3vbfz2zsk22")))) }
+            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.SignedCommit(ver: 1, rev: try TID(tidString: "3l3vbfz2zsk22"), hash: Bytes(data: Data([1])), sig: Bytes(data: Data()), ikm: Bytes(data: Data()), mac: Bytes(data: Data())))) }
         )
 
         #expect(output.cid == expectedCID)
@@ -405,7 +419,7 @@ struct WritePipelineTests {
                 return (200, ComAtprotoSpaceDeleteRecord.Output())
             },
             clientListRecords: { _ in (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [])) },
-            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.SignedCommit(ver: 1, hash: Bytes(data: Data([1])), ikm: Bytes(data: Data()), sig: Bytes(data: Data()), mac: Bytes(data: Data()), rev: try TID(tidString: "3l3vbfz2zsk22")))) }
+            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.SignedCommit(ver: 1, rev: try TID(tidString: "3l3vbfz2zsk22"), hash: Bytes(data: Data([1])), sig: Bytes(data: Data()), ikm: Bytes(data: Data()), mac: Bytes(data: Data())))) }
         )
 
         let count = await tracker.callCount
@@ -734,11 +748,11 @@ struct WritePipelineTests {
 
         let signedCommit = ComAtprotoSpaceDefs.SignedCommit(
             ver: 1,
+            rev: try TID(tidString: "3l3vbfz2zsk22"),
             hash: Bytes(data: Data([1, 2, 3])),
-            ikm: Bytes(data: Data()),
             sig: Bytes(data: Data()),
-            mac: Bytes(data: Data()),
-            rev: try TID(tidString: "3l3vbfz2zsk22")
+            ikm: Bytes(data: Data()),
+            mac: Bytes(data: Data())
         )
 
         let createTracker = WriteTestCallTracker()
@@ -822,11 +836,11 @@ struct WritePipelineTests {
 
         let signedCommit = ComAtprotoSpaceDefs.SignedCommit(
             ver: 1,
+            rev: try TID(tidString: "3l3vbfz2zsk22"),
             hash: Bytes(data: Data([1, 2, 3])),
-            ikm: Bytes(data: Data()),
             sig: Bytes(data: Data()),
-            mac: Bytes(data: Data()),
-            rev: try TID(tidString: "3l3vbfz2zsk22")
+            ikm: Bytes(data: Data()),
+            mac: Bytes(data: Data())
         )
 
         let putTracker = WriteTestCallTracker()
@@ -901,11 +915,11 @@ struct WritePipelineTests {
 
         let signedCommit = ComAtprotoSpaceDefs.SignedCommit(
             ver: 1,
+            rev: try TID(tidString: "3l3vbfz2zsk22"),
             hash: Bytes(data: Data([1, 2, 3])),
-            ikm: Bytes(data: Data()),
             sig: Bytes(data: Data()),
-            mac: Bytes(data: Data()),
-            rev: try TID(tidString: "3l3vbfz2zsk22")
+            ikm: Bytes(data: Data()),
+            mac: Bytes(data: Data())
         )
 
         let deleteTracker = WriteTestCallTracker()
@@ -965,8 +979,8 @@ struct WritePipelineTests {
         let dummyAccount = await makeTestAccount()
         let model = SpaceDetailModel()
 
-        let m1 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:alice123"))
-        let m2 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:bob456"))
+        let m1 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:alice123"), read: true, write: true)
+        let m2 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:bob456"), read: true, write: true)
 
         let addTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
@@ -993,6 +1007,8 @@ struct WritePipelineTests {
             resolveHandle: nil,
             transport: { input in
                 await addTracker.record(input)
+                #expect(input.read == true)
+                #expect(input.write == true)
                 return 200
             },
             fetchRepos: { [] },
@@ -1016,8 +1032,8 @@ struct WritePipelineTests {
         let dummyAccount = await makeTestAccount()
         let model = SpaceDetailModel()
 
-        let m1 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:alice123"))
-        let m2 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:bob456"))
+        let m1 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:alice123"), read: true, write: true)
+        let m2 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:bob456"), read: true, write: true)
 
         let removeTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()

@@ -107,26 +107,35 @@ public final class BrowserSession {
     }
 
     public func navigate(to newPath: BrowserPath) {
+        guard path != newPath else { return }
         if let index = historyIndex, index < history.count - 1 {
             history = Array(history.prefix(upTo: index + 1))
         }
         history.append(newPath)
         historyIndex = history.count - 1
-        path = newPath
+        applyNavigation(newPath)
     }
 
     public func goBack() {
         guard canGoBack, let index = historyIndex else { return }
         let newIndex = index - 1
         historyIndex = newIndex
-        path = history[newIndex]
+        applyNavigation(history[newIndex])
     }
 
     public func goForward() {
         guard canGoForward, let index = historyIndex else { return }
         let newIndex = index + 1
         historyIndex = newIndex
-        path = history[newIndex]
+        applyNavigation(history[newIndex])
+    }
+
+    private func applyNavigation(_ newPath: BrowserPath) {
+        path = newPath
+        selectedSource = newPath.source
+        selectedItemIDs = []
+        selectedReferences = [:]
+        searchQuery = SearchQuery()
     }
 
     public func rememberOpenedRepository(_ summary: OpenedRepositorySummary) {

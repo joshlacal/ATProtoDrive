@@ -19,12 +19,14 @@ private struct BrowserSceneRoot: View {
 
     init(
         publicRepositoryService: any PublicRepositoryServing,
+        publicBlobService: any PublicBlobServing,
         recentRepositoryStore: RecentRepositoryStore,
         isFixtureMode: Bool = false
     ) {
         _session = State(initialValue: BrowserSession())
         _publicRepositoryStore = State(initialValue: PublicRepositoryStore(
-            service: publicRepositoryService
+            service: publicRepositoryService,
+            blobService: publicBlobService
         ))
         self.recentRepositoryStore = recentRepositoryStore
         self.isFixtureMode = isFixtureMode
@@ -96,6 +98,7 @@ private struct BrowserSceneRoot: View {
 struct ATProtoDriveApp: App {
     @State private var accountStore = AccountStore()
     private let publicRepositoryService: any PublicRepositoryServing
+    private let publicBlobService: any PublicBlobServing
     private let recentRepositoryStore: RecentRepositoryStore
     private let isFixtureMode: Bool
 
@@ -105,11 +108,13 @@ struct ATProtoDriveApp: App {
         self.isFixtureMode = fixtureMode
         if fixtureMode {
             self.publicRepositoryService = FixturePublicRepositoryService()
+            self.publicBlobService = FixturePublicBlobService()
             self.recentRepositoryStore = RecentRepositoryStore(
                 persistence: MemoryRecentRepositoryPersistence()
             )
         } else {
             self.publicRepositoryService = PublicRepositoryService()
+            self.publicBlobService = PublicBlobService()
             do {
                 self.recentRepositoryStore = RecentRepositoryStore(
                     persistence: try FileRecentRepositoryPersistence.live()
@@ -123,6 +128,7 @@ struct ATProtoDriveApp: App {
         #else
         self.isFixtureMode = false
         self.publicRepositoryService = PublicRepositoryService()
+        self.publicBlobService = PublicBlobService()
         do {
             self.recentRepositoryStore = RecentRepositoryStore(
                 persistence: try FileRecentRepositoryPersistence.live()
@@ -139,6 +145,7 @@ struct ATProtoDriveApp: App {
         WindowGroup {
             BrowserSceneRoot(
                 publicRepositoryService: publicRepositoryService,
+                publicBlobService: publicBlobService,
                 recentRepositoryStore: recentRepositoryStore,
                 isFixtureMode: isFixtureMode
             )

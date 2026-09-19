@@ -518,4 +518,121 @@ struct PublicBrowserPresentationTests {
         #expect(submitParsed.tokens == [.collection("app.bsky.feed.post")])
         #expect(submitParsed.text == "drive")
     }
+
+    @Test("public file search supports exact metadata tokens and fails closed")
+    func publicFileSearchTokens() {
+        let blob = BlobDescriptor(
+            locator: .fixturePublic(cid: "bafkreipng"),
+            mimeType: "image/png",
+            declaredSize: 2_048,
+            referenceCount: 3,
+            referenceIndexComplete: true,
+            availability: .unknown,
+            verification: .notVerified
+        )
+
+        let matching = SearchQueryParser.parse(
+            "bafk source:public owner:did:plc:alice mime:image/png kind:file verification:not-verified"
+        )
+        #expect(matching.unsupportedTokens(for: .publicBlob).isEmpty)
+        #expect(matching.matches(blob: blob))
+
+        let wrongMIME = SearchQuery(tokens: [.mimeType("image/jpeg")])
+        #expect(!wrongMIME.matches(blob: blob))
+
+        let unsupported = SearchQuery(tokens: [.collection("app.bsky.feed.post")])
+        #expect(unsupported.unsupportedTokens(for: .publicBlob) == [.collection("app.bsky.feed.post")])
+        #expect(!unsupported.matches(blob: blob))
+    }
+
+    @Test("public file projection labels inferred and unknown metadata honestly")
+    func publicFileProjectionLabels() {
+        let png = BlobDescriptor(
+            locator: .fixturePublic(cid: "bafkreipng"),
+            mimeType: "image/png",
+            declaredSize: 2_048,
+            referenceCount: 2,
+            referenceIndexComplete: false,
+            availability: .unknown,
+            verification: .notVerified
+        )
+        let unknown = BlobDescriptor(
+            locator: .fixturePublic(cid: "bafkreiunknown"),
+            referenceCount: 0,
+            referenceIndexComplete: true,
+            availability: .unknown,
+            verification: .notVerified
+        )
+
+        #expect(png.suggestedFilename == "bafkreipng.png")
+        #expect(png.displayMIMEType == "image/png")
+        #expect(png.ownerDID == "did:plc:alice")
+        #expect(png.dataPlaneLabel == "Public Repository")
+        #expect(png.verificationLabel == "Not Verified")
+        #expect(BlobTableItem(blob: png).referenceCountLabel == "2 found · scan incomplete")
+        #expect(unknown.suggestedFilename == "bafkreiunknown")
+        #expect(unknown.displayMIMEType == "Unknown")
+        #expect(BlobTableItem(blob: unknown).declaredSizeLabel == "Unknown")
+    }
+
+    @Test("public file sorting is stable for size and reference counts")
+    func publicFileSorting() {
+        func blob(_ cid: String, size: Int?, references: Int) -> BlobDescriptor {
+            BlobDescriptor(
+                locator: .fixturePublic(cid: cid),
+                mimeType: "application/octet-stream",
+                declaredSize: size,
+                referenceCount: references,
+                referenceIndexComplete: true,
+                availability: .unknown,
+                verification: .notVerified
+            )
+        }
+        let items = [
+            blob("cid-c", size: nil, references: 1),
+            blob("cid-b", size: 100, references: 5),
+            blob("cid-a", size: 100, references: 5),
+            blob("cid-d", size: 20, references: 9)
+        ].map(BlobTableItem.init)
+
+        #expect(items.sorted(by: BrowserSort(field: "size", ascending: true)).map(\.blob.locator.cid) == [
+            "cid-d", "cid-a", "cid-b", "cid-c"
+        ])
+        #expect(items.sorted(by: BrowserSort(field: "references", ascending: false)).map(\.blob.locator.cid) == [
+            "cid-d", "cid-a", "cid-b", "cid-c"
+        ])
+    }
+
+    @Test("public file qualified selection retains only visible blobs in its exact scope")
+    func publicFileQualifiedSelection() {
+        let first = BlobTableItem(blob: BlobDescriptor(
+            locator: .fixturePublic(cid: "cid-1"), referenceCount: 0,
+            referenceIndexComplete: false, availability: .unknown, verification: .notVerified
+        ))
+        let second = BlobTableItem(blob: BlobDescriptor(
+            locator: .fixturePublic(cid: "cid-2"), referenceCount: 0,
+            referenceIndexComplete: false, availability: .unknown, verification: .notVerified
+        ))
+        let foreign = ResourceReference.blob(.fixturePublic(did: "did:plc:bob", cid: "foreign"))
+        let current = [
+            first.id: first.reference,
+            second.id: second.reference,
+            foreign.stableID: foreign
+        ]
+
+        let filtered = BlobBrowserPresentation.updatedSelection(
+            currentSelectedReferences: current,
+            repositoryScope: first.blob.locator.scope,
+            visibleItems: [second],
+            newSelectedIDs: [second.id]
+        )
+        #expect(filtered == [second.reference])
+
+        let refreshed = BlobBrowserPresentation.prunedSelection(
+            currentSelectedReferences: Dictionary(uniqueKeysWithValues: filtered.map { ($0.stableID, $0) }),
+            repositoryScope: first.blob.locator.scope,
+            refreshedBlobs: [first.blob]
+        )
+        #expect(refreshed.isEmpty)
+    }
 }

@@ -33,11 +33,11 @@ struct RecordListModelPipelineTests {
 
         let signedCommit = ComAtprotoSpaceDefs.SignedCommit(
             ver: 1,
+            rev: try TID(tidString: "3l3vbfz2zsk22"),
             hash: Bytes(data: Data([1, 2, 3])),
-            ikm: Bytes(data: Data()),
             sig: Bytes(data: Data()),
-            mac: Bytes(data: Data()),
-            rev: try TID(tidString: "3l3vbfz2zsk22")
+            ikm: Bytes(data: Data()),
+            mac: Bytes(data: Data())
         )
 
         let (records, commit) = try await RecordListModel.loadRecordsPipeline(
@@ -99,11 +99,11 @@ struct RecordListModelPipelineTests {
 
         let signedCommit = ComAtprotoSpaceDefs.SignedCommit(
             ver: 1,
+            rev: try TID(tidString: "3l3vbfz2zsk23"),
             hash: Bytes(data: Data([4, 5, 6])),
-            ikm: Bytes(data: Data()),
             sig: Bytes(data: Data()),
-            mac: Bytes(data: Data()),
-            rev: try TID(tidString: "3l3vbfz2zsk23")
+            ikm: Bytes(data: Data()),
+            mac: Bytes(data: Data())
         )
         let commitOutputJSON = try JSONEncoder().encode(ComAtprotoSpaceGetLatestCommit.Output(commit: signedCommit))
         let recordsOutputJSON = try JSONEncoder().encode(ComAtprotoSpaceListRecords.Output(cursor: nil, records: [rec]))
