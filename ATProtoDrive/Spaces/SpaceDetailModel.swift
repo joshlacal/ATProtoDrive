@@ -173,8 +173,8 @@ public final class SpaceDetailModel {
         repos.map { repo in
             RepoEntry(
                 did: repo.did.description,
-                rev: repo.rev.description,
-                hash: repo.hash.data.base64EncodedString()
+                rev: repo.repoRev.description,
+                hash: repo.data.data.base64EncodedString()
             )
         }
     }
@@ -241,10 +241,8 @@ public final class SpaceDetailModel {
         let lowercasedMessage = message.lowercased()
         let lowercasedError = errorString.lowercased()
 
-        if errorString == "SpaceDeleted" ||
-            lowercasedError.contains("spacedeleted") ||
-            lowercasedMessage.contains("spacedeleted") ||
-            (lowercasedMessage.contains("space") && lowercasedMessage.contains("deleted")) {
+        if let xrpc = error as? ATProtoXRPCError,
+           xrpc.error == "SpaceDeleted", xrpc.statusCode == 400 {
             return .tombstone(message)
         }
 
@@ -392,6 +390,7 @@ public final class SpaceDetailModel {
     public func load(
         space: SpaceItem,
         account: AccountStore.Account,
+        authorityResolver: SpaceHostResolver? = nil,
         fetchRepos: (@Sendable () async throws -> [RepoEntry])? = nil,
         listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?))? = nil
     ) async {
@@ -403,7 +402,7 @@ public final class SpaceDetailModel {
         defer { isLoading = false }
 
         let reposFetchClosure: @Sendable () async throws -> [RepoEntry] = fetchRepos ?? {
-            let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: account.client))
+            let resolver = authorityResolver ?? SpaceHostResolver(didResolver: ClientDIDResolver(client: account.client))
             let endpoints = try await resolver.resolve(authorityDID: space.authorityDID)
             let spaceHost = endpoints.spaceHost
             return try await Self.fetchAllRepos { cursor in
@@ -486,7 +485,7 @@ public final class SpaceDetailModel {
         let appAccessUnion: ComAtprotoSimplespaceCreateSpace.InputAppAccessUnion = .comAtprotoSimplespaceDefsOpen(ComAtprotoSimplespaceDefs.Open())
 
         return ComAtprotoSimplespaceCreateSpace.Input(
-            type: nsid,
+            spaceType: nsid,
             skey: recordKey,
             readPolicy: readPolicy,
             writePolicy: writePolicy,
@@ -591,23 +590,19 @@ public final class SpaceDetailModel {
         return comps.url
     }
 
-    /// Pure verification pipeline for a repository CAR:
-    /// - Own repo (`repo.did == accountDID`): fetches CAR via `clientGetRepo`.
-    /// - Foreign repo (`repo.did != accountDID`): resolves author DID to PDS via `resolveDIDToPDS`, fetches CAR via `credentialGet`.
-    /// - Resolves author signing key from DID document via `resolveSigningKey`.
-    /// - Verifies CAR using `verifyCAR`.
+    /// Verify a STAR export from the owner's OAuth transport or Petrel's MAC-verified
+    /// credential transport. Foreign responses must pass SpaceCredentialManager.get
+    /// before entering this pipeline; all exports receive full archive/digest validation.
     nonisolated public static func verifyRepoPipeline(
         space: SpaceItem,
         repo: RepoEntry,
         accountDID: String,
         clientGetRepo: @Sendable (_ space: SpaceRef, _ repoDID: DID) async throws -> (responseCode: Int, data: ComAtprotoSpaceGetRepo.Output?),
         resolveDIDToPDS: @Sendable (_ did: String) async throws -> URL,
-        resolveSigningKey: @Sendable (_ did: String) async throws -> Data,
-        credentialGet: @Sendable (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data),
-        verifyCAR: (@Sendable (_ carData: Data, _ authorDID: String, _ space: SpaceRef, _ authorSigningKey: Data) async throws -> VerificationReport)? = nil
+        credentialGet: @Sendable (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data)
     ) async throws -> VerificationReport {
         let isOwnRepo = (repo.did == accountDID)
-        let carData: Data
+        let archiveData: Data
 
         if isOwnRepo {
             let repoDID = try DID(didString: repo.did)
@@ -619,7 +614,7 @@ public final class SpaceDetailModel {
                     statusCode: responseCode
                 )
             }
-            carData = data
+            archiveData = data
         } else {
             let pdsHost = try await resolveDIDToPDS(repo.did)
             guard let requestURL = makeGetRepoURL(pdsHost: pdsHost, space: space.ref, repoDID: repo.did) else {
@@ -636,14 +631,10 @@ public final class SpaceDetailModel {
                     statusCode: responseCode
                 )
             }
-            carData = data
+            archiveData = data
         }
 
-        let signingKey = try await resolveSigningKey(repo.did)
-        let verifier: @Sendable (Data, String, SpaceRef, Data) async throws -> VerificationReport = verifyCAR ?? { carData, authorDID, spaceRef, keyData in
-            try await RepoVerifier.verify(carData: carData, authorDID: authorDID, space: spaceRef, authorSigningKey: keyData)
-        }
-        return try await verifier(carData, repo.did, space.ref, signingKey)
+        return try RepoVerifier.verifySTAR(archive: archiveData, authorDID: repo.did, space: space.ref)
     }
 
     /// Verifies a specific repository and stores the resulting VerificationReport.
@@ -653,9 +644,7 @@ public final class SpaceDetailModel {
         account: AccountStore.Account,
         clientGetRepo: (@Sendable (_ space: SpaceRef, _ repoDID: DID) async throws -> (responseCode: Int, data: ComAtprotoSpaceGetRepo.Output?))? = nil,
         resolveDIDToPDS: (@Sendable (_ did: String) async throws -> URL)? = nil,
-        resolveSigningKey: (@Sendable (_ did: String) async throws -> Data)? = nil,
-        credentialGet: (@Sendable (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data))? = nil,
-        verifyCAR: (@Sendable (_ carData: Data, _ authorDID: String, _ space: SpaceRef, _ authorSigningKey: Data) async throws -> VerificationReport)? = nil
+        credentialGet: (@Sendable (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data))? = nil
     ) async throws -> VerificationReport {
         verifyingRepoDIDs.insert(repo.did)
         defer { verifyingRepoDIDs.remove(repo.did) }
@@ -671,10 +660,6 @@ public final class SpaceDetailModel {
             try await client.resolveDIDToPDSURL(did: did)
         }
 
-        let resolveKey: @Sendable (_ did: String) async throws -> Data = resolveSigningKey ?? { did in
-            let doc = try await SpaceHostResolver.fetchDIDDocument(for: did)
-            return try RepoVerifier.extractSigningKey(from: doc)
-        }
         let foreignGet: @Sendable (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data) = credentialGet ?? { url, spaceRef in
             let (data, response) = try await credentials.get(url: url, space: spaceRef)
             return (response.statusCode, data)
@@ -686,9 +671,7 @@ public final class SpaceDetailModel {
             accountDID: account.id,
             clientGetRepo: clientFetch,
             resolveDIDToPDS: resolvePDS,
-            resolveSigningKey: resolveKey,
-            credentialGet: foreignGet,
-            verifyCAR: verifyCAR
+            credentialGet: foreignGet
         )
 
         verificationReports[repo.did] = StoredVerification(targetRev: repo.rev, report: report)

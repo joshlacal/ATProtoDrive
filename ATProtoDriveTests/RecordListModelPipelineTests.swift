@@ -31,14 +31,7 @@ struct RecordListModelPipelineTests {
             value: nil
         )
 
-        let signedCommit = ComAtprotoSpaceDefs.SignedCommit(
-            ver: 1,
-            rev: try TID(tidString: "3l3vbfz2zsk22"),
-            hash: Bytes(data: Data([1, 2, 3])),
-            sig: Bytes(data: Data()),
-            ikm: Bytes(data: Data()),
-            mac: Bytes(data: Data())
-        )
+        let signedCommit = ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at://did:plc:alice123/space/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1, 2, 3])))
 
         let (records, commit) = try await RecordListModel.loadRecordsPipeline(
             space: spaceItem,
@@ -90,23 +83,10 @@ struct RecordListModelPipelineTests {
         let didResolverCalled = TestCallTracker()
         let credentialGetCalled = TestCallTracker()
 
-        let rec = ComAtprotoSpaceListRecords.Record(
-            collection: try NSID(nsidString: "app.bsky.feed.like"),
-            rkey: try RecordKey(keyString: "2"),
-            cid: try CID.parse("bafyreif7h6gxlc6kpxthfclr3vkqffn4yixoqmmqr7m2kq4xfacgjnlvhm"),
-            value: nil
+        let fixture = try TestSTARFixtureHelper.makeFixture(
+            authorDID: foreignRepo.did, spaceURI: spaceItem.ref.uriString()
         )
-
-        let signedCommit = ComAtprotoSpaceDefs.SignedCommit(
-            ver: 1,
-            rev: try TID(tidString: "3l3vbfz2zsk23"),
-            hash: Bytes(data: Data([4, 5, 6])),
-            sig: Bytes(data: Data()),
-            ikm: Bytes(data: Data()),
-            mac: Bytes(data: Data())
-        )
-        let commitOutputJSON = try JSONEncoder().encode(ComAtprotoSpaceGetLatestCommit.Output(commit: signedCommit))
-        let recordsOutputJSON = try JSONEncoder().encode(ComAtprotoSpaceListRecords.Output(cursor: nil, records: [rec]))
+        let verified = try SpaceSTAR.verify(archive: fixture.archive, space: fixture.spaceRef, repo: foreignRepo.did)
 
         let (records, commit) = try await RecordListModel.loadRecordsPipeline(
             space: spaceItem,
@@ -126,17 +106,15 @@ struct RecordListModelPipelineTests {
             },
             credentialGet: { url, _ in
                 await credentialGetCalled.record(cursor: url.absoluteString)
-                if url.path.contains("getLatestCommit") {
-                    return (200, commitOutputJSON)
-                } else {
-                    return (200, recordsOutputJSON)
-                }
+                #expect(url.path == "/xrpc/com.atproto.space.getRepo")
+                return (200, fixture.archive)
             }
         )
 
-        #expect(records.count == 1)
-        #expect(commit.rev == "3l3vbfz2zsk23")
-        #expect(commit.hash == Data([4, 5, 6]).base64EncodedString())
+        #expect(records.count == 2)
+        #expect(records.allSatisfy { $0.value != nil })
+        #expect(commit.rev == verified.revision)
+        #expect(commit.hash == verified.data.base64EncodedString())
 
         let clientRecCount = await clientRecordsCalled.count
         let clientComCount = await clientCommitCalled.count
@@ -146,10 +124,10 @@ struct RecordListModelPipelineTests {
         #expect(clientRecCount == 0)
         #expect(clientComCount == 0)
         #expect(didResCount == 1)
-        #expect(credGetCount == 2) // listRecords + getLatestCommit
+        #expect(credGetCount == 1) // One authenticated, complete snapshot
     }
 
-    @Test("Model load handles foreign commit non-2xx failure: sets errorState and leaves commit == nil")
+    @Test("Model load handles foreign archive non-2xx failure without partial publication")
     @MainActor
     func testForeignCommitRawErrorInModelLoad() async throws {
         let spaceItem = try SpaceItem(
@@ -165,13 +143,6 @@ struct RecordListModelPipelineTests {
         }
         """.data(using: .utf8)!
 
-        let rec = ComAtprotoSpaceListRecords.Record(
-            collection: try NSID(nsidString: "app.bsky.feed.like"),
-            rkey: try RecordKey(keyString: "2"),
-            cid: try CID.parse("bafyreif7h6gxlc6kpxthfclr3vkqffn4yixoqmmqr7m2kq4xfacgjnlvhm"),
-            value: nil
-        )
-        let recordsOutputJSON = try JSONEncoder().encode(ComAtprotoSpaceListRecords.Output(cursor: nil, records: [rec]))
 
         let model = RecordListModel()
         await model.load(
@@ -182,11 +153,8 @@ struct RecordListModelPipelineTests {
             clientGetLatestCommit: { (200, nil) },
             resolveDIDToPDS: { _ in URL(string: "https://bob.pds")! },
             credentialGet: { url, _ in
-                if url.path.contains("getLatestCommit") {
-                    return (404, errorJSON)
-                } else {
-                    return (200, recordsOutputJSON)
-                }
+                #expect(url.path == "/xrpc/com.atproto.space.getRepo")
+                return (404, errorJSON)
             }
         )
 
@@ -194,6 +162,29 @@ struct RecordListModelPipelineTests {
         #expect(model.rows.isEmpty)
         #expect(model.error == "RepoNotFound: Member repo does not exist")
         #expect(model.errorState == .repoNotFound("RepoNotFound: Member repo does not exist"))
+    }
+
+    @Test("A tampered foreign archive cannot publish records or a commit")
+    @MainActor
+    func testForeignArchiveRejectsPartialPublication() async throws {
+        let fixture = try TestSTARFixtureHelper.makeFixture(authorDID: "did:plc:bob456")
+        let space = try SpaceItem(uriString: fixture.spaceRef.uriString(), accountDID: "did:plc:alice123")
+        var corrupt = fixture.archive
+        corrupt[corrupt.count - 1] ^= 1
+        let response = corrupt
+        let model = RecordListModel()
+        await model.load(
+            space: space,
+            repo: RepoEntry(did: "did:plc:bob456", rev: TestCARFixtureHelper.revision, hash: "unused"),
+            accountDID: "did:plc:alice123",
+            clientListRecords: { _ in Issue.record("Unexpected owner transport"); return (200, nil) },
+            clientGetLatestCommit: { Issue.record("Unexpected owner transport"); return (200, nil) },
+            resolveDIDToPDS: { _ in URL(string: "https://bob.pds.example.com")! },
+            credentialGet: { _, _ in (200, response) }
+        )
+        #expect(model.rows.isEmpty)
+        #expect(model.commit == nil)
+        #expect(model.errorState != nil)
     }
 
     @Test("Model load handles own repo commit thrown error: sets errorState and leaves commit == nil")

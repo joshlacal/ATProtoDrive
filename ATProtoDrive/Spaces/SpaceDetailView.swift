@@ -427,7 +427,7 @@ public struct SpaceDetailView: View {
                 .padding(.vertical, 2)
                 .background(Color.green.opacity(0.12))
                 .clipShape(Capsule())
-                .help("CAR and LtHash verified successfully for revision \(report.rev)")
+                .help("Repository archive and digest verified successfully for revision \(report.rev)")
             case .signatureInvalid:
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -454,11 +454,11 @@ public struct SpaceDetailView: View {
                 .background(Color.red.opacity(0.12))
                 .clipShape(Capsule())
                 .help("Expected: \(expected)\nComputed: \(computed)")
-            case .malformedCAR(let errorMsg):
+            case .malformedArchive(let errorMsg):
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.circle.fill")
                         .foregroundStyle(.orange)
-                    Text("Malformed CAR")
+                    Text("Malformed archive")
                         .font(.caption2)
                         .foregroundStyle(.orange)
                 }

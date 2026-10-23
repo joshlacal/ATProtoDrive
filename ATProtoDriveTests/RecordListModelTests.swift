@@ -345,7 +345,12 @@ struct RecordListModelTests {
 
         let spaceErr = ATProtoXRPCError(error: "SpaceNotFound", message: "Deleted", statusCode: 404)
         let state2 = RecordListModel.classifyError(spaceErr)
-        #expect(state2 == .tombstone("SpaceNotFound: Deleted"))
+        #expect(state2 == .general("SpaceNotFound: Deleted"))
+
+        let deleted = ATProtoXRPCError(error: "SpaceDeleted", message: "Deleted", statusCode: 400)
+        #expect(RecordListModel.classifyError(deleted) == .tombstone("SpaceDeleted: Deleted"))
+        let unrelated = ATProtoXRPCError(error: "ServerError", message: "Space was deleted upstream", statusCode: 500)
+        #expect(RecordListModel.classifyError(unrelated) == .general("ServerError: Space was deleted upstream"))
 
         let tokenErr = ATProtoXRPCError(error: "InvalidDelegationToken", message: "Token rejected", statusCode: 401)
         let stateToken = RecordListModel.classifyError(tokenErr)

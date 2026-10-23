@@ -840,7 +840,7 @@
 		};
 		A10000000000000000000051 /* XCLocalSwiftPackageReference "../swan" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../swan;
+			relativePath = ../Swan;
 		};
 /* End XCLocalSwiftPackageReference section */
 

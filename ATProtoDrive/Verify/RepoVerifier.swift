@@ -16,7 +16,7 @@ public struct VerificationReport: Sendable, Equatable, CustomStringConvertible {
         case verified(recordCount: Int)
         case signatureInvalid
         case hashMismatch(expected: String, computed: String)
-        case malformedCAR(String)
+        case malformedArchive(String)
 
         public var description: String {
             switch self {
@@ -26,8 +26,8 @@ public struct VerificationReport: Sendable, Equatable, CustomStringConvertible {
                 return "signatureInvalid"
             case .hashMismatch(let expected, let computed):
                 return "hashMismatch(expected: \(expected), computed: \(computed))"
-            case .malformedCAR(let msg):
-                return "malformedCAR(\(msg))"
+            case .malformedArchive(let msg):
+                return "malformedArchive(\(msg))"
             }
         }
     }
@@ -104,6 +104,12 @@ public enum AuthorSigningKey: Sendable, Equatable {
 }
 
 public enum RepoVerifier {
+    /// Called only after owner OAuth or credential-response MAC authentication.
+    public static func verifySTAR(archive: Data, authorDID: String, space: SpaceRef) throws -> VerificationReport {
+        let verified = try SpaceSTAR.verify(archive: archive, space: space, repo: authorDID)
+        return VerificationReport(outcome: .verified(recordCount: verified.records.count), rev: verified.revision)
+    }
+
     /// Parses public key data in standard P-256 (ES256) or secp256k1 (ES256K) multicodec formats:
     /// - P-256: multicodec prefix `0x80 0x24` (35 bytes), compressed (33 bytes), uncompressed (65 bytes), raw (64 bytes), or DER
     /// - secp256k1: multicodec prefix `0xe7 0x01` (35 bytes), compressed (33 bytes), uncompressed (65 bytes)
@@ -151,7 +157,7 @@ public enum RepoVerifier {
         throw RepoVerifierError.invalidAuthorSigningKey
     }
 
-    /// Verifies a permissioned repository CAR file using SwanSpaces' streaming verification API.
+    /// Verifies a historical permissioned CAR archive. Live Spaces responses use verifySTAR.
     ///
     /// Delegates strictly to `SpaceCARCodec.verifyStreamingRecovery`:
     /// 1. Bounded memory recovery streaming via `SpaceCARRecoveryByteSource`.
@@ -213,7 +219,7 @@ public enum RepoVerifier {
                 )
             default:
                 return VerificationReport(
-                    outcome: .malformedCAR(String(describing: streamingError)),
+                    outcome: .malformedArchive(String(describing: streamingError)),
                     rev: rev
                 )
             }
@@ -223,13 +229,13 @@ public enum RepoVerifier {
             case .unauthorized:
                 return VerificationReport(outcome: .signatureInvalid, rev: rev)
             case .malformed(let reason):
-                return VerificationReport(outcome: .malformedCAR(reason), rev: rev)
+                return VerificationReport(outcome: .malformedArchive(reason), rev: rev)
             default:
-                return VerificationReport(outcome: .malformedCAR(swanError.localizedDescription), rev: rev)
+                return VerificationReport(outcome: .malformedArchive(swanError.localizedDescription), rev: rev)
             }
         } catch {
             let rev = extractRevision(from: carData, space: spaceURI, author: authorDID) ?? ""
-            return VerificationReport(outcome: .malformedCAR(error.localizedDescription), rev: rev)
+            return VerificationReport(outcome: .malformedArchive(error.localizedDescription), rev: rev)
         }
     }
 

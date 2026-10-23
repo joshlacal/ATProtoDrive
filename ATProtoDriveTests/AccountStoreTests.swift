@@ -157,15 +157,14 @@ struct AccountStoreTests {
     }
 
     @MainActor
-    @Test("beginLogin with josh.spaces-alpha.bsky.network mints consent URL successfully")
+    @Test("Live Spaces alpha consent requires a signed test host and explicit opt-in",
+          .enabled(if: ProcessInfo.processInfo.environment["ATPROTODRIVE_RUN_LIVE_OAUTH"] == "1"))
     func testLiveLoginSpacesAlpha() async throws {
         let store = AccountStore()
         let authURL = try await store.beginLogin(handle: "josh.spaces-alpha.bsky.network")
-        print("MINTED_AUTH_URL: \(authURL.absoluteString)")
         #expect(authURL.host?.contains("bsky") == true || authURL.host?.contains("spaces-alpha") == true || authURL.host?.contains("swan") == true)
         let components = URLComponents(url: authURL, resolvingAgainstBaseURL: false)
         let clientIdItem = components?.queryItems?.first(where: { $0.name == "client_id" })
-        print("MINTED_CLIENT_ID: \(String(describing: clientIdItem?.value))")
         #expect(clientIdItem?.value == AccountStore.publicClientId || clientIdItem?.value == AccountStore.cabClientId)
     }
 

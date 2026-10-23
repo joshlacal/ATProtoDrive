@@ -119,3 +119,33 @@ public enum TestCARFixtureHelper {
         )
     }
 }
+
+
+enum TestSTARFixtureHelper {
+    static func makeFixture(authorDID: String = TestCARFixtureHelper.authorDID, spaceURI: String = TestCARFixtureHelper.spaceRefString) throws -> (archive: Data, spaceRef: SpaceRef) {
+        let space = try SpaceRef(uriString: spaceURI)
+        let records = [("app.bsky.feed.post/one", "hello"), ("app.bsky.feed.post/two", "world")]
+        var digest = SpaceSetHash()
+        var frames: [Data] = []
+        for (path, text) in records {
+            let record = try DAGCBOR.encodeValue(["text": text])
+            digest.add(path: path, cid: CID.fromDAGCBOR(record).string)
+            frames.append(Data(path.utf8)); frames.append(record)
+        }
+        let metadata = try DAGCBOR.encodeValue([
+            "$type": "atproto-space-repo", "ver": 1, "space": space.uriString(),
+            "repo": authorDID, "rev": TestCARFixtureHelper.revision, "data": digest.digest
+        ] as [String: Any])
+        var archive = Data([0x2a, 0x6c, 1, 0])
+        for frame in [metadata] + frames {
+            var length = frame.count
+            repeat {
+                let byte = UInt8(length & 0x7f)
+                length >>= 7
+                archive.append(length > 0 ? byte | 0x80 : byte)
+            } while length > 0
+            archive.append(frame)
+        }
+        return (archive, space)
+    }
+}

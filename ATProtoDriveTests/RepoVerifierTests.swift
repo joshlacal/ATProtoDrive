@@ -86,9 +86,9 @@ struct RepoVerifierTests {
         #expect(expected != computed)
     }
 
-    // MARK: - Step 4: Malformed CAR on Corrupted Record Block
+    // MARK: - Step 4: Malformed archive on Corrupted Record Block
 
-    @Test("RepoVerifier returns malformedCAR after flipping one byte in a record block")
+    @Test("RepoVerifier returns malformedArchive after flipping one byte in a record block")
     func testVerifyMalformedCAROnCorruptedRecordBlock() async throws {
         let fixture = try await TestCARFixtureHelper.makeFixture()
 
@@ -105,8 +105,8 @@ struct RepoVerifierTests {
         )
 
         #expect(report.rev == TestCARFixtureHelper.revision)
-        guard case .malformedCAR = report.outcome else {
-            Issue.record("Expected .malformedCAR outcome for corrupted record block, got \(report.outcome)")
+        guard case .malformedArchive = report.outcome else {
+            Issue.record("Expected .malformedArchive outcome for corrupted record block, got \(report.outcome)")
             return
         }
     }
@@ -129,9 +129,9 @@ struct RepoVerifierTests {
         #expect(report.outcome == .signatureInvalid)
     }
 
-    // MARK: - Step 6: Malformed CAR Handling on Truncated Data
+    // MARK: - Step 6: Malformed archive Handling on Truncated Data
 
-    @Test("RepoVerifier returns malformedCAR on truncated or invalid CAR bytes")
+    @Test("RepoVerifier returns malformedArchive on truncated or invalid CAR bytes")
     func testVerifyMalformedCAROnTruncatedData() async throws {
         let fixture = try await TestCARFixtureHelper.makeFixture()
         let truncated = fixture.carData.prefix(20)
@@ -143,13 +143,13 @@ struct RepoVerifierTests {
             authorSigningKey: fixture.publicKey.rawRepresentation
         )
 
-        guard case .malformedCAR = report.outcome else {
-            Issue.record("Expected .malformedCAR outcome for truncated CAR data, got \(report.outcome)")
+        guard case .malformedArchive = report.outcome else {
+            Issue.record("Expected .malformedArchive outcome for truncated CAR data, got \(report.outcome)")
             return
         }
     }
 
-    // MARK: - Step 7: Malformed CAR Remains Visible for Requested Repo Rev (Finding 2)
+    // MARK: - Step 7: Malformed archive Remains Visible for Requested Repo Rev (Finding 2)
 
     @Test("SpaceDetailModel keeps malformed CAR report visible for requested repo revision and invalidates on advance")
     @MainActor
@@ -158,9 +158,9 @@ struct RepoVerifierTests {
         let initialRev = "3l3vbfz2zsk22"
         let advancedRev = "3l3vbfz2zsk23"
 
-        // Malformed CAR report has rev == ""
+        // Malformed archive report has rev == ""
         let malformedReport = VerificationReport(
-            outcome: .malformedCAR("malformedHeader"),
+            outcome: .malformedArchive("malformedHeader"),
             rev: ""
         )
 
@@ -176,10 +176,10 @@ struct RepoVerifierTests {
         let currentRepo = RepoEntry(did: repoDID, rev: initialRev, hash: "hash1")
         let advancedRepo = RepoEntry(did: repoDID, rev: advancedRev, hash: "hash2")
 
-        // 1. Malformed CAR failure remains visible for the requested repo
+        // 1. Malformed archive failure remains visible for the requested repo
         let visibleReport = model.verificationReport(for: currentRepo)
         #expect(visibleReport != nil)
-        #expect(visibleReport?.outcome == .malformedCAR("malformedHeader"))
+        #expect(visibleReport?.outcome == .malformedArchive("malformedHeader"))
 
         // 2. Advanced revision invalidates the report
         #expect(model.verificationReport(for: advancedRepo) == nil)
@@ -422,7 +422,7 @@ struct RepoVerifierTests {
 
     @Test("verifyRepoPipeline dual-routing routes own repo to clientGetRepo and foreign repo to credentialGet")
     func testDualRoutingExclusivityForGetRepoFetch() async throws {
-        let fixture = try await TestCARFixtureHelper.makeFixture()
+        let fixture = try TestSTARFixtureHelper.makeFixture()
         let ownDID = "did:plc:alice"
         let foreignDID = "did:plc:bob"
         let spaceItem = SpaceItem(
@@ -452,18 +452,15 @@ struct RepoVerifierTests {
             accountDID: ownDID,
             clientGetRepo: { space, repoDID in
                 await tracker.incClient()
-                return (200, ComAtprotoSpaceGetRepo.Output(data: fixture.carData))
+                return (200, ComAtprotoSpaceGetRepo.Output(data: fixture.archive))
             },
             resolveDIDToPDS: { did in
                 await tracker.incPDS()
                 return URL(string: "https://pds.example.com")!
             },
-            resolveSigningKey: { did in
-                return fixture.publicKey.rawRepresentation
-            },
             credentialGet: { url, space in
                 await tracker.incForeign()
-                return (200, fixture.carData)
+                return (200, fixture.archive)
             }
         )
 
@@ -477,25 +474,22 @@ struct RepoVerifierTests {
         #expect(ownReport.outcome == VerificationReport.Outcome.verified(recordCount: 2))
 
         // 2. Foreign Repo Test: must call resolveDIDToPDS + credentialGet exclusively
-        let foreignFixture = try await TestCARFixtureHelper.makeFixture(authorDID: foreignDID)
+        let foreignFixture = try TestSTARFixtureHelper.makeFixture(authorDID: foreignDID)
         let foreignReport = try await SpaceDetailModel.verifyRepoPipeline(
             space: spaceItem,
             repo: foreignRepo,
             accountDID: ownDID,
             clientGetRepo: { space, repoDID in
                 await tracker.incClient()
-                return (200, ComAtprotoSpaceGetRepo.Output(data: foreignFixture.carData))
+                return (200, ComAtprotoSpaceGetRepo.Output(data: foreignFixture.archive))
             },
             resolveDIDToPDS: { did in
                 await tracker.incPDS()
                 return URL(string: "https://pds.example.com")!
             },
-            resolveSigningKey: { did in
-                return foreignFixture.publicKey.rawRepresentation
-            },
             credentialGet: { url, space in
                 await tracker.incForeign()
-                return (200, foreignFixture.carData)
+                return (200, foreignFixture.archive)
             }
         )
 

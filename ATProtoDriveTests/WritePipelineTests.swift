@@ -38,7 +38,7 @@ struct WritePipelineTests {
             policy: .memberList
         )
 
-        #expect(input.type.description == "space.swan.drive")
+        #expect(input.spaceType.description == "space.swan.drive")
         #expect(input.skey?.description == "self")
 
         if case .comAtprotoSimplespaceDefsMemberListPolicy = input.readPolicy {
@@ -68,7 +68,7 @@ struct WritePipelineTests {
             policy: .public
         )
 
-        #expect(input.type.description == "space.swan.notes")
+        #expect(input.spaceType.description == "space.swan.notes")
         #expect(input.skey == nil)
 
         if case .comAtprotoSimplespaceDefsPublicPolicy = input.readPolicy {
@@ -116,7 +116,7 @@ struct WritePipelineTests {
             account: dummyAccount,
             transport: { input in
                 await tracker.record(input)
-                #expect(input.type.description == "space.swan.drive")
+                #expect(input.spaceType.description == "space.swan.drive")
                 return (200, ComAtprotoSimplespaceCreateSpace.Output(uri: expectedRef))
             },
             listSpacesTransport: { cursor in
@@ -355,7 +355,7 @@ struct WritePipelineTests {
                 return (200, ComAtprotoSpaceCreateRecord.Output(uri: expectedURI, cid: expectedCID))
             },
             clientListRecords: { _ in (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [])) },
-            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.SignedCommit(ver: 1, rev: try TID(tidString: "3l3vbfz2zsk22"), hash: Bytes(data: Data([1])), sig: Bytes(data: Data()), ikm: Bytes(data: Data()), mac: Bytes(data: Data())))) }
+            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at://did:plc:alice123/space/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1]))))) }
         )
 
         #expect(output.cid == expectedCID)
@@ -388,7 +388,7 @@ struct WritePipelineTests {
                 return (200, ComAtprotoSpacePutRecord.Output(uri: expectedURI, cid: expectedCID))
             },
             clientListRecords: { _ in (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [])) },
-            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.SignedCommit(ver: 1, rev: try TID(tidString: "3l3vbfz2zsk22"), hash: Bytes(data: Data([1])), sig: Bytes(data: Data()), ikm: Bytes(data: Data()), mac: Bytes(data: Data())))) }
+            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at://did:plc:alice123/space/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1]))))) }
         )
 
         #expect(output.cid == expectedCID)
@@ -419,7 +419,7 @@ struct WritePipelineTests {
                 return (200, ComAtprotoSpaceDeleteRecord.Output())
             },
             clientListRecords: { _ in (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [])) },
-            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.SignedCommit(ver: 1, rev: try TID(tidString: "3l3vbfz2zsk22"), hash: Bytes(data: Data([1])), sig: Bytes(data: Data()), ikm: Bytes(data: Data()), mac: Bytes(data: Data())))) }
+            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at://did:plc:alice123/space/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1]))))) }
         )
 
         let count = await tracker.callCount
@@ -746,14 +746,7 @@ struct WritePipelineTests {
             value: try RecordListModel.validateRecordJSON("{\"text\": \"New Post\"}")
         )
 
-        let signedCommit = ComAtprotoSpaceDefs.SignedCommit(
-            ver: 1,
-            rev: try TID(tidString: "3l3vbfz2zsk22"),
-            hash: Bytes(data: Data([1, 2, 3])),
-            sig: Bytes(data: Data()),
-            ikm: Bytes(data: Data()),
-            mac: Bytes(data: Data())
-        )
+        let signedCommit = ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at://did:plc:alice123/space/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1, 2, 3])))
 
         let createTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
@@ -834,14 +827,7 @@ struct WritePipelineTests {
             value: try RecordListModel.validateRecordJSON("{\"text\": \"Updated Post\"}")
         )
 
-        let signedCommit = ComAtprotoSpaceDefs.SignedCommit(
-            ver: 1,
-            rev: try TID(tidString: "3l3vbfz2zsk22"),
-            hash: Bytes(data: Data([1, 2, 3])),
-            sig: Bytes(data: Data()),
-            ikm: Bytes(data: Data()),
-            mac: Bytes(data: Data())
-        )
+        let signedCommit = ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at://did:plc:alice123/space/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1, 2, 3])))
 
         let putTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
@@ -913,14 +899,7 @@ struct WritePipelineTests {
             value: try RecordListModel.validateRecordJSON("{\"text\": \"Post\"}")
         )
 
-        let signedCommit = ComAtprotoSpaceDefs.SignedCommit(
-            ver: 1,
-            rev: try TID(tidString: "3l3vbfz2zsk22"),
-            hash: Bytes(data: Data([1, 2, 3])),
-            sig: Bytes(data: Data()),
-            ikm: Bytes(data: Data()),
-            mac: Bytes(data: Data())
-        )
+        let signedCommit = ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at://did:plc:alice123/space/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1, 2, 3])))
 
         let deleteTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()

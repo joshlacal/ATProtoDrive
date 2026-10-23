@@ -4,7 +4,7 @@
 //
 
 import Foundation
-import Petrel
+@testable import Petrel
 import Testing
 @testable import ATProtoDrive
 
@@ -101,7 +101,7 @@ struct SpaceDetailModelTests {
         let rawData = "sample commit hash".data(using: .utf8)!
         let hash = Bytes(data: rawData)
 
-        let repo = ComAtprotoSpaceListRepos.Repo(did: did, rev: rev, hash: hash)
+        let repo = ComAtprotoSpaceListRepos.Repo(did: did, repoRev: rev, data: hash, spaceRev: rev)
         let entries = SpaceDetailModel.mapRepoEntries(from: [repo])
 
         #expect(entries.count == 1)
@@ -117,7 +117,7 @@ struct SpaceDetailModelTests {
         let xrpcError = ATProtoXRPCError(
             error: "SpaceDeleted",
             message: "The space was deleted by its authority",
-            statusCode: 404
+            statusCode: 400
         )
         let state1 = SpaceDetailModel.classifyError(xrpcError)
         #expect(state1 == .tombstone("SpaceDeleted: The space was deleted by its authority"))
@@ -128,7 +128,7 @@ struct SpaceDetailModelTests {
             userInfo: [NSLocalizedDescriptionKey: "Space has been deleted"]
         )
         let state2 = SpaceDetailModel.classifyError(genericError)
-        #expect(state2 == .tombstone("Space has been deleted"))
+        #expect(state2 == .general("Space has been deleted"))
     }
 
     @Test("classifyError identifies scope and auth errors as reconsentNeeded")
@@ -229,12 +229,12 @@ struct SpaceDetailModelTests {
         let hash = Bytes(data: "hash1".data(using: .utf8)!)
 
         let page1 = ComAtprotoSpaceListRepos.Output(
-            cursor: "page_2_cursor",
-            repos: [ComAtprotoSpaceListRepos.Repo(did: did1, rev: rev, hash: hash)]
+            repos: [ComAtprotoSpaceListRepos.Repo(did: did1, repoRev: rev, data: hash, spaceRev: rev)],
+            cursor: "page_2_cursor"
         )
         let page2 = ComAtprotoSpaceListRepos.Output(
-            cursor: nil,
-            repos: [ComAtprotoSpaceListRepos.Repo(did: did2, rev: rev, hash: hash)]
+            repos: [ComAtprotoSpaceListRepos.Repo(did: did2, repoRev: rev, data: hash, spaceRev: rev)],
+            cursor: nil
         )
 
         let encoder = JSONEncoder()
@@ -268,8 +268,8 @@ struct SpaceDetailModelTests {
         let hash = Bytes(data: "hash".data(using: .utf8)!)
 
         let loopingPage = ComAtprotoSpaceListRepos.Output(
-            cursor: "loop_cursor",
-            repos: [ComAtprotoSpaceListRepos.Repo(did: did, rev: rev, hash: hash)]
+            repos: [ComAtprotoSpaceListRepos.Repo(did: did, repoRev: rev, data: hash, spaceRev: rev)],
+            cursor: "loop_cursor"
         )
 
         let pageData = try JSONEncoder().encode(loopingPage)
@@ -661,7 +661,7 @@ struct SpaceDetailModelTests {
     """
 
     @MainActor
-    @Test("Case 3: Production path handles 401 InvalidDelegationToken: names swan.place, preserves sidebar & persisted state")
+    @Test("Case 3: Production path handles 400 InvalidDelegationToken: names swan.place, preserves sidebar & persisted state")
     func testProductionPathCase3TokenRejected() async throws {
         URLProtocol.registerClass(ModelMockURLProtocol.self)
         defer {
@@ -682,7 +682,7 @@ struct SpaceDetailModelTests {
         SpaceListModel.saveCustomSpaceURIs([spaceURI], for: accountDID)
 
         let client = await ATProtoClient(baseURL: URL(string: "https://bsky.social")!)
-        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: client))
+        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: client), urlSession: session)
         let credentials = SpaceCredentialManager(
             client: client,
             resolver: resolver,
@@ -710,7 +710,7 @@ struct SpaceDetailModelTests {
                 return (resp, body)
             }
             if urlString == "https://swan.place/xrpc/com.atproto.space.getSpaceCredential" {
-                let resp = HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+                let resp = HTTPURLResponse(url: request.url!, statusCode: 400, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
                 let body = #"{"error":"InvalidDelegationToken"}"#.data(using: .utf8)!
                 return (resp, body)
             }
@@ -727,7 +727,7 @@ struct SpaceDetailModelTests {
 
         let detailModel = SpaceDetailModel()
         // Run the real production load path (no injected fetchRepos closure)
-        await detailModel.load(space: spaceItem, account: account)
+        await detailModel.load(space: spaceItem, account: account, authorityResolver: resolver)
 
         // Assert the user-visible state
         guard case .tokenRejected(let message) = detailModel.errorState else {
@@ -772,7 +772,7 @@ struct SpaceDetailModelTests {
         SpaceListModel.saveCustomSpaceURIs([spaceURI], for: accountDID)
 
         let client = await ATProtoClient(baseURL: URL(string: "https://bsky.social")!)
-        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: client))
+        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: client), urlSession: session)
         let credentials = SpaceCredentialManager(
             client: client,
             resolver: resolver,
@@ -793,7 +793,7 @@ struct SpaceDetailModelTests {
           "@context": ["https://www.w3.org/ns/did/v1"],
           "id": "\(authorityDID)",
           "verificationMethod": [{ "id": "\(authorityDID)#atproto", "type": "Multikey", "controller": "\(authorityDID)", "publicKeyMultibase": "zQ3shb9WV8D4wR8m2C7q8sT2x6b6Z9p" }],
-          "service": [{ "id": "#atproto_pds", "type": "AtprotoPersonalDataServer", "serviceEndpoint": "https://swan-case1.place" }]
+          "service": [{ "id": "#atproto_pds", "type": "AtprotoPersonalDataServer", "serviceEndpoint": "https://swan.place" }]
         }
         """
 
@@ -803,7 +803,7 @@ struct SpaceDetailModelTests {
                 let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
                 return (resp, Data(didDoc.utf8))
             }
-            if urlString == "https://swan-case1.place/xrpc/com.atproto.space.getSpaceCredential" {
+            if urlString == "https://swan.place/xrpc/com.atproto.space.getSpaceCredential" {
                 let resp = HTTPURLResponse(url: request.url!, statusCode: 400, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
                 let body = #"{"error":"SpaceDeleted","message":"Space was deleted by owner"}"#.data(using: .utf8)!
                 return (resp, body)
@@ -814,7 +814,7 @@ struct SpaceDetailModelTests {
 
         let spaceItem = try SpaceItem(uriString: spaceURI, accountDID: accountDID)
         let detailModel = SpaceDetailModel()
-        await detailModel.load(space: spaceItem, account: account)
+        await detailModel.load(space: spaceItem, account: account, authorityResolver: resolver)
 
         guard case .tombstone(let message) = detailModel.errorState else {
             Issue.record("Expected .tombstone, got \(String(describing: detailModel.errorState))")
@@ -845,7 +845,7 @@ struct SpaceDetailModelTests {
         let spaceURI = "at://\(authorityDID)/space/my.bulletin.board/self"
 
         let client = await ATProtoClient(baseURL: URL(string: "https://bsky.social")!)
-        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: client))
+        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: client), urlSession: session)
         let credentials = SpaceCredentialManager(
             client: client,
             resolver: resolver,
@@ -866,7 +866,7 @@ struct SpaceDetailModelTests {
           "@context": ["https://www.w3.org/ns/did/v1"],
           "id": "\(authorityDID)",
           "verificationMethod": [{ "id": "\(authorityDID)#atproto", "type": "Multikey", "controller": "\(authorityDID)", "publicKeyMultibase": "zQ3shb9WV8D4wR8m2C7q8sT2x6b6Z9p" }],
-          "service": [{ "id": "#atproto_pds", "type": "AtprotoPersonalDataServer", "serviceEndpoint": "https://swan-case2.place" }]
+          "service": [{ "id": "#atproto_pds", "type": "AtprotoPersonalDataServer", "serviceEndpoint": "https://swan.place" }]
         }
         """
 
@@ -876,7 +876,7 @@ struct SpaceDetailModelTests {
                 let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
                 return (resp, Data(didDoc.utf8))
             }
-            if urlString == "https://swan-case2.place/xrpc/com.atproto.space.getSpaceCredential" {
+            if urlString == "https://swan.place/xrpc/com.atproto.space.getSpaceCredential" {
                 let resp = HTTPURLResponse(url: request.url!, statusCode: 403, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
                 let body = #"{"error":"UserNotAuthorized","message":"Account is not a member of this space"}"#.data(using: .utf8)!
                 return (resp, body)
@@ -887,14 +887,14 @@ struct SpaceDetailModelTests {
 
         let spaceItem = try SpaceItem(uriString: spaceURI, accountDID: accountDID)
         let detailModel = SpaceDetailModel()
-        await detailModel.load(space: spaceItem, account: account)
+        await detailModel.load(space: spaceItem, account: account, authorityResolver: resolver)
 
         guard case .authorizationRefused(let message) = detailModel.errorState else {
             Issue.record("Expected .authorizationRefused, got \(String(describing: detailModel.errorState))")
             return
         }
         #expect(message.contains("You no longer have access to this space"))
-        #expect(message.contains("swan-case2.place refused authorization"))
+        #expect(message.contains("swan.place refused authorization"))
         #expect(detailModel.error == message)
     }
 
@@ -913,7 +913,7 @@ struct SpaceDetailModelTests {
         let spaceURI = "at://\(authorityDID)/space/my.bulletin.board/self"
 
         let client = await ATProtoClient(baseURL: URL(string: "https://bsky.social")!)
-        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: client))
+        let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: client), urlSession: session)
         let credentials = SpaceCredentialManager(
             client: client,
             resolver: resolver,
@@ -934,7 +934,7 @@ struct SpaceDetailModelTests {
           "@context": ["https://www.w3.org/ns/did/v1"],
           "id": "\(authorityDID)",
           "verificationMethod": [{ "id": "\(authorityDID)#atproto", "type": "Multikey", "controller": "\(authorityDID)", "publicKeyMultibase": "zQ3shb9WV8D4wR8m2C7q8sT2x6b6Z9p" }],
-          "service": [{ "id": "#atproto_pds", "type": "AtprotoPersonalDataServer", "serviceEndpoint": "https://swan-case4.place" }]
+          "service": [{ "id": "#atproto_pds", "type": "AtprotoPersonalDataServer", "serviceEndpoint": "https://swan.place" }]
         }
         """
 
@@ -944,7 +944,7 @@ struct SpaceDetailModelTests {
                 let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
                 return (resp, Data(didDoc.utf8))
             }
-            if urlString == "https://swan-case4.place/xrpc/com.atproto.space.getSpaceCredential" {
+            if urlString == "https://swan.place/xrpc/com.atproto.space.getSpaceCredential" {
                 let resp = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: ["Content-Type": "text/plain"])!
                 let body = "Internal Server Error Occurred".data(using: .utf8)!
                 return (resp, body)
@@ -955,7 +955,7 @@ struct SpaceDetailModelTests {
 
         let spaceItem = try SpaceItem(uriString: spaceURI, accountDID: accountDID)
         let detailModel = SpaceDetailModel()
-        await detailModel.load(space: spaceItem, account: account)
+        await detailModel.load(space: spaceItem, account: account, authorityResolver: resolver)
 
         guard case .general(let message) = detailModel.errorState else {
             Issue.record("Expected .general, got \(String(describing: detailModel.errorState))")

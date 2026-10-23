@@ -979,7 +979,7 @@ public final class RecordListModel {
 
     /// Pure pipeline helper that decides and executes the own-vs-foreign repo path for blob retrieval:
     /// - Own repo: uses `clientGetBlob`
-    /// - Foreign repo: uses `resolveDIDToPDS` + `credentialGet`
+    /// - Foreign repo: uses `resolveDIDToPDS` + MAC-verified `credentialGet`, then full STAR verification
     nonisolated public static func getBlobPipeline(
         space: SpaceItem,
         repo: RepoEntry,
@@ -1151,13 +1151,8 @@ public final class RecordListModel {
             return .repoNotFound(message)
         }
 
-        if errorString == "SpaceNotFound" ||
-            errorString == "SpaceDeleted" ||
-            lowercasedError.contains("spacenotfound") ||
-            lowercasedError.contains("spacedeleted") ||
-            lowercasedMessage.contains("spacenotfound") ||
-            lowercasedMessage.contains("spacedeleted") ||
-            (lowercasedMessage.contains("space") && lowercasedMessage.contains("deleted")) {
+        if let xrpc = error as? ATProtoXRPCError,
+           xrpc.error == "SpaceDeleted", xrpc.statusCode == 400 {
             return .tombstone(message)
         }
 
@@ -1203,7 +1198,7 @@ public final class RecordListModel {
 
     /// Pure pipeline helper that decides and executes the own-vs-foreign repo path with injected transports:
     /// - Own repo: uses `clientListRecords` + `clientGetLatestCommit`
-    /// - Foreign repo: uses `resolveDIDToPDS` + `credentialGet`
+    /// - Foreign repo: uses `resolveDIDToPDS` + MAC-verified `credentialGet`, then full STAR verification
     nonisolated public static func loadRecordsPipeline(
         space: SpaceItem,
         repo: RepoEntry,
@@ -1228,7 +1223,7 @@ public final class RecordListModel {
                         statusCode: responseCode
                     )
                 }
-                let hashStr = commitObj.hash.data.base64EncodedString()
+                let hashStr = commitObj.data.data.base64EncodedString()
                 return (rev: commitObj.rev.description, hash: hashStr)
             }()
 
@@ -1238,45 +1233,35 @@ public final class RecordListModel {
         } else {
             let pdsURL = try await resolveDIDToPDS(repo.did)
 
-            async let recordsTask = fetchAllRecords { cursor in
-                guard let requestURL = makeListRecordsURL(
-                    pdsHost: pdsURL,
-                    space: space.ref,
-                    repoDID: repo.did,
-                    cursor: cursor
-                ) else {
-                    throw SpaceHostResolutionError.invalidDID(repo.did)
-                }
-                return try await credentialGet(requestURL, space.ref)
+            guard let requestURL = SpaceDetailModel.makeGetRepoURL(
+                pdsHost: pdsURL, space: space.ref, repoDID: repo.did
+            ) else {
+                throw SpaceHostResolutionError.invalidDID(repo.did)
             }
-
-            async let commitTask: (rev: String, hash: String) = {
-                guard let commitURL = makeGetLatestCommitURL(
-                    pdsHost: pdsURL,
-                    space: space.ref,
-                    repoDID: repo.did
-                ) else {
-                    throw SpaceHostResolutionError.invalidDID(repo.did)
+            // The production credential transport verifies the request-bound MAC
+            // before returning bytes. Validate the complete archive again here so
+            // no record or commit escapes a failed digest/identity check.
+            let (responseCode, data) = try await credentialGet(requestURL, space.ref)
+            guard (200...299).contains(responseCode) else {
+                if let parsed = ATProtoErrorParser.parseGeneric(data: data, statusCode: responseCode) {
+                    throw parsed
                 }
-                let (responseCode, data) = try await credentialGet(commitURL, space.ref)
-                guard (200...299).contains(responseCode) else {
-                    if let parsed = ATProtoErrorParser.parseGeneric(data: data, statusCode: responseCode) {
-                        throw parsed
-                    }
-                    throw ATProtoXRPCError(
-                        error: "XRPCError_\(responseCode)",
-                        message: "HTTP \(responseCode)",
-                        statusCode: responseCode
-                    )
-                }
-                let commitOutput = try JSONDecoder().decode(ComAtprotoSpaceGetLatestCommit.Output.self, from: data)
-                let hashStr = commitOutput.commit.hash.data.base64EncodedString()
-                return (rev: commitOutput.commit.rev.description, hash: hashStr)
-            }()
-
-            let records = try await recordsTask
-            let commit = try await commitTask
-            return (records, commit)
+                throw ATProtoXRPCError(
+                    error: "XRPCError_\(responseCode)", message: "HTTP \(responseCode)", statusCode: responseCode
+                )
+            }
+            let snapshot = try SpaceSTAR.verify(archive: data, space: space.ref, repo: repo.did)
+            let records = try snapshot.records.map { record in
+                let path = record.path.split(separator: "/", omittingEmptySubsequences: false)
+                guard path.count == 2 else { throw SpaceVerificationError.invalidRecord }
+                return ComAtprotoSpaceListRecords.Record(
+                    collection: try NSID(nsidString: String(path[0])),
+                    rkey: try RecordKey(keyString: String(path[1])),
+                    cid: record.cid,
+                    value: try ATProtocolValueContainer.decodedFromDAGCBOR(record.bytes)
+                )
+            }
+            return (records, (rev: snapshot.revision, hash: snapshot.data.base64EncodedString()))
         }
     }
 
