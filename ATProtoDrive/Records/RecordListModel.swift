@@ -1496,6 +1496,13 @@ public final class RecordListModel {
             transport: transport
         )
     }
+    /// Largest Space blob downloaded, from the user's own repo or a member's.
+    /// Petrel stops responses at 10 MiB unless the caller raises the limit.
+    /// Upstream bounds a Space blob only by the uploading PDS's upload limit
+    /// (5 MiB by default, configurable) and Swan accepts 256 MiB; this covers
+    /// raised limits while bounding one in-memory download.
+    nonisolated static let spaceBlobLimit = SpaceSTAR.defaultMaximumArchiveBytes
+
     public func getBlob(
         space: SpaceItem,
         repo: RepoEntry,
@@ -1506,13 +1513,16 @@ public final class RecordListModel {
         let executeClientGetBlob: @Sendable (_ cid: String) async throws -> (responseCode: Int, data: Data?) = clientGetBlob ?? { blobCID in
             let repoDIDObj = try DID(didString: repo.did)
             let cidObj = try CID.parse(blobCID)
-            let (responseCode, output) = try await account.client.com.atproto.space.getBlob(
-                input: ComAtprotoSpaceGetBlob.Parameters(
-                    space: space.ref,
-                    repo: repoDIDObj,
-                    cid: cidObj
+            let limits = NetworkResponseLimits(maximumWireBytes: Self.spaceBlobLimit, maximumDecodedBytes: Self.spaceBlobLimit)
+            let (responseCode, output) = try await NetworkService.withResponseLimits(limits) {
+                try await account.client.com.atproto.space.getBlob(
+                    input: ComAtprotoSpaceGetBlob.Parameters(
+                        space: space.ref,
+                        repo: repoDIDObj,
+                        cid: cidObj
+                    )
                 )
-            )
+            }
             return (responseCode, output?.data)
         }
 
@@ -1526,7 +1536,11 @@ public final class RecordListModel {
                 try await account.client.resolveDIDToPDSURL(did: did)
             },
             credentialGet: { url, spaceRef in
-                let (data, response) = try await account.credentials.get(url: url, space: spaceRef)
+                let (data, response) = try await account.credentials.get(
+                    url: url,
+                    space: spaceRef,
+                    maximumBlobBytes: Self.spaceBlobLimit
+                )
                 return (response.statusCode, data)
             }
         )

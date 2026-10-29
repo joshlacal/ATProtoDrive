@@ -596,6 +596,15 @@ public final class SpaceDetailModel {
     /// the archive, and callers verify it again, before anything is shown.
     nonisolated static let foreignRepoArchiveLimit = SpaceSTAR.defaultMaximumArchiveBytes
 
+    /// Response limits for the owner's OAuth `getRepo` archive. The generated
+    /// call otherwise stops at the client's 10 MiB default; this accepts the
+    /// same STAR maximum as foreign archives, and the archive is still verified
+    /// in full before anything is shown.
+    nonisolated static let ownRepoArchiveResponseLimits = NetworkResponseLimits(
+        maximumWireBytes: SpaceSTAR.defaultMaximumArchiveBytes,
+        maximumDecodedBytes: SpaceSTAR.defaultMaximumArchiveBytes
+    )
+
     /// Petrel's MAC-verified space-credential GET for a foreign repo's
     /// `getRepo` archive, accepting archives up to `foreignRepoArchiveLimit`.
     nonisolated static func foreignRepoArchiveGet(
@@ -674,7 +683,9 @@ public final class SpaceDetailModel {
         let credentials = account.credentials
 
         let clientFetch: @Sendable (_ space: SpaceRef, _ repoDID: DID) async throws -> (responseCode: Int, data: ComAtprotoSpaceGetRepo.Output?) = clientGetRepo ?? { spaceRef, repoDID in
-            try await client.com.atproto.space.getRepo(input: .init(space: spaceRef, repo: repoDID))
+            try await NetworkService.withResponseLimits(Self.ownRepoArchiveResponseLimits) {
+                try await client.com.atproto.space.getRepo(input: .init(space: spaceRef, repo: repoDID))
+            }
         }
 
         let resolvePDS: @Sendable (_ did: String) async throws -> URL = resolveDIDToPDS ?? { did in
