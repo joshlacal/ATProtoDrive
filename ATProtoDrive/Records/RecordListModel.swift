@@ -1359,10 +1359,7 @@ public final class RecordListModel {
             resolveDIDToPDS: { did in
                 try await account.client.resolveDIDToPDSURL(did: did)
             },
-            credentialGet: { url, spaceRef in
-                let (data, response) = try await account.credentials.get(url: url, space: spaceRef)
-                return (responseCode: response.statusCode, data: data)
-            },
+            credentialGet: SpaceDetailModel.foreignRepoArchiveGet(account.credentials),
             onInvalidateSpace: { spaceRef in
                 await account.credentials.invalidate(spaceRef)
             }

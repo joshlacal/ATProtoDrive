@@ -3,8 +3,10 @@
 //  ATProtoDriveTests
 //
 
+import CryptoKit
 import Foundation
-import Petrel
+@testable import Petrel
+import PetrelCrypto
 import Testing
 @testable import ATProtoDrive
 
@@ -739,5 +741,216 @@ struct RecordListModelPipelineTests {
         #expect(entries[0].cid == "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
         #expect(entries[0].mimeType == "image/png")
         #expect(entries[0].size == 12345)
+    }
+}
+
+// MARK: - Foreign archives above Petrel's 10 MiB default (ATPD-1)
+
+/// Serves the mock space host and member PDS on one loopback port. Only that
+/// port is intercepted, so no other suite's requests reach this handler.
+private final class ForeignArchiveMockURLProtocol: URLProtocol, @unchecked Sendable {
+    static let port = 47231
+    private static let lock = NSLock()
+    private nonisolated(unsafe) static var handler: (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    static func setHandler(_ newHandler: (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?) {
+        lock.lock()
+        defer { lock.unlock() }
+        handler = newHandler
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == "127.0.0.1" && request.url?.port == port
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        Self.lock.lock()
+        let currentHandler = Self.handler
+        Self.lock.unlock()
+
+        guard let currentHandler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+
+        do {
+            let (response, data) = try currentHandler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+}
+
+/// Resolves every DID to the mock member PDS.
+private final class LoopbackDIDResolver: DIDResolving {
+    let pds: URL
+
+    init(pds: URL) {
+        self.pds = pds
+    }
+
+    func resolveHandleToDID(handle: String) async throws -> String {
+        throw URLError(.unsupportedURL)
+    }
+
+    func resolveDIDToPDSURL(did: String) async throws -> URL {
+        pds
+    }
+
+    func resolveDIDToHandleAndPDSURL(did: String) async throws -> (String, URL) {
+        ("member.test", pds)
+    }
+}
+
+@Suite("Foreign repo archives above 10 MiB", .serialized)
+struct ForeignRepoArchiveLimitTests {
+    private static let accountDID = "did:plc:alice123"
+    private static let memberDID = "did:plc:bob456"
+    private static let rev = "3kbcq3p7ad422"
+
+    /// Eleven records just under 1 MiB each: about 11 MB of STAR, above
+    /// Petrel's default 10 MiB response limit.
+    private static func makeLargeArchive(space: SpaceRef) throws -> (archive: Data, digest: Data) {
+        var digest = SpaceSetHash()
+        var frames: [Data] = []
+        for index in 0 ..< 11 {
+            let path = "com.example.drive.file/a\(index < 10 ? "0" : "")\(index)"
+            let value = try DAGCBOR.encodeValue(["blob": Data(repeating: UInt8(index), count: 1_000_000)])
+            digest.add(path: path, cid: CID.fromDAGCBOR(value).string)
+            frames.append(Data(path.utf8))
+            frames.append(value)
+        }
+        let metadata = try DAGCBOR.encodeValue([
+            "$type": "atproto-space-repo", "ver": 1, "space": space.uriString(),
+            "repo": Self.memberDID, "rev": Self.rev, "data": digest.digest
+        ] as [String: Any])
+        var archive = Data([0x2a, 0x6c, 1, 0])
+        for frame in [metadata] + frames {
+            var length = frame.count
+            repeat {
+                let byte = UInt8(length & 0x7f)
+                length >>= 7
+                archive.append(length > 0 ? byte | 0x80 : byte)
+            } while length > 0
+            archive.append(frame)
+        }
+        return (archive, digest.digest)
+    }
+
+    private static func credentialJWT() -> String {
+        func base64URL(_ data: Data) -> String {
+            data.base64EncodedString()
+                .replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: "=", with: "")
+        }
+        let now = Int(Date().timeIntervalSince1970)
+        let header = ##"{"alg":"ES256","typ":"JWT","kid":"#atproto"}"##
+        let payload = #"{"iss":"\#(Self.accountDID)","sub":"\#(Self.accountDID)","iat":\#(now),"exp":\#(now + 600)}"#
+        return [Data(header.utf8), Data(payload.utf8), Data(repeating: 0x42, count: 64)]
+            .map(base64URL)
+            .joined(separator: ".")
+    }
+
+    /// Issues a space credential, and answers getRepo with `archive` and a MAC
+    /// over the published commit (`digest`), as the member's PDS would.
+    private static func makeHandler(
+        space: SpaceRef,
+        archive: Data,
+        digest: Data,
+        kemKey: P256.KeyAgreement.PrivateKey
+    ) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data) {
+        { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            if url.lastPathComponent == "com.atproto.space.getSpaceCredential" {
+                let body = try JSONEncoder().encode(["credential": Self.credentialJWT()])
+                let headers = ["Content-Type": "application/json"]
+                return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: headers)!, body)
+            }
+            guard url.lastPathComponent == "com.atproto.space.getRepo",
+                  let want = request.value(forHTTPHeaderField: "Atproto-Space-Want-Mac"),
+                  let share = want.components(separatedBy: "key_share=\"").last?.split(separator: "\"").first
+            else {
+                return (HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)!, Data())
+            }
+            let secret = try SpaceMAC.decapsulate(privateKey: kemKey, keyShare: String(share))
+            let mac = try SpaceMAC.commit(sharedSecret: secret, space: space.uriString(), repo: Self.memberDID, rev: Self.rev, data: digest)
+            let headers = [
+                "Content-Type": "application/octet-stream",
+                "Atproto-Space-Mac": "type=\"atproto-space-repo\", ver=1, mac=:\(mac.base64EncodedString()):",
+            ]
+            return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: headers)!, archive)
+        }
+    }
+
+    @Test("Production foreign browse and verify accept a MAC-verified archive above 10 MiB, and a tampered one publishes nothing")
+    @MainActor
+    func largeForeignArchiveIsBrowsableOnlyAfterVerification() async throws {
+        let host = try #require(URL(string: "http://127.0.0.1:\(ForeignArchiveMockURLProtocol.port)"))
+        let spaceItem = try SpaceItem(
+            uriString: "at://\(Self.accountDID)/space/com.example.drive/self",
+            accountDID: Self.accountDID
+        )
+        let repo = RepoEntry(did: Self.memberDID, rev: Self.rev, hash: "unused")
+        let (archive, digest) = try Self.makeLargeArchive(space: spaceItem.ref)
+        #expect(archive.count > 10 * 1_048_576)
+
+        let kemKey = P256.KeyAgreement.PrivateKey()
+        let kemDIDKey = try P256DIDKey(
+            publicKey: P256.Signing.PublicKey(compressedRepresentation: kemKey.publicKey.compressedRepresentation)
+        ).value
+
+        let client = await ATProtoClient(baseURL: host, didResolver: LoopbackDIDResolver(pds: host))
+        // Like AccountStore, pass no URLSession: Petrel then builds its hardened
+        // session with the default 10 MiB response limit.
+        NetworkService.setNetworkTestProtocolClasses([ForeignArchiveMockURLProtocol.self])
+        let credentials = SpaceCredentialManager(
+            client: client,
+            authorityHostProvider: { _ in host },
+            delegationTokenProvider: { _ in "mock-delegation-token" },
+            authorKEMKeyProvider: { _, _ in kemDIDKey }
+        )
+        NetworkService.setNetworkTestProtocolClasses(nil)
+        let account = AccountStore.Account(
+            id: Self.accountDID,
+            handle: "alice.test",
+            client: client,
+            credentials: credentials,
+            authMode: .cab
+        )
+        defer { ForeignArchiveMockURLProtocol.setHandler(nil) }
+
+        ForeignArchiveMockURLProtocol.setHandler(
+            Self.makeHandler(space: spaceItem.ref, archive: archive, digest: digest, kemKey: kemKey)
+        )
+        let model = RecordListModel()
+        await model.load(space: spaceItem, repo: repo, account: account)
+        #expect(model.errorState == nil, "unexpected error: \(model.error ?? "nil")")
+        #expect(model.rows.count == 11)
+        #expect(model.commit?.rev == Self.rev)
+        #expect(model.commit?.hash == digest.base64EncodedString())
+
+        let report = try await SpaceDetailModel().verifyRepo(repo: repo, space: spaceItem, account: account)
+        #expect(report.outcome == .verified(recordCount: 11))
+        #expect(report.rev == Self.rev)
+
+        // The same large archive with one record byte changed no longer matches
+        // the MAC'd commit, so nothing from it is shown.
+        var tampered = archive
+        tampered[tampered.count - 1] ^= 1
+        ForeignArchiveMockURLProtocol.setHandler(
+            Self.makeHandler(space: spaceItem.ref, archive: tampered, digest: digest, kemKey: kemKey)
+        )
+        await model.load(space: spaceItem, repo: repo, account: account)
+        #expect(model.rows.isEmpty)
+        #expect(model.commit == nil)
+        #expect(model.errorState != nil)
     }
 }

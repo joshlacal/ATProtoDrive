@@ -590,6 +590,27 @@ public final class SpaceDetailModel {
         return comps.url
     }
 
+    /// Largest foreign `getRepo` STAR archive accepted. Petrel's credential
+    /// transport stops responses at 10 MiB unless a getRepo caller raises the
+    /// limit, and a member's repo can be larger. Petrel still checks the MAC and
+    /// the archive, and callers verify it again, before anything is shown.
+    nonisolated static let foreignRepoArchiveLimit = SpaceSTAR.defaultMaximumArchiveBytes
+
+    /// Petrel's MAC-verified space-credential GET for a foreign repo's
+    /// `getRepo` archive, accepting archives up to `foreignRepoArchiveLimit`.
+    nonisolated static func foreignRepoArchiveGet(
+        _ credentials: SpaceCredentialManager
+    ) -> @Sendable (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data) {
+        { url, space in
+            let (data, response) = try await credentials.get(
+                url: url,
+                space: space,
+                maximumArchiveBytes: Self.foreignRepoArchiveLimit
+            )
+            return (response.statusCode, data)
+        }
+    }
+
     /// Verify a STAR export from the owner's OAuth transport or Petrel's MAC-verified
     /// credential transport. Foreign responses must pass SpaceCredentialManager.get
     /// before entering this pipeline; all exports receive full archive/digest validation.
@@ -660,10 +681,8 @@ public final class SpaceDetailModel {
             try await client.resolveDIDToPDSURL(did: did)
         }
 
-        let foreignGet: @Sendable (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data) = credentialGet ?? { url, spaceRef in
-            let (data, response) = try await credentials.get(url: url, space: spaceRef)
-            return (response.statusCode, data)
-        }
+        let foreignGet: @Sendable (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data) =
+            credentialGet ?? Self.foreignRepoArchiveGet(credentials)
 
         let report = try await Self.verifyRepoPipeline(
             space: space,
