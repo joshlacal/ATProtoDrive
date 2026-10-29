@@ -815,12 +815,16 @@ struct ForeignRepoArchiveLimitTests {
     private static let memberDID = "did:plc:bob456"
     private static let rev = "3kbcq3p7ad422"
 
-    /// Eleven records just under 1 MiB each: about 11 MB of STAR, above
-    /// Petrel's default 10 MiB response limit.
-    private static func makeLargeArchive(space: SpaceRef) throws -> (archive: Data, digest: Data) {
+    /// Records just under 1 MiB each. The default eleven make about 11 MB of
+    /// STAR, above Petrel's default 10 MiB response limit; nine stay below it.
+    private static func makeLargeArchive(
+        space: SpaceRef,
+        repo: String = ForeignRepoArchiveLimitTests.memberDID,
+        recordCount: Int = 11
+    ) throws -> (archive: Data, digest: Data) {
         var digest = SpaceSetHash()
         var frames: [Data] = []
-        for index in 0 ..< 11 {
+        for index in 0 ..< recordCount {
             let path = "com.example.drive.file/a\(index < 10 ? "0" : "")\(index)"
             let value = try DAGCBOR.encodeValue(["blob": Data(repeating: UInt8(index), count: 1_000_000)])
             digest.add(path: path, cid: CID.fromDAGCBOR(value).string)
@@ -829,7 +833,7 @@ struct ForeignRepoArchiveLimitTests {
         }
         let metadata = try DAGCBOR.encodeValue([
             "$type": "atproto-space-repo", "ver": 1, "space": space.uriString(),
-            "repo": Self.memberDID, "rev": Self.rev, "data": digest.digest
+            "repo": repo, "rev": Self.rev, "data": digest.digest
         ] as [String: Any])
         var archive = Data([0x2a, 0x6c, 1, 0])
         for frame in [metadata] + frames {
@@ -952,5 +956,135 @@ struct ForeignRepoArchiveLimitTests {
         #expect(model.rows.isEmpty)
         #expect(model.commit == nil)
         #expect(model.errorState != nil)
+    }
+
+    // MARK: Known issue AD-1: reads Petrel still caps at 10 MiB
+
+    /// Answers the reads whose response limit ATProtoDrive cannot raise: the
+    /// owner's OAuth getRepo (sent without a MAC request), getBlob from either
+    /// transport, and the credential exchange a foreign getBlob needs.
+    private static func makeUncappableReadHandler(
+        archive: Data,
+        blob: Data
+    ) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data) {
+        { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let octetStream = ["Content-Type": "application/octet-stream"]
+            switch url.lastPathComponent {
+            case "com.atproto.space.getSpaceCredential":
+                let body = try JSONEncoder().encode(["credential": Self.credentialJWT()])
+                let headers = ["Content-Type": "application/json"]
+                return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: headers)!, body)
+            case "com.atproto.space.getRepo" where request.value(forHTTPHeaderField: "Atproto-Space-Want-Mac") == nil:
+                return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: octetStream)!, archive)
+            case "com.atproto.space.getBlob":
+                return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: octetStream)!, blob)
+            default:
+                return (HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)!, Data())
+            }
+        }
+    }
+
+    /// An account built as AccountStore builds it, with Petrel's default
+    /// sessions for both the OAuth client and the credential transport. Both
+    /// are routed to the loopback mock.
+    @MainActor
+    private static func makeLoopbackAccount(host: URL) async -> AccountStore.Account {
+        NetworkService.setNetworkTestProtocolClasses([ForeignArchiveMockURLProtocol.self])
+        defer { NetworkService.setNetworkTestProtocolClasses(nil) }
+        let client = await ATProtoClient(baseURL: host, didResolver: LoopbackDIDResolver(pds: host))
+        let credentials = SpaceCredentialManager(
+            client: client,
+            authorityHostProvider: { _ in host },
+            delegationTokenProvider: { _ in "mock-delegation-token" }
+        )
+        return AccountStore.Account(
+            id: Self.accountDID,
+            handle: "alice.test",
+            client: client,
+            credentials: credentials,
+            authMode: .cab
+        )
+    }
+
+    /// Only Petrel's response-size refusal satisfies the known issues below, so
+    /// an unrelated failure is still reported.
+    private static func isResponseLimitExceeded(_ issue: Issue) -> Bool {
+        guard let error = issue.error as? NetworkError, case .responseLimitExceeded = error else {
+            return false
+        }
+        return true
+    }
+
+    @Test("Known issue AD-1: own-repo verification over OAuth still stops at Petrel's 10 MiB response limit")
+    @MainActor
+    func ownRepoVerificationStopsAtPetrelResponseLimit() async throws {
+        let host = try #require(URL(string: "http://127.0.0.1:\(ForeignArchiveMockURLProtocol.port)"))
+        let spaceItem = try SpaceItem(
+            uriString: "at://\(Self.accountDID)/space/com.example.drive/self",
+            accountDID: Self.accountDID
+        )
+        let ownRepo = RepoEntry(did: Self.accountDID, rev: Self.rev, hash: "unused")
+        let account = await Self.makeLoopbackAccount(host: host)
+        defer { ForeignArchiveMockURLProtocol.setHandler(nil) }
+
+        // Control: the same OAuth route verifies an own archive below 10 MiB.
+        let (small, _) = try Self.makeLargeArchive(space: spaceItem.ref, repo: Self.accountDID, recordCount: 9)
+        #expect(small.count < 10 * 1_048_576)
+        ForeignArchiveMockURLProtocol.setHandler(Self.makeUncappableReadHandler(archive: small, blob: Data()))
+        let report = try await SpaceDetailModel().verifyRepo(repo: ownRepo, space: spaceItem, account: account)
+        #expect(report.outcome == .verified(recordCount: 9))
+
+        // Above 10 MiB the generated client's NetworkService refuses the body.
+        // Petrel has no per-request limit for generated calls, so ATProtoDrive
+        // cannot apply SpaceSTAR.defaultMaximumArchiveBytes here. Remove this
+        // known issue when Petrel adds one and verifyRepo passes it.
+        let (large, _) = try Self.makeLargeArchive(space: spaceItem.ref, repo: Self.accountDID)
+        #expect(large.count > 10 * 1_048_576)
+        ForeignArchiveMockURLProtocol.setHandler(Self.makeUncappableReadHandler(archive: large, blob: Data()))
+        try await withKnownIssue("AD-1: Petrel caps OAuth getRepo at 10 MiB") {
+            _ = try await SpaceDetailModel().verifyRepo(repo: ownRepo, space: spaceItem, account: account)
+        } matching: { issue in
+            Self.isResponseLimitExceeded(issue)
+        }
+    }
+
+    @Test("Known issue AD-1: own and foreign Space blob downloads still stop at Petrel's 10 MiB response limit")
+    @MainActor
+    func spaceBlobDownloadsStopAtPetrelResponseLimit() async throws {
+        let host = try #require(URL(string: "http://127.0.0.1:\(ForeignArchiveMockURLProtocol.port)"))
+        let spaceItem = try SpaceItem(
+            uriString: "at://\(Self.accountDID)/space/com.example.drive/self",
+            accountDID: Self.accountDID
+        )
+        let account = await Self.makeLoopbackAccount(host: host)
+        defer { ForeignArchiveMockURLProtocol.setHandler(nil) }
+        let cid = try CID.fromDAGCBOR(DAGCBOR.encodeValue(["blob": "AD-1"])).string
+        let small = Data(repeating: 0x5a, count: 9 * 1_048_576)
+        let large = Data(repeating: 0x5a, count: 11 * 1_048_576)
+        let model = RecordListModel()
+
+        // Own repo: the generated OAuth getBlob, capped by the client's NetworkService.
+        let ownRepo = RepoEntry(did: Self.accountDID, rev: Self.rev, hash: "unused")
+        ForeignArchiveMockURLProtocol.setHandler(Self.makeUncappableReadHandler(archive: Data(), blob: small))
+        #expect(try await model.getBlob(space: spaceItem, repo: ownRepo, cid: cid, account: account) == small)
+        ForeignArchiveMockURLProtocol.setHandler(Self.makeUncappableReadHandler(archive: Data(), blob: large))
+        try await withKnownIssue("AD-1: Petrel caps OAuth Space getBlob at 10 MiB") {
+            _ = try await model.getBlob(space: spaceItem, repo: ownRepo, cid: cid, account: account)
+        } matching: { issue in
+            Self.isResponseLimitExceeded(issue)
+        }
+
+        // Foreign repo: SpaceCredentialManager.get, whose maximumArchiveBytes
+        // applies to getRepo only and is ignored for getBlob.
+        let memberRepo = RepoEntry(did: Self.memberDID, rev: Self.rev, hash: "unused")
+        ForeignArchiveMockURLProtocol.setHandler(Self.makeUncappableReadHandler(archive: Data(), blob: small))
+        #expect(try await model.getBlob(space: spaceItem, repo: memberRepo, cid: cid, account: account) == small)
+        ForeignArchiveMockURLProtocol.setHandler(Self.makeUncappableReadHandler(archive: Data(), blob: large))
+        try await withKnownIssue("AD-1: Petrel caps space-credential getBlob at 10 MiB") {
+            _ = try await model.getBlob(space: spaceItem, repo: memberRepo, cid: cid, account: account)
+        } matching: { issue in
+            Self.isResponseLimitExceeded(issue)
+        }
     }
 }
