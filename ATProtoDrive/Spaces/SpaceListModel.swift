@@ -163,12 +163,12 @@ public final class SpaceListModel {
         skey: String?,
         policy: SpacePolicyOption,
         account: AccountStore.Account,
-        transport: (@Sendable (_ input: ComAtprotoSimplespaceCreateSpace.Input) async throws -> (responseCode: Int, data: ComAtprotoSimplespaceCreateSpace.Output?))? = nil,
+        transport: (@Sendable (_ input: ComAtprotoSpaceCreateSpace.Input) async throws -> (responseCode: Int, data: ComAtprotoSpaceCreateSpace.Output?))? = nil,
         listSpacesTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListSpaces.Output?))? = nil
     ) async throws -> SpaceRef {
         let input = try SpaceDetailModel.makeCreateSpaceInput(spaceType: spaceType, skey: skey, policy: policy)
         let execute = transport ?? { input in
-            try await account.client.com.atproto.simplespace.createSpace(input: input)
+            try await account.client.com.atproto.space.createSpace(input: input)
         }
         let (responseCode, output) = try await execute(input)
         guard (200...299).contains(responseCode) else {
@@ -198,12 +198,12 @@ public final class SpaceListModel {
     public func deleteSpace(
         space: SpaceItem,
         account: AccountStore.Account,
-        transport: (@Sendable (_ input: ComAtprotoSimplespaceDeleteSpace.Input) async throws -> Int)? = nil,
+        transport: (@Sendable (_ input: ComAtprotoSpaceDeleteSpace.Input) async throws -> Int)? = nil,
         listSpacesTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListSpaces.Output?))? = nil
     ) async throws {
-        let input = ComAtprotoSimplespaceDeleteSpace.Input(space: space.ref)
+        let input = ComAtprotoSpaceDeleteSpace.Input(space: space.ref)
         let execute = transport ?? { input in
-            try await account.client.com.atproto.simplespace.deleteSpace(input: input)
+            try await account.client.com.atproto.space.deleteSpace(input: input)
         }
         let responseCode = try await execute(input)
         guard (200...299).contains(responseCode) else {

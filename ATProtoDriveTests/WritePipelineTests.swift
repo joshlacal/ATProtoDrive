@@ -30,7 +30,7 @@ struct WritePipelineTests {
 
     // MARK: - 1. CreateSpace Tests
 
-    @Test("makeCreateSpaceInput constructs memberListPolicy and open appAccess correctly")
+    @Test("makeCreateSpaceInput maps memberList to a memberspace policy with no public flags")
     func testCreateSpaceInputMemberList() throws {
         let input = try SpaceDetailModel.makeCreateSpaceInput(
             spaceType: "space.swan.drive",
@@ -41,26 +41,18 @@ struct WritePipelineTests {
         #expect(input.spaceType.description == "space.swan.drive")
         #expect(input.skey?.description == "self")
 
-        if case .comAtprotoSimplespaceDefsMemberListPolicy = input.readPolicy {
-            // expected
-        } else {
-            Issue.record("Expected member-list read policy")
+        guard case let .comAtprotoMemberspacePolicy(policy) = input.policy else {
+            Issue.record("Expected a memberspace policy")
+            return
         }
-
-        if case .comAtprotoSimplespaceDefsMemberListPolicy = input.writePolicy {
-            // expected
-        } else {
-            Issue.record("Expected member-list write policy")
-        }
-
-        if case .comAtprotoSimplespaceDefsOpen = input.appAccess {
-            // expected
-        } else {
-            Issue.record("Expected comAtprotoSimplespaceDefsOpen")
-        }
+        #expect(policy.publicRead != true)
+        #expect(policy.publicWrite != true)
+        #expect(policy.allowedApps == nil)
+        #expect(policy.publishPolicy == nil)
+        #expect(policy.publishMembers == nil)
     }
 
-    @Test("makeCreateSpaceInput constructs publicPolicy correctly and handles nil skey")
+    @Test("makeCreateSpaceInput maps public to memberspace with public read and write, and handles nil skey")
     func testCreateSpaceInputPublicPolicy() throws {
         let input = try SpaceDetailModel.makeCreateSpaceInput(
             spaceType: "space.swan.notes",
@@ -71,23 +63,33 @@ struct WritePipelineTests {
         #expect(input.spaceType.description == "space.swan.notes")
         #expect(input.skey == nil)
 
-        if case .comAtprotoSimplespaceDefsPublicPolicy = input.readPolicy {
-            // expected
-        } else {
-            Issue.record("Expected public read policy")
+        guard case let .comAtprotoMemberspacePolicy(policy) = input.policy else {
+            Issue.record("Expected a memberspace policy")
+            return
         }
+        #expect(policy.publicRead == true)
+        #expect(policy.publicWrite == true)
+        #expect(policy.allowedApps == nil)
+        #expect(policy.publishPolicy == nil)
+        #expect(policy.publishMembers == nil)
+    }
 
-        if case .comAtprotoSimplespaceDefsPublicPolicy = input.writePolicy {
-            // expected
-        } else {
-            Issue.record("Expected public write policy")
-        }
-
-        if case .comAtprotoSimplespaceDefsOpen = input.appAccess {
-            // expected
-        } else {
-            Issue.record("Expected comAtprotoSimplespaceDefsOpen")
-        }
+    @Test("makeCreateSpaceInput encodes the policy union with the memberspace type")
+    func testCreateSpaceInputPolicyWireType() throws {
+        let input = try SpaceDetailModel.makeCreateSpaceInput(
+            spaceType: "space.swan.drive",
+            skey: nil,
+            policy: .public
+        )
+        let data = try JSONEncoder().encode(input)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let policy = try #require(object["policy"] as? [String: Any])
+        #expect(policy["$type"] as? String == "com.atproto.memberspace.policy")
+        #expect(policy["publicRead"] as? Bool == true)
+        #expect(policy["publicWrite"] as? Bool == true)
+        #expect(object["readPolicy"] == nil)
+        #expect(object["writePolicy"] == nil)
+        #expect(object["appAccess"] == nil)
     }
 
     @Test("makeCreateSpaceInput rejects empty space type")
@@ -117,7 +119,7 @@ struct WritePipelineTests {
             transport: { input in
                 await tracker.record(input)
                 #expect(input.spaceType.description == "space.swan.drive")
-                return (200, ComAtprotoSimplespaceCreateSpace.Output(uri: expectedRef))
+                return (200, ComAtprotoSpaceCreateSpace.Output(uri: expectedRef))
             },
             listSpacesTransport: { cursor in
                 return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: expectedRef)]))
@@ -192,7 +194,7 @@ struct WritePipelineTests {
             },
             fetchRepos: { [] },
             listMembersTransport: { cursor in
-                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:carol789"), read: true, write: true)]))
+                return (200, ComAtprotoMemberspaceListMembers.Output(cursor: nil, members: [ComAtprotoMemberspaceListMembers.Member(did: try DID(didString: "did:plc:carol789"), read: true, write: true)]))
             }
         )
 
@@ -223,7 +225,7 @@ struct WritePipelineTests {
             },
             fetchRepos: { [] },
             listMembersTransport: { cursor in
-                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: []))
+                return (200, ComAtprotoMemberspaceListMembers.Output(cursor: nil, members: []))
             }
         )
 
@@ -631,7 +633,7 @@ struct WritePipelineTests {
             account: dummyAccount,
             transport: { input in
                 await createTracker.record(input)
-                return (200, ComAtprotoSimplespaceCreateSpace.Output(uri: createdRef))
+                return (200, ComAtprotoSpaceCreateSpace.Output(uri: createdRef))
             },
             listSpacesTransport: listTransport
         )
@@ -667,7 +669,7 @@ struct WritePipelineTests {
             policy: .memberList,
             account: dummyAccount,
             transport: { _ in
-                return (200, ComAtprotoSimplespaceCreateSpace.Output(uri: createdRef))
+                return (200, ComAtprotoSpaceCreateSpace.Output(uri: createdRef))
             },
             listSpacesTransport: listTransport
         )
@@ -958,19 +960,19 @@ struct WritePipelineTests {
         let dummyAccount = await makeTestAccount()
         let model = SpaceDetailModel()
 
-        let m1 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:alice123"), read: true, write: true)
-        let m2 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:bob456"), read: true, write: true)
+        let m1 = ComAtprotoMemberspaceListMembers.Member(did: try DID(didString: "did:plc:alice123"), read: true, write: true)
+        let m2 = ComAtprotoMemberspaceListMembers.Member(did: try DID(didString: "did:plc:bob456"), read: true, write: true)
 
         let addTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
 
-        let listTransport: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?) = { cursor in
+        let listTransport: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoMemberspaceListMembers.Output?) = { cursor in
             let count = await listTracker.callCount
             await listTracker.record(cursor as Any)
             if count == 0 {
-                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [m1]))
+                return (200, ComAtprotoMemberspaceListMembers.Output(cursor: nil, members: [m1]))
             } else {
-                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [m1, m2]))
+                return (200, ComAtprotoMemberspaceListMembers.Output(cursor: nil, members: [m1, m2]))
             }
         }
 
@@ -1011,19 +1013,19 @@ struct WritePipelineTests {
         let dummyAccount = await makeTestAccount()
         let model = SpaceDetailModel()
 
-        let m1 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:alice123"), read: true, write: true)
-        let m2 = ComAtprotoSimplespaceListMembers.Member(did: try DID(didString: "did:plc:bob456"), read: true, write: true)
+        let m1 = ComAtprotoMemberspaceListMembers.Member(did: try DID(didString: "did:plc:alice123"), read: true, write: true)
+        let m2 = ComAtprotoMemberspaceListMembers.Member(did: try DID(didString: "did:plc:bob456"), read: true, write: true)
 
         let removeTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
 
-        let listTransport: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?) = { cursor in
+        let listTransport: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoMemberspaceListMembers.Output?) = { cursor in
             let count = await listTracker.callCount
             await listTracker.record(cursor as Any)
             if count == 0 {
-                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [m1, m2]))
+                return (200, ComAtprotoMemberspaceListMembers.Output(cursor: nil, members: [m1, m2]))
             } else {
-                return (200, ComAtprotoSimplespaceListMembers.Output(cursor: nil, members: [m1]))
+                return (200, ComAtprotoMemberspaceListMembers.Output(cursor: nil, members: [m1]))
             }
         }
 

@@ -251,7 +251,7 @@ public struct SpaceDetailView: View {
             ContentUnavailableView {
                 Label("Access Denied", systemImage: "person.crop.circle.badge.xmark")
             } description: {
-                Text("You no longer have access to this space.")
+                Text("This space was not found, or you do not have access to it.")
             } actions: {
                 Text(message)
                     .font(.caption)

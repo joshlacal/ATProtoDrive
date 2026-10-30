@@ -203,6 +203,16 @@ struct SpaceDetailModelTests {
         )
         let state2 = SpaceDetailModel.classifyError(credError)
         #expect(state2 == .authorizationRefused("You no longer have access to this space (swan.place refused authorization: User is not a member)"))
+
+        let notFoundOrNotAuthorized = SpaceCredentialError.authorizationRefused(
+            host: "swan.place",
+            error: "SpaceNotFound",
+            message: nil
+        )
+        guard case .authorizationRefused = SpaceDetailModel.classifyError(notFoundOrNotAuthorized) else {
+            Issue.record("Expected SpaceNotFound from the credential exchange to classify as authorizationRefused")
+            return
+        }
     }
 
     @Test("classifyError identifies general errors")
@@ -303,13 +313,13 @@ struct SpaceDetailModelTests {
         let did1 = try DID(didString: "did:plc:member1")
         let did2 = try DID(didString: "did:plc:member2")
 
-        let page1 = ComAtprotoSimplespaceListMembers.Output(
+        let page1 = ComAtprotoMemberspaceListMembers.Output(
             cursor: "member_cursor_2",
-            members: [ComAtprotoSimplespaceListMembers.Member(did: did1, read: true, write: true)]
+            members: [ComAtprotoMemberspaceListMembers.Member(did: did1, read: true, write: true)]
         )
-        let page2 = ComAtprotoSimplespaceListMembers.Output(
+        let page2 = ComAtprotoMemberspaceListMembers.Output(
             cursor: nil,
-            members: [ComAtprotoSimplespaceListMembers.Member(did: did2, read: true, write: true)]
+            members: [ComAtprotoMemberspaceListMembers.Member(did: did2, read: true, write: true)]
         )
 
         let tracker = TestCallTracker()
@@ -333,9 +343,9 @@ struct SpaceDetailModelTests {
     @Test("fetchAllMembers protects against duplicate cursor cycle loops")
     func testFetchAllMembersCycleProtection() async throws {
         let did = try DID(didString: "did:plc:member1")
-        let loopingPage = ComAtprotoSimplespaceListMembers.Output(
+        let loopingPage = ComAtprotoMemberspaceListMembers.Output(
             cursor: "member_loop_cursor",
-            members: [ComAtprotoSimplespaceListMembers.Member(did: did, read: true, write: true)]
+            members: [ComAtprotoMemberspaceListMembers.Member(did: did, read: true, write: true)]
         )
 
         let tracker = TestCallTracker()
@@ -354,14 +364,14 @@ struct SpaceDetailModelTests {
     func testIsMemberListNotReadableError() {
         let methodNotImplemented = ATProtoXRPCError(
             error: "MethodNotImplemented",
-            message: "Method com.atproto.simplespace.listMembers not implemented",
+            message: "Method com.atproto.memberspace.listMembers not implemented",
             statusCode: 501
         )
         #expect(SpaceDetailModel.isMemberListNotReadableError(methodNotImplemented) == true)
 
         let methodNotFound = ATProtoXRPCError(
             error: "MethodNotFound",
-            message: "Method com.atproto.simplespace.listMembers not found",
+            message: "Method com.atproto.memberspace.listMembers not found",
             statusCode: 404
         )
         #expect(SpaceDetailModel.isMemberListNotReadableError(methodNotFound) == true)
@@ -379,6 +389,28 @@ struct SpaceDetailModelTests {
             statusCode: 400
         )
         #expect(SpaceDetailModel.isMemberListNotReadableError(messageContainsNotImplemented) == true)
+
+        // A space under a personalspace or managedspace policy answers PolicyMismatch.
+        let typedPolicyMismatch = ATProtoError<ComAtprotoMemberspaceListMembers.Error>(
+            error: .policyMismatch,
+            message: "Space is not governed by the memberspace policy",
+            statusCode: 400
+        )
+        #expect(SpaceDetailModel.isMemberListNotReadableError(typedPolicyMismatch) == true)
+
+        let genericPolicyMismatch = ATProtoXRPCError(
+            error: "PolicyMismatch",
+            message: "Space is not governed by the memberspace policy",
+            statusCode: 400
+        )
+        #expect(SpaceDetailModel.isMemberListNotReadableError(genericPolicyMismatch) == true)
+
+        let typedSpaceNotFound = ATProtoError<ComAtprotoMemberspaceListMembers.Error>(
+            error: .spaceNotFound,
+            message: "Space not found",
+            statusCode: 400
+        )
+        #expect(SpaceDetailModel.isMemberListNotReadableError(typedSpaceNotFound) == false)
 
         // Genuine XRPC errors that MUST NOT be suppressed:
         let notFound = ATProtoXRPCError(
@@ -515,6 +547,22 @@ struct SpaceDetailModelTests {
             }
         )
         #expect(suppressedResult.members == nil)
+
+        // Suppressed: a personalspace or managedspace answers PolicyMismatch; repos still load
+        let repo = RepoEntry(did: "did:plc:alice", rev: "rev1", hash: "abc123")
+        let policyMismatchResult = try await SpaceDetailModel.loadSpaceDetails(
+            space: space,
+            fetchRepos: { [repo] },
+            fetchMembers: {
+                throw ATProtoError<ComAtprotoMemberspaceListMembers.Error>(
+                    error: .policyMismatch,
+                    message: nil,
+                    statusCode: 400
+                )
+            }
+        )
+        #expect(policyMismatchResult.members == nil)
+        #expect(policyMismatchResult.repos.count == 1)
 
         // Not suppressed: genuine 404 InvalidRequest throws and preserves exact raw error text
         do {

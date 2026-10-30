@@ -96,7 +96,7 @@ public final class SpaceDetailModel {
     }
 
     public private(set) var repos: [RepoEntry] = []
-    public private(set) var members: [String]? // DIDs; nil when not simplespace-readable
+    public private(set) var members: [String]? // DIDs; nil when the member list is not readable
     public private(set) var isLoading: Bool = false
     public private(set) var error: String?
     public private(set) var errorState: ErrorState?
@@ -186,11 +186,18 @@ public final class SpaceDetailModel {
         space.isOwnAuthority
     }
 
-    /// Distinguishes an unreadable member list (e.g. endpoint/method not implemented or supported on this server)
+    /// Distinguishes an unreadable member list (e.g. a space not governed by the memberspace policy, or an
+    /// endpoint/method not implemented or supported on this server)
     /// from a genuine XRPC error (auth, permission, space not found, invalid request, server error).
     nonisolated public static func isMemberListNotReadableError(_ error: Error) -> Bool {
+        // A space governed by a personalspace or managedspace policy has no member list.
+        if let typed = error as? ATProtoError<ComAtprotoMemberspaceListMembers.Error>,
+           typed.error == .policyMismatch {
+            return true
+        }
         if let xrpc = error as? ATProtoXRPCError {
-            if xrpc.error == "MethodNotImplemented" ||
+            if xrpc.error == "PolicyMismatch" ||
+                xrpc.error == "MethodNotImplemented" ||
                 xrpc.error == "MethodNotFound" ||
                 xrpc.error == "XRPCNotSupported" {
                 return true
@@ -327,9 +334,9 @@ public final class SpaceDetailModel {
         return accumulated
     }
 
-    /// Pure pagination helper for `com.atproto.simplespace.listMembers`.
+    /// Pure pagination helper for `com.atproto.memberspace.listMembers`.
     nonisolated public static func fetchAllMembers(
-        fetchPage: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?)
+        fetchPage: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoMemberspaceListMembers.Output?)
     ) async throws -> [String] {
         var accumulated: [String] = []
         var currentCursor: String? = nil
@@ -392,7 +399,7 @@ public final class SpaceDetailModel {
         account: AccountStore.Account,
         authorityResolver: SpaceHostResolver? = nil,
         fetchRepos: (@Sendable () async throws -> [RepoEntry])? = nil,
-        listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?))? = nil
+        listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoMemberspaceListMembers.Output?))? = nil
     ) async {
         isLoading = true
         error = nil
@@ -419,8 +426,8 @@ public final class SpaceDetailModel {
                 return try await Self.fetchAllMembers(fetchPage: listMembersTransport)
             } else {
                 return try await Self.fetchAllMembers { cursor in
-                    let (responseCode, output) = try await account.client.com.atproto.simplespace.listMembers(
-                        input: ComAtprotoSimplespaceListMembers.Parameters(space: space.ref, cursor: cursor)
+                    let (responseCode, output) = try await account.client.com.atproto.memberspace.listMembers(
+                        input: ComAtprotoMemberspaceListMembers.Parameters(space: space.ref, cursor: cursor)
                     )
                     return (responseCode, output)
                 }
@@ -453,12 +460,12 @@ public final class SpaceDetailModel {
 
     // MARK: - Write Pipelines & Actions
 
-    /// Pure helper to construct `ComAtprotoSimplespaceCreateSpace.Input`.
+    /// Pure helper to construct `ComAtprotoSpaceCreateSpace.Input`.
     nonisolated public static func makeCreateSpaceInput(
         spaceType: String,
         skey: String?,
         policy: SpacePolicyOption
-    ) throws -> ComAtprotoSimplespaceCreateSpace.Input {
+    ) throws -> ComAtprotoSpaceCreateSpace.Input {
         let trimmedType = spaceType.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedType.isEmpty else {
             throw CreateSpaceError.emptySpaceType
@@ -471,25 +478,22 @@ public final class SpaceDetailModel {
             recordKey = nil
         }
 
-        let readPolicy: ComAtprotoSimplespaceCreateSpace.InputReadPolicyUnion
-        let writePolicy: ComAtprotoSimplespaceCreateSpace.InputWritePolicyUnion
+        // Both legacy options map exactly onto the memberspace policy: a member list
+        // on both sides is memberspace with no public flags, and public on both sides
+        // is memberspace with public read and public write. Omitting allowedApps keeps
+        // the old open app access.
+        let memberspacePolicy: ComAtprotoMemberspacePolicy
         switch policy {
         case .memberList:
-            readPolicy = .comAtprotoSimplespaceDefsMemberListPolicy(ComAtprotoSimplespaceDefs.MemberListPolicy())
-            writePolicy = .comAtprotoSimplespaceDefsMemberListPolicy(ComAtprotoSimplespaceDefs.MemberListPolicy())
+            memberspacePolicy = ComAtprotoMemberspacePolicy()
         case .public:
-            readPolicy = .comAtprotoSimplespaceDefsPublicPolicy(ComAtprotoSimplespaceDefs.PublicPolicy())
-            writePolicy = .comAtprotoSimplespaceDefsPublicPolicy(ComAtprotoSimplespaceDefs.PublicPolicy())
+            memberspacePolicy = ComAtprotoMemberspacePolicy(publicRead: true, publicWrite: true)
         }
 
-        let appAccessUnion: ComAtprotoSimplespaceCreateSpace.InputAppAccessUnion = .comAtprotoSimplespaceDefsOpen(ComAtprotoSimplespaceDefs.Open())
-
-        return ComAtprotoSimplespaceCreateSpace.Input(
+        return ComAtprotoSpaceCreateSpace.Input(
             spaceType: nsid,
             skey: recordKey,
-            readPolicy: readPolicy,
-            writePolicy: writePolicy,
-            appAccess: appAccessUnion
+            policy: .comAtprotoMemberspacePolicy(memberspacePolicy)
         )
     }
 
@@ -519,17 +523,17 @@ public final class SpaceDetailModel {
         space: SpaceItem,
         account: AccountStore.Account,
         resolveHandle: (@Sendable (_ handle: String) async throws -> String)? = nil,
-        transport: (@Sendable (_ input: ComAtprotoSimplespacePutMember.Input) async throws -> Int)? = nil,
+        transport: (@Sendable (_ input: ComAtprotoMemberspacePutMember.Input) async throws -> Int)? = nil,
         fetchRepos: (@Sendable () async throws -> [RepoEntry])? = nil,
-        listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?))? = nil
+        listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoMemberspaceListMembers.Output?))? = nil
     ) async throws {
         let resolver = resolveHandle ?? { handle in
             try await account.client.resolveHandleToDID(handle: handle)
         }
         let did = try await Self.resolveIdentifierToDID(identifier, resolveHandle: resolver)
-        let input = ComAtprotoSimplespacePutMember.Input(space: space.ref, did: did, read: true, write: true)
+        let input = ComAtprotoMemberspacePutMember.Input(space: space.ref, did: did, read: true, write: true)
         let execute = transport ?? { input in
-            try await account.client.com.atproto.simplespace.putMember(input: input)
+            try await account.client.com.atproto.memberspace.putMember(input: input)
         }
         let responseCode = try await execute(input)
         guard (200...299).contains(responseCode) else {
@@ -548,14 +552,14 @@ public final class SpaceDetailModel {
         did: String,
         space: SpaceItem,
         account: AccountStore.Account,
-        transport: (@Sendable (_ input: ComAtprotoSimplespaceRemoveMember.Input) async throws -> Int)? = nil,
+        transport: (@Sendable (_ input: ComAtprotoMemberspaceRemoveMember.Input) async throws -> Int)? = nil,
         fetchRepos: (@Sendable () async throws -> [RepoEntry])? = nil,
-        listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSimplespaceListMembers.Output?))? = nil
+        listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoMemberspaceListMembers.Output?))? = nil
     ) async throws {
         let didVal = try DID(didString: did.trimmingCharacters(in: .whitespacesAndNewlines))
-        let input = ComAtprotoSimplespaceRemoveMember.Input(space: space.ref, did: didVal)
+        let input = ComAtprotoMemberspaceRemoveMember.Input(space: space.ref, did: didVal)
         let execute = transport ?? { input in
-            try await account.client.com.atproto.simplespace.removeMember(input: input)
+            try await account.client.com.atproto.memberspace.removeMember(input: input)
         }
         let responseCode = try await execute(input)
         guard (200...299).contains(responseCode) else {
