@@ -21,3 +21,13 @@ The existing recovery index also adopts Swan's current canonical path ordering a
 Chose: place the existing inspector content in a fixed-width side panel beside the navigation split view (provisional). On the current macOS/Xcode 27 runtime, opening the native SwiftUI inspector repeatedly terminated the app with an AppKit constraint-update exception for both record and file details. Fixing the native inspector width did not resolve it. The ordinary side panel preserves the toolbar toggle and selection while remaining stable during the same fixture interactions.
 
 Reversible until integration. Override by restoring the native inspector after its window constraint behavior is verified on the target runtime. This is a local runtime workaround, not a claim about all macOS versions.
+
+## 2026-10-30 · ATProtoDrive · October 29 Spaces alpha compatibility
+
+Chose: map the two existing create-space options onto the memberspace policy (provisional). "Member List" becomes `com.atproto.memberspace.policy` with no flags set, and "Public" becomes memberspace with `publicRead: true` and `publicWrite: true`. `allowedApps` is omitted, which matches the old open app access. This is the exact conversion the October 29 proposal gives for the old member-list and public policies, so a space created by the app grants the same access as before. Rejected: offering personalspace or managedspace creation, or exposing the new publish flags (feature work the compatibility request rules out). This supersedes the split read/write mapping in the 2026-09-19 compatibility entry.
+
+Chose: treat `PolicyMismatch` from `com.atproto.memberspace.listMembers` as "member list not readable", like an unimplemented method (provisional). An own space governed by a personalspace or managedspace policy then still loads its repositories with no member list, instead of failing the whole detail load. Both the typed Petrel error and the generic XRPC error are recognised. Rejected: deciding from the space type before calling listMembers (the app cannot read a non-owner policy, and the server is the authority on which policy applies).
+
+Chose: reword the compiled detail view's access-denied line to "not found, or you do not have access" (provisional). Under October 29 a refused user receives `SpaceNotFound`, which Petrel already reports as an authorization refusal described as "not found or not authorized". `UserNotAuthorized`, `AppNotAuthorized` and `NotAuthorized` are still handled. Rejected: leaving "You no longer have access", which asserts prior membership the error no longer implies.
+
+Reversible until: integration of `claude/spaces-oct29-20261030`. Override by: reverting that bookmark's ATProtoDrive commit.

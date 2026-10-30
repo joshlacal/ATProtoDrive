@@ -79,7 +79,7 @@ Opening a public repository resolves the handle when supplied, then resolves and
 
 ### 5.2 ATProto Spaces
 
-Space browsing and mutation use `com.atproto.space.*` and `com.atproto.simplespace.*`. A Space is an authorization and synchronization boundary containing one permissioned repository per writer. The app labels this section **Spaces — Experimental** and displays its access policy without describing the content as encrypted.
+Space browsing and mutation use `com.atproto.space.*` and, for member lists, `com.atproto.memberspace.*`. A Space is an authorization and synchronization boundary containing one permissioned repository per writer. The app labels this section **Spaces — Experimental** and displays its access policy without describing the content as encrypted.
 
 A Space record is identified by the full permissioned URI `at://{spaceDid}/space/{spaceType}/{skey}/{authorDid}/{collection}/{rkey}`. The app derives and validates that URI through `SpaceRef`; it never substitutes the public-repository form rooted at the writer DID.
 
