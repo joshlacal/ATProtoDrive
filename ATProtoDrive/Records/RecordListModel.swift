@@ -1151,6 +1151,18 @@ public final class RecordListModel {
             return .repoNotFound(message)
         }
 
+        if errorString == "RepoTakendown" || errorString == "RepoDeactivated" {
+            return .general("Repository suspended: \(message)")
+        }
+
+        if errorString == "UpstreamFailure" {
+            return .general("Temporary upstream failure: \(message)")
+        }
+
+        if errorString == "InvalidSpaceMac" {
+            return .general("Space response verification failed: \(message)")
+        }
+
         if let xrpc = error as? ATProtoXRPCError,
            xrpc.error == "SpaceDeleted", xrpc.statusCode == 400 {
             return .tombstone(message)
@@ -1164,16 +1176,16 @@ public final class RecordListModel {
         }
 
         if lowercasedMessage.contains("you no longer have access") ||
-            errorString == "UserNotAuthorized" ||
+            errorString == "AccountNotAuthorized" ||
             errorString == "AppNotAuthorized" ||
             errorString == "NotAuthorized" ||
             errorString == "AccessDenied" ||
             errorString == "Forbidden" ||
             errorString == "PermissionDenied" ||
-            lowercasedError.contains("usernotauthorized") ||
+            lowercasedError.contains("accountnotauthorized") ||
             lowercasedError.contains("notauthorized") ||
             lowercasedError.contains("accessdenied") ||
-            lowercasedMessage.contains("usernotauthorized") ||
+            lowercasedMessage.contains("accountnotauthorized") ||
             lowercasedMessage.contains("notauthorized") ||
             lowercasedMessage.contains("access denied") ||
             lowercasedMessage.contains("refused authorization") {

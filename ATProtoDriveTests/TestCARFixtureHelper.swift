@@ -137,7 +137,7 @@ enum TestSTARFixtureHelper {
             "repo": authorDID, "rev": TestCARFixtureHelper.revision, "data": digest.digest
         ] as [String: Any])
         var archive = Data([0x2a, 0x6c, 1, 0])
-        for frame in [metadata] + frames {
+        func appendFrame(_ frame: Data) {
             var length = frame.count
             repeat {
                 let byte = UInt8(length & 0x7f)
@@ -146,6 +146,13 @@ enum TestSTARFixtureHelper {
             } while length > 0
             archive.append(frame)
         }
+        appendFrame(metadata)
+        for index in stride(from: 0, to: frames.count, by: 2) {
+            archive.append(0x01)
+            appendFrame(frames[index])
+            appendFrame(frames[index + 1])
+        }
+        archive.append(0x00)
         return (archive, space)
     }
 }

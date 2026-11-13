@@ -356,9 +356,18 @@ struct RecordListModelTests {
         let stateToken = RecordListModel.classifyError(tokenErr)
         #expect(stateToken == .tokenRejected("InvalidDelegationToken: Token rejected"))
 
-        let authRefusedErr = ATProtoXRPCError(error: "UserNotAuthorized", message: "Access denied", statusCode: 403)
+        let authRefusedErr = ATProtoXRPCError(error: "AccountNotAuthorized", message: "Access denied", statusCode: 403)
         let stateAuthRefused = RecordListModel.classifyError(authRefusedErr)
-        #expect(stateAuthRefused == .authorizationRefused("UserNotAuthorized: Access denied"))
+        #expect(stateAuthRefused == .authorizationRefused("AccountNotAuthorized: Access denied"))
+
+        let suspended = ATProtoXRPCError(error: "RepoDeactivated", message: "Account suspended", statusCode: 400)
+        #expect(RecordListModel.classifyError(suspended) == .general("Repository suspended: RepoDeactivated: Account suspended"))
+
+        let invalidMAC = ATProtoXRPCError(error: "InvalidSpaceMac", message: "MAC rejected", statusCode: 400)
+        #expect(RecordListModel.classifyError(invalidMAC) == .general("Space response verification failed: InvalidSpaceMac: MAC rejected"))
+
+        let upstream = ATProtoXRPCError(error: "UpstreamFailure", message: "Managing app unavailable", statusCode: 502)
+        #expect(RecordListModel.classifyError(upstream) == .general("Temporary upstream failure: UpstreamFailure: Managing app unavailable"))
 
         let authErr = ATProtoXRPCError(error: "MissingScope", message: "Scope required", statusCode: 403)
         let state3 = RecordListModel.classifyError(authErr)

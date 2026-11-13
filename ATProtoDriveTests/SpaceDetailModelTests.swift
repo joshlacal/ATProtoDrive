@@ -50,59 +50,64 @@ struct SpaceDetailModelTests {
         #expect(entry1 != entry3)
     }
 
-    // MARK: - makeListReposURL Tests
+    // MARK: - makeListWritersURL Tests
 
-    @Test("makeListReposURL builds correct endpoint URL with space query item")
-    func testMakeListReposURLStandard() throws {
+    @Test("makeListWritersURL builds correct endpoint URL with space query item")
+    func testMakeListWritersURLStandard() throws {
         let spaceHost = URL(string: "https://pds.example.com")!
         let ref = try SpaceRef(uriString: "at://did:plc:alice123/space/com.atproto.feed/main")
 
-        let url = try #require(SpaceDetailModel.makeListReposURL(spaceHost: spaceHost, space: ref))
+        let url = try #require(SpaceDetailModel.makeListWritersURL(spaceHost: spaceHost, space: ref))
 
         let comps = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
         #expect(comps.scheme == "https")
         #expect(comps.host == "pds.example.com")
-        #expect(comps.path == "/xrpc/com.atproto.space.listRepos")
+        #expect(comps.path == "/xrpc/com.atproto.space.listWriters")
         #expect(comps.queryItems?.contains(URLQueryItem(name: "space", value: "at://did:plc:alice123/space/com.atproto.feed/main")) == true)
         #expect(comps.queryItems?.contains(where: { $0.name == "cursor" }) == false)
     }
 
-    @Test("makeListReposURL handles trailing slash in host and appends cursor when present")
-    func testMakeListReposURLWithCursorAndTrailingSlash() throws {
+    @Test("makeListWritersURL handles trailing slash in host and appends cursor when present")
+    func testMakeListWritersURLWithCursorAndTrailingSlash() throws {
         let spaceHost = URL(string: "https://space.swan.place/")!
         let ref = try SpaceRef(uriString: "at://did:plc:alice123/space/com.atproto.simplespace/my-space")
 
-        let url = try #require(SpaceDetailModel.makeListReposURL(spaceHost: spaceHost, space: ref, cursor: "cursor_page_2"))
+        let url = try #require(SpaceDetailModel.makeListWritersURL(spaceHost: spaceHost, space: ref, cursor: "cursor_page_2"))
 
         let comps = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
-        #expect(comps.path == "/xrpc/com.atproto.space.listRepos")
+        #expect(comps.path == "/xrpc/com.atproto.space.listWriters")
         #expect(comps.queryItems?.first(where: { $0.name == "space" })?.value == "at://did:plc:alice123/space/com.atproto.simplespace/my-space")
         #expect(comps.queryItems?.first(where: { $0.name == "cursor" })?.value == "cursor_page_2")
     }
 
-    @Test("makeListReposURL preserves subpaths in space host")
-    func testMakeListReposURLWithSubpath() throws {
+    @Test("makeListWritersURL preserves subpaths in space host")
+    func testMakeListWritersURLWithSubpath() throws {
         let spaceHost = URL(string: "http://127.0.0.1:8080/custom/prefix")!
         let ref = try SpaceRef(uriString: "at://did:plc:bob456/space/com.example.drive/root")
 
-        let url = try #require(SpaceDetailModel.makeListReposURL(spaceHost: spaceHost, space: ref))
+        let url = try #require(SpaceDetailModel.makeListWritersURL(spaceHost: spaceHost, space: ref))
 
         let comps = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
-        #expect(comps.path == "/custom/prefix/xrpc/com.atproto.space.listRepos")
+        #expect(comps.path == "/custom/prefix/xrpc/com.atproto.space.listWriters")
         #expect(comps.queryItems?.first(where: { $0.name == "space" })?.value == "at://did:plc:bob456/space/com.example.drive/root")
     }
 
-    // MARK: - mapRepoEntries Tests
+    // MARK: - mapWriterEntries Tests
 
-    @Test("mapRepoEntries converts lexicon Repo to UI RepoEntry with base64 hash")
-    func testMapRepoEntries() throws {
+    @Test("mapWriterEntries maps current writers and skips removed repositories")
+    func testMapWriterEntries() throws {
         let did = try DID(didString: "did:plc:alice123")
+        let removedDID = try DID(didString: "did:plc:removed")
         let rev = try TID(tidString: "3l3vbfz2zsk22")
         let rawData = "sample commit hash".data(using: .utf8)!
         let hash = Bytes(data: rawData)
 
-        let repo = ComAtprotoSpaceListRepos.Repo(did: did, repoRev: rev, data: hash, spaceRev: rev)
-        let entries = SpaceDetailModel.mapRepoEntries(from: [repo])
+        let write = ComAtprotoSpaceDefs.RepoWrite(repo: did, repoRev: rev, data: hash, spaceRev: rev)
+        let removed = ComAtprotoSpaceDefs.RepoRemoved(repo: removedDID, spaceRev: rev)
+        let entries = SpaceDetailModel.mapWriterEntries(from: [
+            .comAtprotoSpaceDefsRepoWrite(write),
+            .comAtprotoSpaceDefsRepoRemoved(removed),
+        ])
 
         #expect(entries.count == 1)
         #expect(entries[0].did == "did:plc:alice123")
@@ -186,23 +191,23 @@ struct SpaceDetailModelTests {
         #expect(state3 == .tokenRejected("swan.place rejected the delegation token as invalid (not an access denial; membership is unaffected). swan.place reports: swanProfile=permissioned-data-0016-2026-07-30."))
     }
 
-    @Test("classifyError identifies authorization refused errors")
-    func testClassifyErrorAuthorizationRefused() {
+    @Test("classifyError identifies November 12 authorization and transient states")
+    func testClassifyErrorAuthorizationAndTransientStates() {
         let authRefusedXRPC = ATProtoXRPCError(
-            error: "UserNotAuthorized",
-            message: "User is not a member",
+            error: "AccountNotAuthorized",
+            message: "Account is not a member",
             statusCode: 403
         )
         let state1 = SpaceDetailModel.classifyError(authRefusedXRPC)
-        #expect(state1 == .authorizationRefused("UserNotAuthorized: User is not a member"))
+        #expect(state1 == .authorizationRefused("AccountNotAuthorized: Account is not a member"))
 
         let credError = SpaceCredentialError.authorizationRefused(
             host: "swan.place",
-            error: "UserNotAuthorized",
-            message: "User is not a member"
+            error: "AccountNotAuthorized",
+            message: "Account is not a member"
         )
         let state2 = SpaceDetailModel.classifyError(credError)
-        #expect(state2 == .authorizationRefused("You no longer have access to this space (swan.place refused authorization: User is not a member)"))
+        #expect(state2 == .authorizationRefused("You no longer have access to this space (swan.place refused authorization: Account is not a member)"))
 
         let notFoundOrNotAuthorized = SpaceCredentialError.authorizationRefused(
             host: "swan.place",
@@ -213,6 +218,12 @@ struct SpaceDetailModelTests {
             Issue.record("Expected SpaceNotFound from the credential exchange to classify as authorizationRefused")
             return
         }
+
+        let suspended = ATProtoXRPCError(error: "RepoTakendown", message: "Authority suspended", statusCode: 400)
+        #expect(SpaceDetailModel.classifyError(suspended) == .general("Space suspended: RepoTakendown: Authority suspended"))
+
+        let upstream = ATProtoXRPCError(error: "UpstreamFailure", message: "Managing app unavailable", statusCode: 502)
+        #expect(SpaceDetailModel.classifyError(upstream) == .general("Temporary upstream failure: UpstreamFailure: Managing app unavailable"))
     }
 
     @Test("classifyError identifies general errors")
@@ -229,31 +240,34 @@ struct SpaceDetailModelTests {
         let state2 = SpaceDetailModel.classifyError(generalCredError)
         #expect(state2 == .general("Space credential exchange failed with status 500: Internal Server Error"))
     }
-    // MARK: - fetchAllRepos Pagination Tests
+    // MARK: - fetchAllWriters Pagination Tests
 
-    @Test("fetchAllRepos accumulates across multiple pages using cursor")
-    func testFetchAllReposPagination() async throws {
+    @Test("fetchAllWriters accumulates current writers across pages using cursor")
+    func testFetchAllWritersPagination() async throws {
         let did1 = try DID(didString: "did:plc:alice123")
         let did2 = try DID(didString: "did:plc:bob456")
         let rev = try TID(tidString: "3l3vbfz2zsk22")
         let hash = Bytes(data: "hash1".data(using: .utf8)!)
 
-        let page1 = ComAtprotoSpaceListRepos.Output(
-            repos: [ComAtprotoSpaceListRepos.Repo(did: did1, repoRev: rev, data: hash, spaceRev: rev)],
+        let page1 = ComAtprotoSpaceListWriters.Output(
+            repos: [.comAtprotoSpaceDefsRepoWrite(
+                ComAtprotoSpaceDefs.RepoWrite(repo: did1, repoRev: rev, data: hash, spaceRev: rev)
+            )],
             cursor: "page_2_cursor"
         )
-        let page2 = ComAtprotoSpaceListRepos.Output(
-            repos: [ComAtprotoSpaceListRepos.Repo(did: did2, repoRev: rev, data: hash, spaceRev: rev)],
+        let page2 = ComAtprotoSpaceListWriters.Output(
+            repos: [.comAtprotoSpaceDefsRepoWrite(
+                ComAtprotoSpaceDefs.RepoWrite(repo: did2, repoRev: rev, data: hash, spaceRev: rev)
+            )],
             cursor: nil
         )
-
         let encoder = JSONEncoder()
         let page1Data = try encoder.encode(page1)
         let page2Data = try encoder.encode(page2)
 
         let tracker = TestCallTracker()
 
-        let result = try await SpaceDetailModel.fetchAllRepos { cursor in
+        let result = try await SpaceDetailModel.fetchAllWriters { cursor in
             await tracker.record(cursor: cursor)
             if cursor == nil {
                 return (200, page1Data)
@@ -271,21 +285,23 @@ struct SpaceDetailModelTests {
         #expect(result[1].did == "did:plc:bob456")
     }
 
-    @Test("fetchAllRepos protects against duplicate cursor cycle loops")
-    func testFetchAllReposCycleProtection() async throws {
+    @Test("fetchAllWriters protects against duplicate cursor cycle loops")
+    func testFetchAllWritersCycleProtection() async throws {
         let did = try DID(didString: "did:plc:alice123")
         let rev = try TID(tidString: "3l3vbfz2zsk22")
         let hash = Bytes(data: "hash".data(using: .utf8)!)
 
-        let loopingPage = ComAtprotoSpaceListRepos.Output(
-            repos: [ComAtprotoSpaceListRepos.Repo(did: did, repoRev: rev, data: hash, spaceRev: rev)],
+        let loopingPage = ComAtprotoSpaceListWriters.Output(
+            repos: [.comAtprotoSpaceDefsRepoWrite(
+                ComAtprotoSpaceDefs.RepoWrite(repo: did, repoRev: rev, data: hash, spaceRev: rev)
+            )],
             cursor: "loop_cursor"
         )
 
         let pageData = try JSONEncoder().encode(loopingPage)
         let tracker = TestCallTracker()
 
-        let result = try await SpaceDetailModel.fetchAllRepos { cursor in
+        let result = try await SpaceDetailModel.fetchAllWriters { cursor in
             await tracker.record(cursor: cursor)
             return (200, pageData)
         }
@@ -295,12 +311,12 @@ struct SpaceDetailModelTests {
         #expect(result.count == 2)
     }
 
-    @Test("fetchAllRepos propagates non-200 XRPC errors")
-    func testFetchAllReposErrorPropagation() async {
+    @Test("fetchAllWriters propagates non-200 XRPC errors")
+    func testFetchAllWritersErrorPropagation() async {
         let errorJSON = "{\"error\":\"SpaceNotFound\",\"message\":\"The requested space does not exist\"}".data(using: .utf8)!
 
         await #expect(throws: ATProtoXRPCError.self) {
-            try await SpaceDetailModel.fetchAllRepos { _ in
+            try await SpaceDetailModel.fetchAllWriters { _ in
                 return (404, errorJSON)
             }
         }
@@ -315,11 +331,11 @@ struct SpaceDetailModelTests {
 
         let page1 = ComAtprotoMemberspaceListMembers.Output(
             cursor: "member_cursor_2",
-            members: [ComAtprotoMemberspaceListMembers.Member(did: did1, read: true, write: true)]
+            members: [ComAtprotoMemberspaceDefs.Member(did: did1, read: true, write: true)]
         )
         let page2 = ComAtprotoMemberspaceListMembers.Output(
             cursor: nil,
-            members: [ComAtprotoMemberspaceListMembers.Member(did: did2, read: true, write: true)]
+            members: [ComAtprotoMemberspaceDefs.Member(did: did2, read: true, write: true)]
         )
 
         let tracker = TestCallTracker()
@@ -345,7 +361,7 @@ struct SpaceDetailModelTests {
         let did = try DID(didString: "did:plc:member1")
         let loopingPage = ComAtprotoMemberspaceListMembers.Output(
             cursor: "member_loop_cursor",
-            members: [ComAtprotoMemberspaceListMembers.Member(did: did, read: true, write: true)]
+            members: [ComAtprotoMemberspaceDefs.Member(did: did, read: true, write: true)]
         )
 
         let tracker = TestCallTracker()
@@ -757,7 +773,7 @@ struct SpaceDetailModelTests {
                 let body = #"{"token":"mock-delegation-token"}"#.data(using: .utf8)!
                 return (resp, body)
             }
-            if urlString == "https://swan.place/xrpc/com.atproto.space.getSpaceCredential" {
+            if urlString == "https://swan.place/xrpc/com.atproto.space.authorizeSpaceSync" {
                 let resp = HTTPURLResponse(url: request.url!, statusCode: 400, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
                 let body = #"{"error":"InvalidDelegationToken"}"#.data(using: .utf8)!
                 return (resp, body)
@@ -851,7 +867,7 @@ struct SpaceDetailModelTests {
                 let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
                 return (resp, Data(didDoc.utf8))
             }
-            if urlString == "https://swan.place/xrpc/com.atproto.space.getSpaceCredential" {
+            if urlString == "https://swan.place/xrpc/com.atproto.space.authorizeSpaceSync" {
                 let resp = HTTPURLResponse(url: request.url!, statusCode: 400, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
                 let body = #"{"error":"SpaceDeleted","message":"Space was deleted by owner"}"#.data(using: .utf8)!
                 return (resp, body)
@@ -879,7 +895,7 @@ struct SpaceDetailModelTests {
     }
 
     @MainActor
-    @Test("Case 2: Production path handles 403 UserNotAuthorized: shows access denied message")
+    @Test("Case 2: Production path handles 403 AccountNotAuthorized: shows access denied message")
     func testProductionPathCase2AuthorizationRefused() async throws {
         URLProtocol.registerClass(ModelMockURLProtocol.self)
         defer {
@@ -924,9 +940,9 @@ struct SpaceDetailModelTests {
                 let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
                 return (resp, Data(didDoc.utf8))
             }
-            if urlString == "https://swan.place/xrpc/com.atproto.space.getSpaceCredential" {
+            if urlString == "https://swan.place/xrpc/com.atproto.space.authorizeSpaceSync" {
                 let resp = HTTPURLResponse(url: request.url!, statusCode: 403, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
-                let body = #"{"error":"UserNotAuthorized","message":"Account is not a member of this space"}"#.data(using: .utf8)!
+                let body = #"{"error":"AccountNotAuthorized","message":"Account is not a member of this space"}"#.data(using: .utf8)!
                 return (resp, body)
             }
             let resp = HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
@@ -992,7 +1008,7 @@ struct SpaceDetailModelTests {
                 let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
                 return (resp, Data(didDoc.utf8))
             }
-            if urlString == "https://swan.place/xrpc/com.atproto.space.getSpaceCredential" {
+            if urlString == "https://swan.place/xrpc/com.atproto.space.authorizeSpaceSync" {
                 let resp = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: ["Content-Type": "text/plain"])!
                 let body = "Internal Server Error Occurred".data(using: .utf8)!
                 return (resp, body)

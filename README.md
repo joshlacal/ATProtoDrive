@@ -87,6 +87,8 @@ Bluesky-lineage PDS implementations reject `private_key_jwt` client assertions f
 
 The Bluesky permissioned data spaces alpha is under active development. The hosted alpha PDS is wiped and updated weekly on Thursdays.
 
+The app currently targets the November 12, 2026 alpha (`d4def6e9`) through the sibling old-line Petrel Spaces backport and Swan. See [the November 12 compatibility note](docs/spaces-release-20261112.md).
+
 If upstream lexicons change on the `permissioned-data` branch of `bluesky-social/atproto`:
 ```bash
 # 1. Resolve and validate the current permissioned-data commit SHA.
@@ -113,6 +115,7 @@ xcodebuild test -project ATProtoDrive.xcodeproj -scheme ATProtoDrive -destinatio
 
 ## Documentation & References
 
+- **Spaces November 12 compatibility:** `docs/spaces-release-20261112.md`
 - **Architecture & Design Specification:** `docs/superpowers/specs/2026-08-23-atprotodrive-v1-design.md`
 - **Implementation Plan Index:** `docs/superpowers/plans/2026-08-23-atprotodrive-v1.md`
 - **Manual E2E Smoke Checklist:** `Scripts/e2e-smoke.md`

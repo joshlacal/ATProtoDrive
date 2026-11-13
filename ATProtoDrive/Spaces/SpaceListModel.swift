@@ -92,7 +92,7 @@ public final class SpaceListModel {
                 throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body (HTTP \(responseCode))", statusCode: responseCode)
             }
 
-            let pageItems = output.spaces.map { SpaceItem(ref: $0.uri, accountDID: accountDID) }
+            let pageItems = output.spaces.map { SpaceItem(ref: $0.space, accountDID: accountDID) }
             accumulated.append(contentsOf: pageItems)
 
             if let nextCursor = output.cursor, !nextCursor.isEmpty, !seenCursors.contains(nextCursor) {
@@ -180,8 +180,8 @@ public final class SpaceListModel {
 
         // Persist the newly created space URI so it appears even before creating a repo in it
         var customURIs = Self.loadCustomSpaceURIs(for: account.id)
-        if !customURIs.contains(output.uri.uriString()) {
-            customURIs.append(output.uri.uriString())
+        if !customURIs.contains(output.space.uriString()) {
+            customURIs.append(output.space.uriString())
             Self.saveCustomSpaceURIs(customURIs, for: account.id)
         }
 
@@ -192,7 +192,7 @@ public final class SpaceListModel {
             return (responseCode: responseCode, output: data)
         }
         await load(accountDID: account.id, fetchPage: listTransport)
-        return output.uri
+        return output.space
     }
 
     public func deleteSpace(

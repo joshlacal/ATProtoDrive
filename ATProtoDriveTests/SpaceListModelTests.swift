@@ -112,11 +112,11 @@ struct SpaceListModelTests {
 
         let page1 = ComAtprotoSpaceListSpaces.Output(
             cursor: "cursor_page_2",
-            spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: ref1), ComAtprotoSpaceListSpaces.SpaceView(uri: ref2)]
+            spaces: [ComAtprotoSpaceListSpaces.SpaceView(space: ref1), ComAtprotoSpaceListSpaces.SpaceView(space: ref2)]
         )
         let page2 = ComAtprotoSpaceListSpaces.Output(
             cursor: nil,
-            spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: ref3)]
+            spaces: [ComAtprotoSpaceListSpaces.SpaceView(space: ref3)]
         )
 
         var requestedCursors: [String?] = []
@@ -145,7 +145,7 @@ struct SpaceListModelTests {
         let ref = try SpaceRef(uriString: "at://did:plc:alice/space/com.example.type/space1")
         let loopingPage = ComAtprotoSpaceListSpaces.Output(
             cursor: "loop_cursor",
-            spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: ref)]
+            spaces: [ComAtprotoSpaceListSpaces.SpaceView(space: ref)]
         )
 
         var requestCount = 0
@@ -285,7 +285,7 @@ struct SpaceListModelTests {
             // Server now reports the shared space in listSpaces
             let output = ComAtprotoSpaceListSpaces.Output(
                 cursor: nil,
-                spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: sharedRef)]
+                spaces: [ComAtprotoSpaceListSpaces.SpaceView(space: sharedRef)]
             )
             return (200, output)
         }

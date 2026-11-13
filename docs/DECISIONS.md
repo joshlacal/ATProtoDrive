@@ -31,3 +31,11 @@ Chose: treat `PolicyMismatch` from `com.atproto.memberspace.listMembers` as "mem
 Chose: reword the compiled detail view's access-denied line to "not found, or you do not have access" (provisional). Under October 29 a refused user receives `SpaceNotFound`, which Petrel already reports as an authorization refusal described as "not found or not authorized". `UserNotAuthorized`, `AppNotAuthorized` and `NotAuthorized` are still handled. Rejected: leaving "You no longer have access", which asserts prior membership the error no longer implies.
 
 Reversible until: integration of `claude/spaces-oct29-20261030`. Override by: reverting that bookmark's ATProtoDrive commit.
+
+## 2026-11-12 · ATProtoDrive · November 12 Spaces alpha compatibility
+
+Chose: keep the existing repository list as a current-writer view. `com.atproto.space.listWriters` now returns `repoWrite` and `repoRemoved` entries; the app maps `repoWrite` and skips `repoRemoved` and unknown variants. ATProtoDrive does not maintain a synchronized local copy, so there is no retained repository state to delete or hide separately.
+
+Chose: preserve suspension and transient failures rather than treating them as deletion. `RepoTakendown` and `RepoDeactivated` display as suspended, `UpstreamFailure` as temporary, and only `SpaceDeleted` invalidates the cached credential. Petrel owns the new HPKE-export and RFC 9421 MAC flow.
+
+Reversible until: integration of `claude/spaces-nov12-20261112`. Override by: introducing explicit removed-writer history only as separate product work.

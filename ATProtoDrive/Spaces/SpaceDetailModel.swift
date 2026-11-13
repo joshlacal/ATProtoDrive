@@ -147,16 +147,16 @@ public final class SpaceDetailModel {
 
     // MARK: - Pure Static Helpers
 
-    /// Builds the full XRPC URL for `com.atproto.space.listRepos` on the authority's space host.
-    nonisolated public static func makeListReposURL(spaceHost: URL, space: SpaceRef, cursor: String? = nil) -> URL? {
+    /// Builds the full XRPC URL for `com.atproto.space.listWriters` on the authority's space host.
+    nonisolated public static func makeListWritersURL(spaceHost: URL, space: SpaceRef, cursor: String? = nil) -> URL? {
         guard var comps = URLComponents(url: spaceHost, resolvingAgainstBaseURL: false) else {
             return nil
         }
         var path = comps.path
         if path.hasSuffix("/") {
-            path += "xrpc/com.atproto.space.listRepos"
+            path += "xrpc/com.atproto.space.listWriters"
         } else {
-            path += "/xrpc/com.atproto.space.listRepos"
+            path += "/xrpc/com.atproto.space.listWriters"
         }
         comps.path = path
 
@@ -168,11 +168,15 @@ public final class SpaceDetailModel {
         return comps.url
     }
 
-    /// Maps lexicon Repo structures to UI RepoEntry items.
-    nonisolated public static func mapRepoEntries(from repos: [ComAtprotoSpaceListRepos.Repo]) -> [RepoEntry] {
-        repos.map { repo in
-            RepoEntry(
-                did: repo.did.description,
+    /// Maps current writer entries to the repositories shown by the app.
+    /// Removed and unknown entries are not current writers, so they stay out of the existing repository view.
+    nonisolated public static func mapWriterEntries(
+        from writers: [ComAtprotoSpaceListWriters.OutputReposUnion]
+    ) -> [RepoEntry] {
+        writers.compactMap { writer in
+            guard case let .comAtprotoSpaceDefsRepoWrite(repo) = writer else { return nil }
+            return RepoEntry(
+                did: repo.repo.description,
                 rev: repo.repoRev.description,
                 hash: repo.data.data.base64EncodedString()
             )
@@ -248,6 +252,18 @@ public final class SpaceDetailModel {
         let lowercasedMessage = message.lowercased()
         let lowercasedError = errorString.lowercased()
 
+        if errorString == "RepoTakendown" || errorString == "RepoDeactivated" {
+            return .general("Space suspended: \(message)")
+        }
+
+        if errorString == "UpstreamFailure" {
+            return .general("Temporary upstream failure: \(message)")
+        }
+
+        if errorString == "InvalidSpaceMac" {
+            return .general("Space response verification failed: \(message)")
+        }
+
         if let xrpc = error as? ATProtoXRPCError,
            xrpc.error == "SpaceDeleted", xrpc.statusCode == 400 {
             return .tombstone(message)
@@ -261,16 +277,16 @@ public final class SpaceDetailModel {
         }
 
         if lowercasedMessage.contains("you no longer have access") ||
-            errorString == "UserNotAuthorized" ||
+            errorString == "AccountNotAuthorized" ||
             errorString == "AppNotAuthorized" ||
             errorString == "NotAuthorized" ||
             errorString == "AccessDenied" ||
             errorString == "Forbidden" ||
             errorString == "PermissionDenied" ||
-            lowercasedError.contains("usernotauthorized") ||
+            lowercasedError.contains("accountnotauthorized") ||
             lowercasedError.contains("notauthorized") ||
             lowercasedError.contains("accessdenied") ||
-            lowercasedMessage.contains("usernotauthorized") ||
+            lowercasedMessage.contains("accountnotauthorized") ||
             lowercasedMessage.contains("notauthorized") ||
             lowercasedMessage.contains("access denied") ||
             lowercasedMessage.contains("refused authorization") {
@@ -297,8 +313,8 @@ public final class SpaceDetailModel {
     }
 
     /// Pure pagination helper: repeatedly invokes `fetchPage` following `output.cursor` until nil,
-    /// decoding `ComAtprotoSpaceListRepos.Output` and protecting against duplicate-cursor loops.
-    nonisolated public static func fetchAllRepos(
+    /// decoding `ComAtprotoSpaceListWriters.Output` and protecting against duplicate-cursor loops.
+    nonisolated public static func fetchAllWriters(
         fetchPage: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, data: Data)
     ) async throws -> [RepoEntry] {
         var accumulated: [RepoEntry] = []
@@ -319,9 +335,8 @@ public final class SpaceDetailModel {
                 )
             }
 
-            let output = try JSONDecoder().decode(ComAtprotoSpaceListRepos.Output.self, from: data)
-            let pageItems = mapRepoEntries(from: output.repos)
-            accumulated.append(contentsOf: pageItems)
+            let output = try JSONDecoder().decode(ComAtprotoSpaceListWriters.Output.self, from: data)
+            accumulated.append(contentsOf: mapWriterEntries(from: output.repos))
 
             if let nextCursor = output.cursor, !nextCursor.isEmpty, !seenCursors.contains(nextCursor) {
                 seenCursors.insert(nextCursor)
@@ -412,8 +427,8 @@ public final class SpaceDetailModel {
             let resolver = authorityResolver ?? SpaceHostResolver(didResolver: ClientDIDResolver(client: account.client))
             let endpoints = try await resolver.resolve(authorityDID: space.authorityDID)
             let spaceHost = endpoints.spaceHost
-            return try await Self.fetchAllRepos { cursor in
-                guard let requestURL = Self.makeListReposURL(spaceHost: spaceHost, space: space.ref, cursor: cursor) else {
+            return try await Self.fetchAllWriters { cursor in
+                guard let requestURL = Self.makeListWritersURL(spaceHost: spaceHost, space: space.ref, cursor: cursor) else {
                     throw SpaceHostResolutionError.invalidDID(space.authorityDID)
                 }
                 let (data, response) = try await account.credentials.get(url: requestURL, space: space.ref)
@@ -523,7 +538,7 @@ public final class SpaceDetailModel {
         space: SpaceItem,
         account: AccountStore.Account,
         resolveHandle: (@Sendable (_ handle: String) async throws -> String)? = nil,
-        transport: (@Sendable (_ input: ComAtprotoMemberspacePutMember.Input) async throws -> Int)? = nil,
+        transport: (@Sendable (_ input: ComAtprotoMemberspacePutMembers.Input) async throws -> Int)? = nil,
         fetchRepos: (@Sendable () async throws -> [RepoEntry])? = nil,
         listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoMemberspaceListMembers.Output?))? = nil
     ) async throws {
@@ -531,9 +546,10 @@ public final class SpaceDetailModel {
             try await account.client.resolveHandleToDID(handle: handle)
         }
         let did = try await Self.resolveIdentifierToDID(identifier, resolveHandle: resolver)
-        let input = ComAtprotoMemberspacePutMember.Input(space: space.ref, did: did, read: true, write: true)
+        let member = ComAtprotoMemberspaceDefs.Member(did: did, read: true, write: true)
+        let input = ComAtprotoMemberspacePutMembers.Input(space: space.ref, members: [member])
         let execute = transport ?? { input in
-            try await account.client.com.atproto.memberspace.putMember(input: input)
+            try await account.client.com.atproto.memberspace.putMembers(input: input)
         }
         let responseCode = try await execute(input)
         guard (200...299).contains(responseCode) else {
@@ -552,14 +568,14 @@ public final class SpaceDetailModel {
         did: String,
         space: SpaceItem,
         account: AccountStore.Account,
-        transport: (@Sendable (_ input: ComAtprotoMemberspaceRemoveMember.Input) async throws -> Int)? = nil,
+        transport: (@Sendable (_ input: ComAtprotoMemberspaceRemoveMembers.Input) async throws -> Int)? = nil,
         fetchRepos: (@Sendable () async throws -> [RepoEntry])? = nil,
         listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoMemberspaceListMembers.Output?))? = nil
     ) async throws {
         let didVal = try DID(didString: did.trimmingCharacters(in: .whitespacesAndNewlines))
-        let input = ComAtprotoMemberspaceRemoveMember.Input(space: space.ref, did: didVal)
+        let input = ComAtprotoMemberspaceRemoveMembers.Input(space: space.ref, dids: [didVal])
         let execute = transport ?? { input in
-            try await account.client.com.atproto.memberspace.removeMember(input: input)
+            try await account.client.com.atproto.memberspace.removeMembers(input: input)
         }
         let responseCode = try await execute(input)
         guard (200...299).contains(responseCode) else {

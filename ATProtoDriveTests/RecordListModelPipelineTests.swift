@@ -776,7 +776,20 @@ private final class ForeignArchiveMockURLProtocol: URLProtocol, @unchecked Senda
         }
 
         do {
-            let (response, data) = try currentHandler(request)
+            var normalized = request
+            if normalized.httpBody == nil, let stream = normalized.httpBodyStream {
+                stream.open()
+                defer { stream.close() }
+                var body = Data()
+                var buffer = [UInt8](repeating: 0, count: 4_096)
+                while stream.hasBytesAvailable {
+                    let count = stream.read(&buffer, maxLength: buffer.count)
+                    if count <= 0 { break }
+                    body.append(contentsOf: buffer.prefix(count))
+                }
+                normalized.httpBody = body
+            }
+            let (response, data) = try currentHandler(normalized)
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)
             client?.urlProtocolDidFinishLoading(self)
@@ -814,6 +827,7 @@ struct ForeignRepoArchiveLimitTests {
     private static let accountDID = "did:plc:alice123"
     private static let memberDID = "did:plc:bob456"
     private static let rev = "3kbcq3p7ad422"
+    private static let authoritySigningKey = P256.Signing.PrivateKey()
 
     /// Records just under 1 MiB each. The default eleven make about 11 MB of
     /// STAR, above Petrel's default 10 MiB response limit; nine stay below it.
@@ -836,7 +850,7 @@ struct ForeignRepoArchiveLimitTests {
             "repo": repo, "rev": Self.rev, "data": digest.digest
         ] as [String: Any])
         var archive = Data([0x2a, 0x6c, 1, 0])
-        for frame in [metadata] + frames {
+        func appendFrame(_ frame: Data) {
             var length = frame.count
             repeat {
                 let byte = UInt8(length & 0x7f)
@@ -845,26 +859,47 @@ struct ForeignRepoArchiveLimitTests {
             } while length > 0
             archive.append(frame)
         }
+        appendFrame(metadata)
+        for index in stride(from: 0, to: frames.count, by: 2) {
+            archive.append(0x01)
+            appendFrame(frames[index])
+            appendFrame(frames[index + 1])
+        }
+        archive.append(0x00)
         return (archive, digest.digest)
     }
 
-    private static func credentialJWT() -> String {
+    private static func credentialJWT(for request: URLRequest, space: SpaceRef) throws -> String {
         func base64URL(_ data: Data) -> String {
             data.base64EncodedString()
                 .replacingOccurrences(of: "+", with: "-")
                 .replacingOccurrences(of: "/", with: "_")
                 .replacingOccurrences(of: "=", with: "")
         }
+        let body = try #require(request.httpBody)
+        let object = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let credentialKey = try #require(object["credentialKey"] as? String)
         let now = Int(Date().timeIntervalSince1970)
-        let header = ##"{"alg":"ES256","typ":"JWT","kid":"#atproto"}"##
-        let payload = #"{"iss":"\#(Self.accountDID)","sub":"\#(Self.accountDID)","iat":\#(now),"exp":\#(now + 600)}"#
-        return [Data(header.utf8), Data(payload.utf8), Data(repeating: 0x42, count: 64)]
-            .map(base64URL)
-            .joined(separator: ".")
+        let header = try JSONSerialization.data(withJSONObject: [
+            "alg": "ES256",
+            "typ": "atproto-space-credential+jwt",
+            "kid": "#atproto",
+        ], options: [.sortedKeys])
+        let payload = try JSONSerialization.data(withJSONObject: [
+            "iss": space.spaceDID,
+            "sub": space.uriString(),
+            "iat": now,
+            "exp": now + 600,
+            "jti": UUID().uuidString,
+            "cnf": ["kid": credentialKey],
+        ], options: [.sortedKeys])
+        let signingInput = "\(base64URL(header)).\(base64URL(payload))"
+        let signature = try P256WireSignature.sign(Data(signingInput.utf8), using: authoritySigningKey)
+        return "\(signingInput).\(base64URL(signature))"
     }
 
-    /// Issues a space credential, and answers getRepo with `archive` and a MAC
-    /// over the published commit (`digest`), as the member's PDS would.
+    /// Issues a space credential, and answers getRepo with the requested RFC 9421
+    /// MAC over the published commit (`digest`), as the member's PDS would.
     private static func makeHandler(
         space: SpaceRef,
         archive: Data,
@@ -873,22 +908,30 @@ struct ForeignRepoArchiveLimitTests {
     ) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data) {
         { request in
             guard let url = request.url else { throw URLError(.badURL) }
-            if url.lastPathComponent == "com.atproto.space.getSpaceCredential" {
-                let body = try JSONEncoder().encode(["credential": Self.credentialJWT()])
+            if url.lastPathComponent == "com.atproto.space.authorizeSpaceSync" {
+                let body = try JSONEncoder().encode(["credential": Self.credentialJWT(for: request, space: space)])
                 let headers = ["Content-Type": "application/json"]
                 return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: headers)!, body)
             }
             guard url.lastPathComponent == "com.atproto.space.getRepo",
-                  let want = request.value(forHTTPHeaderField: "Atproto-Space-Want-Mac"),
-                  let share = want.components(separatedBy: "key_share=\"").last?.split(separator: "\"").first
+                  let accept = request.value(forHTTPHeaderField: "Accept-Signature"),
+                  accept.hasPrefix("mac="),
+                  let keyShare = accept.components(separatedBy: "keyid=\"").last?.split(separator: "\"").first
             else {
                 return (HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)!, Data())
             }
-            let secret = try SpaceMAC.decapsulate(privateKey: kemKey, keyShare: String(share))
-            let mac = try SpaceMAC.commit(sharedSecret: secret, space: space.uriString(), repo: Self.memberDID, rev: Self.rev, data: digest)
+            let secret = try SpaceMAC.decapsulate(privateKey: kemKey, keyShare: String(keyShare))
+            let covered = "ver=1, repo=\"\(Self.memberDID)\", space=\"\(space.uriString())\", rev=\"\(Self.rev)\", data=:\(digest.base64EncodedString()):"
+            let signatureParameters = String(accept.dropFirst("mac=".count))
+            let base = Data(
+                "\"atproto-space-commit\";sf: \(covered)\n\"@signature-params\": \(signatureParameters)".utf8
+            )
+            let mac = Data(HMAC<SHA256>.authenticationCode(for: base, using: SymmetricKey(data: secret)))
             let headers = [
-                "Content-Type": "application/octet-stream",
-                "Atproto-Space-Mac": "type=\"atproto-space-repo\", ver=1, mac=:\(mac.base64EncodedString()):",
+                "Content-Type": "application/vnd.dasl.star",
+                "Atproto-Space-Commit": covered,
+                "Signature-Input": accept,
+                "Signature": "mac=:\(mac.base64EncodedString()):",
             ]
             return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: headers)!, archive)
         }
@@ -919,7 +962,8 @@ struct ForeignRepoArchiveLimitTests {
             client: client,
             authorityHostProvider: { _ in host },
             delegationTokenProvider: { _ in "mock-delegation-token" },
-            authorKEMKeyProvider: { _, _ in kemDIDKey }
+            authorKEMKeyProvider: { _, _ in kemDIDKey },
+            authoritySigningKeyProvider: { _, _ in .p256(Self.authoritySigningKey.publicKey) }
         )
         NetworkService.setNetworkTestProtocolClasses(nil)
         let account = AccountStore.Account(
@@ -964,6 +1008,7 @@ struct ForeignRepoArchiveLimitTests {
     /// owner's OAuth getRepo (sent without a MAC request), getBlob from either
     /// transport, and the credential exchange a foreign getBlob needs.
     private static func makeLargeReadHandler(
+        space: SpaceRef,
         archive: Data,
         blob: Data
     ) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data) {
@@ -971,12 +1016,13 @@ struct ForeignRepoArchiveLimitTests {
             guard let url = request.url else { throw URLError(.badURL) }
             let octetStream = ["Content-Type": "application/octet-stream"]
             switch url.lastPathComponent {
-            case "com.atproto.space.getSpaceCredential":
-                let body = try JSONEncoder().encode(["credential": Self.credentialJWT()])
+            case "com.atproto.space.authorizeSpaceSync":
+                let body = try JSONEncoder().encode(["credential": Self.credentialJWT(for: request, space: space)])
                 let headers = ["Content-Type": "application/json"]
                 return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: headers)!, body)
-            case "com.atproto.space.getRepo" where request.value(forHTTPHeaderField: "Atproto-Space-Want-Mac") == nil:
-                return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: octetStream)!, archive)
+            case "com.atproto.space.getRepo" where request.value(forHTTPHeaderField: "Accept-Signature") == nil:
+                let headers = ["Content-Type": "application/vnd.dasl.star"]
+                return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: headers)!, archive)
             case "com.atproto.space.getBlob":
                 return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: octetStream)!, blob)
             default:
@@ -996,7 +1042,8 @@ struct ForeignRepoArchiveLimitTests {
         let credentials = SpaceCredentialManager(
             client: client,
             authorityHostProvider: { _ in host },
-            delegationTokenProvider: { _ in "mock-delegation-token" }
+            delegationTokenProvider: { _ in "mock-delegation-token" },
+            authoritySigningKeyProvider: { _, _ in .p256(Self.authoritySigningKey.publicKey) }
         )
         return AccountStore.Account(
             id: Self.accountDID,
@@ -1029,7 +1076,7 @@ struct ForeignRepoArchiveLimitTests {
         // Control: the same OAuth route verifies an own archive below 10 MiB.
         let (small, _) = try Self.makeLargeArchive(space: spaceItem.ref, repo: Self.accountDID, recordCount: 9)
         #expect(small.count < 10 * 1_048_576)
-        ForeignArchiveMockURLProtocol.setHandler(Self.makeLargeReadHandler(archive: small, blob: Data()))
+        ForeignArchiveMockURLProtocol.setHandler(Self.makeLargeReadHandler(space: spaceItem.ref, archive: small, blob: Data()))
         let report = try await SpaceDetailModel().verifyRepo(repo: ownRepo, space: spaceItem, account: account)
         #expect(report.outcome == .verified(recordCount: 9))
 
@@ -1037,7 +1084,7 @@ struct ForeignRepoArchiveLimitTests {
         // to SpaceSTAR.defaultMaximumArchiveBytes and the archive verifies.
         let (large, _) = try Self.makeLargeArchive(space: spaceItem.ref, repo: Self.accountDID)
         #expect(large.count > 10 * 1_048_576)
-        ForeignArchiveMockURLProtocol.setHandler(Self.makeLargeReadHandler(archive: large, blob: Data()))
+        ForeignArchiveMockURLProtocol.setHandler(Self.makeLargeReadHandler(space: spaceItem.ref, archive: large, blob: Data()))
         let largeReport = try await SpaceDetailModel().verifyRepo(repo: ownRepo, space: spaceItem, account: account)
         #expect(largeReport.outcome == .verified(recordCount: 11))
         #expect(largeReport.rev == Self.rev)
@@ -1060,9 +1107,9 @@ struct ForeignRepoArchiveLimitTests {
 
         // Own repo: the generated OAuth getBlob, run under a raised response limit.
         let ownRepo = RepoEntry(did: Self.accountDID, rev: Self.rev, hash: "unused")
-        ForeignArchiveMockURLProtocol.setHandler(Self.makeLargeReadHandler(archive: Data(), blob: small))
+        ForeignArchiveMockURLProtocol.setHandler(Self.makeLargeReadHandler(space: spaceItem.ref, archive: Data(), blob: small))
         #expect(try await model.getBlob(space: spaceItem, repo: ownRepo, cid: cid, account: account) == small)
-        ForeignArchiveMockURLProtocol.setHandler(Self.makeLargeReadHandler(archive: Data(), blob: large))
+        ForeignArchiveMockURLProtocol.setHandler(Self.makeLargeReadHandler(space: spaceItem.ref, archive: Data(), blob: large))
         #expect(try await model.getBlob(space: spaceItem, repo: ownRepo, cid: cid, account: account) == large)
 
         // The raised limit covers only getBlob's own call: the same generated
@@ -1080,9 +1127,9 @@ struct ForeignRepoArchiveLimitTests {
 
         // Foreign repo: SpaceCredentialManager.get with maximumBlobBytes.
         let memberRepo = RepoEntry(did: Self.memberDID, rev: Self.rev, hash: "unused")
-        ForeignArchiveMockURLProtocol.setHandler(Self.makeLargeReadHandler(archive: Data(), blob: small))
+        ForeignArchiveMockURLProtocol.setHandler(Self.makeLargeReadHandler(space: spaceItem.ref, archive: Data(), blob: small))
         #expect(try await model.getBlob(space: spaceItem, repo: memberRepo, cid: cid, account: account) == small)
-        ForeignArchiveMockURLProtocol.setHandler(Self.makeLargeReadHandler(archive: Data(), blob: large))
+        ForeignArchiveMockURLProtocol.setHandler(Self.makeLargeReadHandler(space: spaceItem.ref, archive: Data(), blob: large))
         #expect(try await model.getBlob(space: spaceItem, repo: memberRepo, cid: cid, account: account) == large)
     }
 }

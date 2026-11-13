@@ -119,10 +119,10 @@ struct WritePipelineTests {
             transport: { input in
                 await tracker.record(input)
                 #expect(input.spaceType.description == "space.swan.drive")
-                return (200, ComAtprotoSpaceCreateSpace.Output(uri: expectedRef))
+                return (200, ComAtprotoSpaceCreateSpace.Output(space: expectedRef))
             },
             listSpacesTransport: { cursor in
-                return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: expectedRef)]))
+                return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: [ComAtprotoSpaceListSpaces.SpaceView(space: expectedRef)]))
             }
         )
 
@@ -187,14 +187,16 @@ struct WritePipelineTests {
             transport: { input in
                 await tracker.record(input)
                 #expect(input.space.uriString() == spaceItem.ref.uriString())
-                #expect(input.did.description == "did:plc:carol789")
-                #expect(input.read == true)
-                #expect(input.write == true)
+                let member = try #require(input.members.first)
+                #expect(input.members.count == 1)
+                #expect(member.did.description == "did:plc:carol789")
+                #expect(member.read == true)
+                #expect(member.write == true)
                 return 200
             },
             fetchRepos: { [] },
             listMembersTransport: { cursor in
-                return (200, ComAtprotoMemberspaceListMembers.Output(cursor: nil, members: [ComAtprotoMemberspaceListMembers.Member(did: try DID(didString: "did:plc:carol789"), read: true, write: true)]))
+                return (200, ComAtprotoMemberspaceListMembers.Output(cursor: nil, members: [ComAtprotoMemberspaceDefs.Member(did: try DID(didString: "did:plc:carol789"), read: true, write: true)]))
             }
         )
 
@@ -220,7 +222,7 @@ struct WritePipelineTests {
             transport: { input in
                 await tracker.record(input)
                 #expect(input.space.uriString() == spaceItem.ref.uriString())
-                #expect(input.did.description == "did:plc:carol789")
+                #expect(input.dids.map(\.description) == ["did:plc:carol789"])
                 return 200
             },
             fetchRepos: { [] },
@@ -617,7 +619,7 @@ struct WritePipelineTests {
             if count == 0 {
                 return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: []))
             } else {
-                return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: createdRef)]))
+                return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: [ComAtprotoSpaceListSpaces.SpaceView(space: createdRef)]))
             }
         }
 
@@ -633,7 +635,7 @@ struct WritePipelineTests {
             account: dummyAccount,
             transport: { input in
                 await createTracker.record(input)
-                return (200, ComAtprotoSpaceCreateSpace.Output(uri: createdRef))
+                return (200, ComAtprotoSpaceCreateSpace.Output(space: createdRef))
             },
             listSpacesTransport: listTransport
         )
@@ -669,7 +671,7 @@ struct WritePipelineTests {
             policy: .memberList,
             account: dummyAccount,
             transport: { _ in
-                return (200, ComAtprotoSpaceCreateSpace.Output(uri: createdRef))
+                return (200, ComAtprotoSpaceCreateSpace.Output(space: createdRef))
             },
             listSpacesTransport: listTransport
         )
@@ -699,7 +701,7 @@ struct WritePipelineTests {
             let count = await listTracker.callCount
             await listTracker.record(cursor as Any)
             if count == 0 {
-                return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: spaceRef)]))
+                return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: [ComAtprotoSpaceListSpaces.SpaceView(space: spaceRef)]))
             } else {
                 return (200, ComAtprotoSpaceListSpaces.Output(cursor: nil, spaces: []))
             }
@@ -960,8 +962,8 @@ struct WritePipelineTests {
         let dummyAccount = await makeTestAccount()
         let model = SpaceDetailModel()
 
-        let m1 = ComAtprotoMemberspaceListMembers.Member(did: try DID(didString: "did:plc:alice123"), read: true, write: true)
-        let m2 = ComAtprotoMemberspaceListMembers.Member(did: try DID(didString: "did:plc:bob456"), read: true, write: true)
+        let m1 = ComAtprotoMemberspaceDefs.Member(did: try DID(didString: "did:plc:alice123"), read: true, write: true)
+        let m2 = ComAtprotoMemberspaceDefs.Member(did: try DID(didString: "did:plc:bob456"), read: true, write: true)
 
         let addTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
@@ -988,8 +990,10 @@ struct WritePipelineTests {
             resolveHandle: nil,
             transport: { input in
                 await addTracker.record(input)
-                #expect(input.read == true)
-                #expect(input.write == true)
+                let member = try #require(input.members.first)
+                #expect(input.members.count == 1)
+                #expect(member.read == true)
+                #expect(member.write == true)
                 return 200
             },
             fetchRepos: { [] },
@@ -1013,8 +1017,8 @@ struct WritePipelineTests {
         let dummyAccount = await makeTestAccount()
         let model = SpaceDetailModel()
 
-        let m1 = ComAtprotoMemberspaceListMembers.Member(did: try DID(didString: "did:plc:alice123"), read: true, write: true)
-        let m2 = ComAtprotoMemberspaceListMembers.Member(did: try DID(didString: "did:plc:bob456"), read: true, write: true)
+        let m1 = ComAtprotoMemberspaceDefs.Member(did: try DID(didString: "did:plc:alice123"), read: true, write: true)
+        let m2 = ComAtprotoMemberspaceDefs.Member(did: try DID(didString: "did:plc:bob456"), read: true, write: true)
 
         let removeTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
@@ -1040,6 +1044,7 @@ struct WritePipelineTests {
             account: dummyAccount,
             transport: { input in
                 await removeTracker.record(input)
+                #expect(input.dids.map(\.description) == ["did:plc:bob456"])
                 return 200
             },
             fetchRepos: { [] },
