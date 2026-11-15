@@ -341,7 +341,7 @@ struct WritePipelineTests {
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
-        let expectedCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+        let expectedCID = try CIDString(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
         let expectedURI = try ATProtocolURI(uriString: "at://did:plc:alice123/app.bsky.feed.post/3l3vbfz2zsk22")
         let model = RecordListModel()
 
@@ -375,7 +375,7 @@ struct WritePipelineTests {
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
-        let expectedCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+        let expectedCID = try CIDString(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
         let expectedURI = try ATProtocolURI(uriString: "at://did:plc:alice123/app.bsky.feed.post/post123")
         let model = RecordListModel()
 
@@ -741,7 +741,7 @@ struct WritePipelineTests {
         let model = RecordListModel()
 
         let expectedURI = try ATProtocolURI(uriString: "at://did:plc:alice123/app.bsky.feed.post/post1")
-        let expectedCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+        let expectedCID = try CIDString(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
 
         let createdRecord = ComAtprotoSpaceListRecords.Record(
             collection: try NSID(nsidString: "app.bsky.feed.post"),
@@ -815,7 +815,7 @@ struct WritePipelineTests {
         let model = RecordListModel()
 
         let expectedURI = try ATProtocolURI(uriString: "at://did:plc:alice123/app.bsky.feed.post/post1")
-        let expectedCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+        let expectedCID = try CIDString(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
 
         let initialRecord = ComAtprotoSpaceListRecords.Record(
             collection: try NSID(nsidString: "app.bsky.feed.post"),
@@ -895,7 +895,7 @@ struct WritePipelineTests {
         let dummyAccount = await makeTestAccount()
         let model = RecordListModel()
 
-        let expectedCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+        let expectedCID = try CIDString(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
         let existingRecord = ComAtprotoSpaceListRecords.Record(
             collection: try NSID(nsidString: "app.bsky.feed.post"),
             rkey: try RecordKey(keyString: "post1"),

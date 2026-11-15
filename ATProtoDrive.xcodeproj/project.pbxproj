@@ -834,9 +834,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		A10000000000000000000050 /* XCLocalSwiftPackageReference "../Petrel" */ = {
+		A10000000000000000000050 /* XCLocalSwiftPackageReference "../../dec1-w0/wave1-petrel" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../Petrel;
+			relativePath = "../../dec1-w0/wave1-petrel";
 		};
 		A10000000000000000000051 /* XCLocalSwiftPackageReference "../swan" */ = {
 			isa = XCLocalSwiftPackageReference;

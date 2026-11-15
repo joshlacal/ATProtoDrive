@@ -1269,7 +1269,7 @@ public final class RecordListModel {
                 return ComAtprotoSpaceListRecords.Record(
                     collection: try NSID(nsidString: String(path[0])),
                     rkey: try RecordKey(keyString: String(path[1])),
-                    cid: record.cid,
+                    cid: CIDString(record.cid),
                     value: try ATProtocolValueContainer.decodedFromDAGCBOR(record.bytes)
                 )
             }
@@ -1524,7 +1524,7 @@ public final class RecordListModel {
     ) async throws -> Data {
         let executeClientGetBlob: @Sendable (_ cid: String) async throws -> (responseCode: Int, data: Data?) = clientGetBlob ?? { blobCID in
             let repoDIDObj = try DID(didString: repo.did)
-            let cidObj = try CID.parse(blobCID)
+            let cidObj = CIDString(try CID.parse(blobCID))
             let limits = NetworkResponseLimits(maximumWireBytes: Self.spaceBlobLimit, maximumDecodedBytes: Self.spaceBlobLimit)
             let (responseCode, output) = try await NetworkService.withResponseLimits(limits) {
                 try await account.client.com.atproto.space.getBlob(

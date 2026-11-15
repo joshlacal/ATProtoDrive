@@ -29,7 +29,7 @@ struct RecordListModelPipelineTests {
         let rec = ComAtprotoSpaceListRecords.Record(
             collection: try NSID(nsidString: "app.bsky.feed.post"),
             rkey: try RecordKey(keyString: "1"),
-            cid: try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"),
+            cid: try CIDString(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"),
             value: nil
         )
 
@@ -201,7 +201,7 @@ struct RecordListModelPipelineTests {
         let rec = ComAtprotoSpaceListRecords.Record(
             collection: try NSID(nsidString: "app.bsky.feed.post"),
             rkey: try RecordKey(keyString: "1"),
-            cid: try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"),
+            cid: try CIDString(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"),
             value: nil
         )
 
@@ -1118,7 +1118,7 @@ struct ForeignRepoArchiveLimitTests {
             _ = try await account.client.com.atproto.space.getBlob(input: ComAtprotoSpaceGetBlob.Parameters(
                 space: spaceItem.ref,
                 repo: DID(didString: Self.accountDID),
-                cid: CID.parse(cid)
+                cid: CIDString(cidString: cid)
             ))
             Issue.record("Expected the client's default limit to refuse the blob outside getBlob")
         } catch {

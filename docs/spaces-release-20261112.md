@@ -1,6 +1,6 @@
 # ATProtoDrive: November 12 Spaces alpha compatibility
 
-ATProtoDrive now targets the November 12, 2026 Spaces alpha at atproto `d4def6e9`, through the old-line Petrel Spaces backport `db6c3ccb` and Swan `f240becd`. This is a compatibility-only update; it adds no Spaces features.
+ATProtoDrive targets the November 12, 2026 Spaces alpha at atproto `d4def6e9` through unified Petrel 2.0 (`PetrelCrypto` `ATProtoPublicKey`/`K256Keypair`, `CIDString`, and strict `DIDWebIdentifier`) and Swan (`d7e66ccb`). This is a compatibility-only update; it adds no Spaces features.
 
 ## Changes
 

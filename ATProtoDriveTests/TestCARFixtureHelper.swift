@@ -6,7 +6,6 @@
 import CryptoKit
 import Foundation
 import Petrel
-import secp256k1
 import PetrelCrypto
 import SwanSpaces
 
@@ -70,9 +69,9 @@ public enum TestCARFixtureHelper {
             key: P256.Signing.PrivateKey(rawRepresentation: privateKeyRaw)
         )
 
-        let secpKey = try secp256k1.Signing.PrivateKey(dataRepresentation: secp256k1PrivateRaw)
+        let secpKey = try K256Keypair(rawRepresentation: secp256k1PrivateRaw)
         let signingInput = try SpaceCommitCodec.contextSigningBytes(readerEnvelope.context)
-        let signature = try secpKey.signature(for: signingInput).compactRepresentation
+        let signature = try secpKey.sign(signingInput)
 
         let commit = SpaceCommitEnvelope(
             ver: 1,
@@ -83,7 +82,7 @@ public enum TestCARFixtureHelper {
         )
 
         let car = try await SpaceCARCodec.encode(commit: commit, records: repository.snapshot(authorization: authorization))
-        let multicodecKey = Data([0xe7, 0x01]) + secpKey.publicKey.dataRepresentation
+        let multicodecKey = Data([0xe7, 0x01]) + secpKey.publicKey.compressedRepresentation
         return (carData: car.data, publicKeyBytes: multicodecKey, spaceRef: spaceRef)
     }
 

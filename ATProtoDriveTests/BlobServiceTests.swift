@@ -7,7 +7,7 @@ import Testing
 struct BlobServiceTests {
     @Test("passes opaque cursor to the resolved PDS and requires output")
     func listPage() async throws {
-        let cid = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+        let cid = try CIDString(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
         let service = PublicBlobService(operations: .init { url, input in
             #expect(url == ResolvedRepository.fixture.pdsURL)
             #expect(input.cursor == "opaque+/=")
@@ -30,7 +30,7 @@ struct BlobServiceTests {
 
     @Test("rejects non-success status even when an output was decoded")
     func nonSuccessWithOutput() async throws {
-        let cid = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+        let cid = try CIDString(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
         let service = PublicBlobService(operations: .init { _, _ in
             (503, .init(cids: [cid]))
         })

@@ -6,7 +6,6 @@
 import CryptoKit
 import Foundation
 import Petrel
-import secp256k1
 import PetrelCrypto
 import SwanCore
 import SwanSpaces
@@ -91,14 +90,10 @@ public enum AuthorSigningKey: Sendable, Equatable {
             }
             return publicKey.isValidSignature(canonicalSignature, for: signingInput)
         case .secp256k1PublicKey(let keyBytes):
-            do {
-                let format: secp256k1.Format = (keyBytes.count == 33) ? .compressed : .uncompressed
-                let publicKey = try secp256k1.Signing.PublicKey(dataRepresentation: keyBytes, format: format)
-                let compact = try secp256k1.Signing.ECDSASignature(compactRepresentation: signature)
-                return publicKey.isValidSignature(compact, for: signingInput)
-            } catch {
+            guard let publicKey = try? ATProtoPublicKey(curve: .k256, sec1Representation: keyBytes) else {
                 return false
             }
+            return publicKey.isValidSignature(signature, for: signingInput)
         }
     }
 }
@@ -123,7 +118,7 @@ public enum RepoVerifier {
         // Multicodec secp256k1: prefix [0xe7, 0x01] + 33 bytes
         if data.count == 35 && data.prefix(2) == Data([0xe7, 0x01]) {
             let point = Data(data.dropFirst(2))
-            if (try? secp256k1.Signing.PublicKey(dataRepresentation: point, format: .compressed)) != nil {
+            if (try? ATProtoPublicKey(curve: .k256, sec1Representation: point)) != nil {
                 return .secp256k1PublicKey(point)
             }
         }
@@ -132,7 +127,7 @@ public enum RepoVerifier {
             if let key = try? P256.Signing.PublicKey(compressedRepresentation: data) {
                 return .p256(key)
             }
-            if (try? secp256k1.Signing.PublicKey(dataRepresentation: data, format: .compressed)) != nil {
+            if (try? ATProtoPublicKey(curve: .k256, sec1Representation: data)) != nil {
                 return .secp256k1PublicKey(data)
             }
         }
@@ -141,7 +136,7 @@ public enum RepoVerifier {
             if let key = try? P256.Signing.PublicKey(x963Representation: data) {
                 return .p256(key)
             }
-            if (try? secp256k1.Signing.PublicKey(dataRepresentation: data, format: .uncompressed)) != nil {
+            if (try? ATProtoPublicKey(curve: .k256, sec1Representation: data)) != nil {
                 return .secp256k1PublicKey(data)
             }
         }

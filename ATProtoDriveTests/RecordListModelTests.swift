@@ -174,7 +174,7 @@ struct RecordListModelTests {
         let record = ComAtprotoSpaceListRecords.Record(
             collection: try NSID(nsidString: "app.bsky.feed.post"),
             rkey: try RecordKey(keyString: "3l3vbfz"),
-            cid: try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"),
+            cid: try CIDString(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"),
             value: valContainer
         )
 
@@ -244,19 +244,19 @@ struct RecordListModelTests {
         let rec1 = ComAtprotoSpaceListRecords.Record(
             collection: try NSID(nsidString: "app.bsky.feed.post"),
             rkey: try RecordKey(keyString: "1"),
-            cid: try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"),
+            cid: try CIDString(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"),
             value: nil
         )
         let rec2 = ComAtprotoSpaceListRecords.Record(
             collection: try NSID(nsidString: "app.bsky.feed.post"),
             rkey: try RecordKey(keyString: "2"),
-            cid: try CID.parse("bafyreif7h6gxlc6kpxthfclr3vkqffn4yixoqmmqr7m2kq4xfacgjnlvhm"),
+            cid: try CIDString(cidString: "bafyreif7h6gxlc6kpxthfclr3vkqffn4yixoqmmqr7m2kq4xfacgjnlvhm"),
             value: nil
         )
         let rec3 = ComAtprotoSpaceListRecords.Record(
             collection: try NSID(nsidString: "app.bsky.feed.like"),
             rkey: try RecordKey(keyString: "3"),
-            cid: try CID.parse("bafyreid7qjxf7f4pszgnjj6x7v7dcxpehbxvqfxvlazmnhp26g5qbgzxqe"),
+            cid: try CIDString(cidString: "bafyreid7qjxf7f4pszgnjj6x7v7dcxpehbxvqfxvlazmnhp26g5qbgzxqe"),
             value: nil
         )
 
@@ -292,7 +292,7 @@ struct RecordListModelTests {
         let rec1 = ComAtprotoSpaceListRecords.Record(
             collection: try NSID(nsidString: "app.bsky.feed.post"),
             rkey: try RecordKey(keyString: "1"),
-            cid: try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"),
+            cid: try CIDString(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"),
             value: nil
         )
         let out = ComAtprotoSpaceListRecords.Output(cursor: "loop_cursor", records: [rec1])

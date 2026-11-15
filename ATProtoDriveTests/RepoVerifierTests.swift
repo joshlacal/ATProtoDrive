@@ -6,7 +6,6 @@
 import CryptoKit
 import Foundation
 import Petrel
-import secp256k1
 import PetrelCrypto
 import SwanSpaces
 import Testing
@@ -299,8 +298,8 @@ struct RepoVerifierTests {
         let derP256 = p256PublicKey.derRepresentation
         let multicodecP256 = Data([0x80, 0x24]) + compressedP256
 
-        let secpKey = try secp256k1.Signing.PrivateKey(dataRepresentation: Data(repeating: 2, count: 32))
-        let multicodecSecp = Data([0xe7, 0x01]) + secpKey.publicKey.dataRepresentation
+        let secpKey = try K256Keypair(rawRepresentation: Data(repeating: 2, count: 32))
+        let multicodecSecp = Data([0xe7, 0x01]) + secpKey.publicKey.compressedRepresentation
 
         let parsedRaw = try RepoVerifier.parseSigningKey(from: rawP256)
         let parsedCompressed = try RepoVerifier.parseSigningKey(from: compressedP256)
@@ -314,7 +313,7 @@ struct RepoVerifierTests {
         #expect(parsedX963 == .p256(p256PublicKey))
         #expect(parsedDER == .p256(p256PublicKey))
         #expect(parsedMulticodecP256 == .p256(p256PublicKey))
-        #expect(parsedMulticodecSecp == .secp256k1PublicKey(secpKey.publicKey.dataRepresentation))
+        #expect(parsedMulticodecSecp == .secp256k1PublicKey(secpKey.publicKey.compressedRepresentation))
 
         // Invalid key bytes throw RepoVerifierError.invalidAuthorSigningKey
         #expect(throws: RepoVerifierError.self) {
@@ -398,16 +397,17 @@ struct RepoVerifierTests {
         }
     }
 
-    // MARK: - did:web Path-Based Resolution (Finding 5)
+    // MARK: - ATProto Strict did:web / did:plc Resolution (Petrel 2.0 DIDWebIdentifier)
 
-    @Test("SpaceHostResolver resolves path-based did:web according to W3C specification")
+    @Test("SpaceHostResolver resolves hostname-level did:web and did:plc while rejecting path-based did:web")
     func testPathBasedDidWebResolution() throws {
-        // Path-based did:web: did:web:example.com:users:alice -> https://example.com/users/alice/did.json
+        // ATProto forbids path-based did:web identifiers (DIDWebIdentifier rejects `:users:alice`)
         let pathDID = "did:web:example.com:users:alice"
-        let pathURL = try SpaceHostResolver.didDocumentURL(for: pathDID)
-        #expect(pathURL.absoluteString == "https://example.com/users/alice/did.json")
+        #expect(throws: SpaceHostResolutionError.invalidDID(pathDID)) {
+            _ = try SpaceHostResolver.didDocumentURL(for: pathDID)
+        }
 
-        // Bare did:web: did:web:example.com -> https://example.com/.well-known/did.json
+        // Bare hostname-level did:web: did:web:example.com -> https://example.com/.well-known/did.json
         let bareDID = "did:web:example.com"
         let bareURL = try SpaceHostResolver.didDocumentURL(for: bareDID)
         #expect(bareURL.absoluteString == "https://example.com/.well-known/did.json")

@@ -296,7 +296,7 @@ struct PublicRepositoryServiceTests {
     @Test("listRecords preserves cursors with +, /, = and maps rows")
     func listRecordsCursorAndMapping() async throws {
         let testURI = try ATProtocolURI(uriString: "at://\(fixtureDID)/app.test.item/3k2v5q")
-        let testCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+        let testCID = try CIDString(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
         let complexCursor = "cursor+with/special=chars=="
 
         let record = ComAtprotoRepoListRecords.Record(
@@ -345,7 +345,7 @@ struct PublicRepositoryServiceTests {
     func listRecordsURIMismatches() async throws {
         let wrongAuthorityURI = try ATProtocolURI(uriString: "at://did:plc:other/app.test.item/one")
         let wrongCollectionURI = try ATProtocolURI(uriString: "at://\(fixtureDID)/app.wrong.item/one")
-        let testCID = try CID.parse("bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
+        let testCID = try CIDString(cidString: "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a")
 
         let wrongAuthRecord = ComAtprotoRepoListRecords.Record(
             uri: wrongAuthorityURI,
@@ -446,9 +446,9 @@ struct PublicRepositoryServiceTests {
     @Test("getRecord CID matching, fallback, and mismatch rules")
     func getRecordCIDRules() async throws {
         let validCIDStr = "bafyreigcxd76a5xqjzw2l6fq3u7d26hjtybdslqj2kxlzpvfyrvhycbr2a"
-        let validCID = try CID.parse(validCIDStr)
+        let validCID = try CIDString(cidString: validCIDStr)
         let otherCIDStr = "bafyreib2rxk3rybk4a4v2w2w4fepzg2k3wve2q25x4bwhu5f2e6q5khezu"
-        let otherCID = try CID.parse(otherCIDStr)
+        let otherCID = try CIDString(cidString: otherCIDStr)
         let recordURI = try ATProtocolURI(uriString: "at://\(fixtureDID)/app.test.item/one")
 
         // Exact match

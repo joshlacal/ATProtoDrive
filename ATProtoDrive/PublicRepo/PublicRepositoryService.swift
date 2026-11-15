@@ -312,10 +312,10 @@ public actor PublicRepositoryService: PublicRepositoryServing {
             throw BrowserFailure.invalidIdentifier(rkey)
         }
 
-        var requestedCID: CID? = nil
+        var requestedCID: CIDString? = nil
         if let cid {
             do {
-                requestedCID = try CID.parse(cid)
+                requestedCID = CIDString(try CID.parse(cid))
             } catch {
                 throw BrowserFailure.invalidIdentifier(cid)
             }
