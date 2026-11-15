@@ -468,8 +468,8 @@
 			);
 			mainGroup = A10000000000000000000002;
 			packageReferences = (
-				A10000000000000000000050 /* XCLocalSwiftPackageReference "../Petrel" */,
-				A10000000000000000000051 /* XCLocalSwiftPackageReference "../swan" */,
+				A10000000000000000000050 /* XCLocalSwiftPackageReference "../../dec1-w0/wave1-petrel" */,
+				A10000000000000000000051 /* XCLocalSwiftPackageReference "../Swan" */,
 			);
 			productRefGroup = A10000000000000000000005 /* Products */;
 			projectDirPath = "";
@@ -838,7 +838,7 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "../../dec1-w0/wave1-petrel";
 		};
-		A10000000000000000000051 /* XCLocalSwiftPackageReference "../swan" */ = {
+		A10000000000000000000051 /* XCLocalSwiftPackageReference "../Swan" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../Swan;
 		};
@@ -847,12 +847,12 @@
 /* Begin XCSwiftPackageProductDependency section */
 		A10000000000000000000060 /* Petrel */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10000000000000000000050 /* XCLocalSwiftPackageReference "../Petrel" */;
+			package = A10000000000000000000050 /* XCLocalSwiftPackageReference "../../dec1-w0/wave1-petrel" */;
 			productName = Petrel;
 		};
 		A10000000000000000000061 /* SwanSpaces */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10000000000000000000051 /* XCLocalSwiftPackageReference "../swan" */;
+			package = A10000000000000000000051 /* XCLocalSwiftPackageReference "../Swan" */;
 			productName = SwanSpaces;
 		};
 /* End XCSwiftPackageProductDependency section */
