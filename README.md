@@ -120,3 +120,16 @@ xcodebuild test -project ATProtoDrive.xcodeproj -scheme ATProtoDrive -destinatio
 - **Implementation Plan Index:** `docs/superpowers/plans/2026-08-23-atprotodrive-v1.md`
 - **Manual E2E Smoke Checklist:** `Scripts/e2e-smoke.md`
 - **ATProto Proposal 0016:** [Permissioned Data Spaces](https://github.com/bluesky-social/proposals/blob/main/0016-permissioned-data/README.md)
+
+---
+
+## License
+
+ATProtoDrive is dual-licensed under either of
+
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+
+at your option (`MIT OR Apache-2.0`). Unless you explicitly state otherwise, any contribution you intentionally submit for inclusion in this project, as defined in the Apache-2.0 license, is dual-licensed as above, without any additional terms or conditions.
+
+To report a security vulnerability, see [SECURITY.md](SECURITY.md).

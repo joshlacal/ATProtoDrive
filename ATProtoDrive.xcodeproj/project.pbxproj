@@ -26,6 +26,7 @@
 		A100000000000000000000A5 /* MemberEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A1 /* MemberEditor.swift */; };
 		A100000000000000000000A6 /* RecordEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A2 /* RecordEditorSheet.swift */; };
 		A100000000000000000000A7 /* WritePipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A3 /* WritePipelineTests.swift */; };
+		A100000000000000000000D1 /* BundleLicenseMetadataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000D0 /* BundleLicenseMetadataTests.swift */; };
 		A100000000000000000000C1 /* OpenSpaceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000C0 /* OpenSpaceSheet.swift */; };
 		A100000000000000000000B0 /* RepoVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B1 /* RepoVerifier.swift */; };
 		A100000000000000000000B3 /* RepoVerifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B4 /* RepoVerifierTests.swift */; };
@@ -116,6 +117,7 @@
 		A100000000000000000000A1 /* MemberEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberEditor.swift; sourceTree = "<group>"; };
 		A100000000000000000000A2 /* RecordEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordEditorSheet.swift; sourceTree = "<group>"; };
 		A100000000000000000000A3 /* WritePipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritePipelineTests.swift; sourceTree = "<group>"; };
+		A100000000000000000000D0 /* BundleLicenseMetadataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundleLicenseMetadataTests.swift; sourceTree = "<group>"; };
 		A100000000000000000000B1 /* RepoVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoVerifier.swift; sourceTree = "<group>"; };
 		A100000000000000000000C0 /* OpenSpaceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenSpaceSheet.swift; sourceTree = "<group>"; };
 		A100000000000000000000B4 /* RepoVerifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoVerifierTests.swift; sourceTree = "<group>"; };
@@ -266,6 +268,7 @@
 				A1000000000000000000002F /* RecordListModelTests.swift */,
 				A1000000000000000000003E /* RecordListModelPipelineTests.swift */,
 				A100000000000000000000A3 /* WritePipelineTests.swift */,
+				A100000000000000000000D0 /* BundleLicenseMetadataTests.swift */,
 				A100000000000000000000B4 /* RepoVerifierTests.swift */,
 				A100000000000000000000B6 /* TestCARFixtureHelper.swift */,
 				B10000000000000000000051 /* BrowserDomainTests.swift */,
@@ -568,6 +571,7 @@
 				A1000000000000000000004D /* RecordListModelTests.swift in Sources */,
 				A1000000000000000000004E /* RecordListModelPipelineTests.swift in Sources */,
 				A100000000000000000000A7 /* WritePipelineTests.swift in Sources */,
+				A100000000000000000000D1 /* BundleLicenseMetadataTests.swift in Sources */,
 				A100000000000000000000B3 /* RepoVerifierTests.swift in Sources */,
 				A100000000000000000000B5 /* TestCARFixtureHelper.swift in Sources */,
 				B10000000000000000000061 /* BrowserDomainTests.swift in Sources */,
