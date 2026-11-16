@@ -16,7 +16,18 @@ File previews/downloads, verified backup packages, durable transfer jobs, and th
 
 - **macOS 15.0+** (Sequoia)
 - **Xcode 16.0+**
-- Local path dependencies: `../Petrel` and `../swan` (included in repository monorepo root)
+- Local path dependencies: sibling checkouts of [Petrel](https://github.com/joshlacal/Petrel) at `../Petrel` and [Swan](https://github.com/joshlacal/Swan) at `../Swan`. They are not part of this repository; clone them next to it at the revisions below.
+
+### Dependency revisions
+
+The Xcode project references Petrel and Swan as local packages (`XCLocalSwiftPackageReference`), so neither the project nor `Package.resolved` pins their revisions. Check out these revisions before building; they are the ones the current test run used:
+
+| Dependency | Path | Revision |
+|---|---|---|
+| Petrel | `../Petrel` | `59a07d0300d697de8a021f2bceae5bae239c0434` |
+| Swan | `../Swan` | `ab63b35b72bcbf92714fc13975e24c1ce63d0286` (source identical to `7bd022cd6559c0e0f366576c00125f458ff29a3f`; the later commit changes only documentation) |
+
+Swan's own `Package.swift` uses `../Petrel` when present and otherwise falls back to Petrel revision `59a07d03…` from GitHub. When either dependency moves, update this table in the same change.
 
 ---
 
@@ -87,7 +98,7 @@ Bluesky-lineage PDS implementations reject `private_key_jwt` client assertions f
 
 The Bluesky permissioned data spaces alpha is under active development. The hosted alpha PDS is wiped and updated weekly on Thursdays.
 
-The app currently targets the November 12, 2026 alpha (`d4def6e9`) through the sibling old-line Petrel Spaces backport and Swan. See [the November 12 compatibility note](docs/spaces-release-20261112.md).
+The app currently targets the November 12, 2026 alpha (`d4def6e9`) through Petrel 2.0 and Swan at the revisions listed under [Dependency revisions](#dependency-revisions). See [the November 12 compatibility note](docs/spaces-release-20261112.md).
 
 If upstream lexicons change on the `permissioned-data` branch of `bluesky-social/atproto`:
 ```bash

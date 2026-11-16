@@ -26,3 +26,7 @@ ATD_DERIVED_DATA="$PWD/../../_build/ATProtoDrive" xcodebuild test \
 ```
 
 The compatibility run passed all 249 tests in 22 suites. The two opt-in live tests skipped in the offline run.
+
+## Later dependency revisions
+
+The Swan revision above (`d7e66ccb`) is the one this compatibility update was made against. Later commits moved Petrel to `59a07d03` and Swan to `7bd022cd` without changing ATProtoDrive source. The README's "Dependency revisions" table is the current record; this note is not updated when dependencies move.

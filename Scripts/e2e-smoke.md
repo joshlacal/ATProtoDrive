@@ -6,8 +6,8 @@ This checklist provides a manual, step-by-step verification script for human exe
 
 ## Preamble & Environment Notice
 
-> **⚠️ Swan Interop Status Notice:**
-> Swan is currently pinned to `permissioned-data-0016-2026-07-30` (atproto 3f6c96d) while Petrel pins 89deb9f. Wire contracts differ (createSpace field shapes; credential auth shape). End-to-end space creation/record reads between ATProtoDrive and swan.place are **BLOCKED pending a swan profile bump and migration**. Login/OAuth and local UI workflows remain fully functional.
+> **⚠️ Dependency and Interop Status Notice:**
+> ATProtoDrive, Petrel and Swan all target the November 12, 2026 Spaces alpha (atproto `d4def6e9`). Build against the Petrel and Swan revisions listed under "Dependency revisions" in the README. This checklist has not been re-run end to end against live hosts on that line; record the build commit and the Petrel and Swan revisions in the summary table when you run it. A live host must also be running a Swan release from the same Spaces line for Scenarios 1, 2 and 7 to pass.
 
 > **⚠️ Alpha PDS Reset & Lexicon Re-vendoring Notice:**
 > The Bluesky Spaces Alpha PDS is updated and reset weekly on Thursdays. If schema or lexicon breaking changes occur upstream:
@@ -305,3 +305,5 @@ This checklist provides a manual, step-by-step verification script for human exe
 **Tester Name:** ________________________  
 **Date:** _______________________________  
 **Build Commit SHA:** ____________________  
+**Petrel Revision:** ____________________  
+**Swan Revision:** ______________________  
