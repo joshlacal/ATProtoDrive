@@ -12,6 +12,7 @@ public struct SpaceDetailView: View {
     let space: SpaceItem
     let account: AccountStore.Account?
     @Binding var selectedRepo: RepoEntry?
+    let refreshToken: Int
     var onDelete: (() -> Void)?
 
     @State private var model = SpaceDetailModel()
@@ -26,11 +27,13 @@ public struct SpaceDetailView: View {
         space: SpaceItem,
         account: AccountStore.Account?,
         selectedRepo: Binding<RepoEntry?> = .constant(nil),
+        refreshToken: Int = 0,
         onDelete: (() -> Void)? = nil
     ) {
         self.space = space
         self.account = account
         self._selectedRepo = selectedRepo
+        self.refreshToken = refreshToken
         self.onDelete = onDelete
     }
     public var body: some View {
@@ -72,7 +75,7 @@ public struct SpaceDetailView: View {
         }
         .id(space.id)
         .navigationTitle(space.skey)
-        .task(id: "\(space.id)-\(account?.id ?? "")") {
+        .task(id: "\(space.id)-\(account?.id ?? "")-\(refreshToken)") {
             if let account {
                 await model.load(space: space, account: account)
             }
@@ -80,18 +83,6 @@ public struct SpaceDetailView: View {
         .refreshable {
             if let account {
                 await model.load(space: space, account: account)
-            }
-        }
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                if account != nil {
-                    Button {
-                        showingCreateRecordSheet = true
-                    } label: {
-                        Label("New Record", systemImage: "plus")
-                    }
-                    .help("Create Record in Space")
-                }
             }
         }
         .sheet(isPresented: $showingCreateRecordSheet) {
@@ -180,10 +171,53 @@ public struct SpaceDetailView: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .center, spacing: 8) {
                 Text(space.skey)
                     .font(.title2.bold())
+
+                Text(space.isOwnAuthority ? "Owned Space" : "Shared Space")
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(space.isOwnAuthority ? Color.blue.opacity(0.15) : Color.purple.opacity(0.15))
+                    .foregroundStyle(space.isOwnAuthority ? .blue : .purple)
+                    .clipShape(Capsule())
+
+                if let policySummary = model.policySummary {
+                    Text(policySummary.title)
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.secondary.opacity(0.14))
+                        .foregroundStyle(.secondary)
+                        .clipShape(Capsule())
+                }
+
                 Spacer()
+
+                if let account {
+                    Button {
+                        showingCreateRecordSheet = true
+                    } label: {
+                        Label("New Record", systemImage: "plus")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Create Record in Space")
+
+                    Button {
+                        Task {
+                            await model.load(space: space, account: account)
+                        }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(model.isLoading)
+                    .help("Reload Space Details")
+                }
+
                 Menu {
                     ContextMenuEntriesView(
                         items: RecordMenuDescriptors.spaceRowMenu(
@@ -198,14 +232,6 @@ public struct SpaceDetailView: View {
                         .font(.title3)
                 }
                 .menuStyle(.borderlessButton)
-
-                Text(space.isOwnAuthority ? "Owned Space" : "Shared Space")
-                    .font(.caption.weight(.medium))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(space.isOwnAuthority ? Color.blue.opacity(0.15) : Color.purple.opacity(0.15))
-                    .foregroundStyle(space.isOwnAuthority ? .blue : .purple)
-                    .clipShape(Capsule())
             }
 
             Text(space.spaceType)
@@ -214,18 +240,58 @@ public struct SpaceDetailView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 LabeledContent("Authority", value: space.authorityDID)
+                    .textSelection(.enabled)
                 LabeledContent("Type", value: space.spaceType)
+                    .textSelection(.enabled)
                 LabeledContent("Key", value: space.skey)
+                    .textSelection(.enabled)
                 LabeledContent("URI", value: space.ref.uriString())
+                    .textSelection(.enabled)
                     .contextMenu {
                         ContextMenuEntriesView(items: RecordMenuDescriptors.spaceRowMenu(for: space))
                     }
+                if let spaceRev = space.spaceRev, !spaceRev.isEmpty {
+                    LabeledContent("Space Revision", value: spaceRev)
+                        .textSelection(.enabled)
+                }
+                if let policySummary = model.policySummary {
+                    policyMetadataRows(policySummary)
+                }
             }
             .font(.caption)
             .padding(.top, 4)
         }
         .contextMenu {
             ContextMenuEntriesView(items: RecordMenuDescriptors.spaceRowMenu(for: space))
+        }
+    }
+
+    @ViewBuilder
+    private func policyMetadataRows(_ policy: SpacePolicySummary) -> some View {
+        LabeledContent("Policy", value: policy.title)
+        switch policy {
+        case .personal:
+            EmptyView()
+        case let .memberList(_, _, allowedApps, publishPolicy, publishMembers):
+            if !allowedApps.isEmpty {
+                LabeledContent("Allowed Apps", value: allowedApps.joined(separator: ", "))
+                    .textSelection(.enabled)
+            }
+            if publishPolicy || publishMembers {
+                let flags = [
+                    publishPolicy ? "policy" : nil,
+                    publishMembers ? "members" : nil
+                ].compactMap { $0 }.joined(separator: ", ")
+                LabeledContent("Published", value: flags)
+            }
+        case let .managed(managingApp, publishPolicy):
+            LabeledContent("Managing App", value: managingApp)
+                .textSelection(.enabled)
+            if publishPolicy {
+                LabeledContent("Published", value: "policy")
+            }
+        case .other:
+            EmptyView()
         }
     }
 
@@ -253,10 +319,28 @@ public struct SpaceDetailView: View {
             } description: {
                 Text("This space was not found, or you do not have access to it.")
             } actions: {
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                VStack(spacing: 10) {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                    HStack(spacing: 8) {
+                        if let account {
+                            Button("Retry") {
+                                Task {
+                                    await model.load(space: space, account: account)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        if let ownRepo = space.ownRepoEntry {
+                            Button("Browse My Records (OAuth)") {
+                                selectedRepo = ownRepo
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                    }
+                }
             }
             .padding(.vertical, 24)
 
@@ -297,13 +381,21 @@ public struct SpaceDetailView: View {
                     .font(.subheadline)
                     .multilineTextAlignment(.center)
 
-                if let account {
-                    Button("Retry") {
-                        Task {
-                            await model.load(space: space, account: account)
+                HStack(spacing: 8) {
+                    if let account {
+                        Button("Retry") {
+                            Task {
+                                await model.load(space: space, account: account)
+                            }
                         }
+                        .buttonStyle(.bordered)
                     }
-                    .buttonStyle(.bordered)
+                    if let ownRepo = space.ownRepoEntry {
+                        Button("Browse My Records (OAuth)") {
+                            selectedRepo = ownRepo
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 }
             }
             .frame(maxWidth: .infinity)
@@ -329,14 +421,25 @@ public struct SpaceDetailView: View {
                     Text("No repos have written to this space yet.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    if account != nil {
-                        Button {
-                            showingCreateRecordSheet = true
-                        } label: {
-                            Label("Create First Record", systemImage: "plus.circle")
+                    HStack(spacing: 8) {
+                        if let ownRepo = space.ownRepoEntry {
+                            Button {
+                                selectedRepo = ownRepo
+                            } label: {
+                                Label("Browse My Records (OAuth)", systemImage: "folder")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                        if account != nil {
+                            Button {
+                                showingCreateRecordSheet = true
+                            } label: {
+                                Label("Create First Record", systemImage: "plus.circle")
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
                     }
                 }
                 .padding(.vertical, 8)
@@ -351,6 +454,15 @@ public struct SpaceDetailView: View {
                                     Text(repo.did)
                                         .font(.system(.body, design: .monospaced))
                                         .foregroundStyle(.primary)
+                                    if repo.did == account?.id {
+                                        Text("You")
+                                            .font(.caption2.weight(.medium))
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color.accentColor.opacity(0.15))
+                                            .foregroundStyle(Color.accentColor)
+                                            .clipShape(Capsule())
+                                    }
                                     Spacer()
                                     verificationBadge(for: repo)
                                     if account != nil {
@@ -369,10 +481,9 @@ public struct SpaceDetailView: View {
                                         .controlSize(.mini)
                                         .disabled(model.verifyingRepoDIDs.contains(repo.did))
                                     }
-                                    if selectedRepo?.did == repo.did {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(Color.accentColor)
-                                    }
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.tertiary)
                                 }
 
                                 HStack(spacing: 12) {
@@ -500,6 +611,9 @@ public struct SpaceDetailView: View {
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             } else {
+                let entriesByDID = Dictionary(
+                    uniqueKeysWithValues: (model.memberEntries ?? []).map { ($0.did, $0) }
+                )
                 VStack(spacing: 6) {
                     ForEach(members, id: \.self) { memberDID in
                         HStack(spacing: 8) {
@@ -507,7 +621,30 @@ public struct SpaceDetailView: View {
                                 .foregroundStyle(.secondary)
                             Text(memberDID)
                                 .font(.system(.body, design: .monospaced))
+                                .textSelection(.enabled)
                             Spacer()
+
+                            if let entry = entriesByDID[memberDID] {
+                                HStack(spacing: 4) {
+                                    if entry.read {
+                                        Text("Read")
+                                            .font(.caption2)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color.secondary.opacity(0.14))
+                                            .clipShape(Capsule())
+                                    }
+                                    if entry.write {
+                                        Text("Write")
+                                            .font(.caption2)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color.blue.opacity(0.14))
+                                            .foregroundStyle(.blue)
+                                            .clipShape(Capsule())
+                                    }
+                                }
+                            }
 
                             if space.isOwnAuthority {
                                 Button(role: .destructive) {

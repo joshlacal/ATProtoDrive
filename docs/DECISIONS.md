@@ -39,3 +39,11 @@ Chose: keep the existing repository list as a current-writer view. `com.atproto.
 Chose: preserve suspension and transient failures rather than treating them as deletion. `RepoTakendown` and `RepoDeactivated` display as suspended, `UpstreamFailure` as temporary, and only `SpaceDeleted` invalidates the cached credential. Petrel owns the new HPKE-export and RFC 9421 MAC flow.
 
 Reversible until: integration of `claude/spaces-nov12-20261112`. Override by: introducing explicit removed-writer history only as separate product work.
+
+## 2026-11-20 · ATProtoDrive · Wire interactive Spaces workspace and Open Space by URI into root browser
+
+Chose: replace the read-only `LegacySpacesCompatibilityView` route in `ContentBrowserView` with `SpacesBrowserView` (provisional), keeping `LegacySpacesCompatibilityProjection` compiling for existing sidebar tests, and wire `.global(.openSpace)` to `OpenSpaceDestinationView`. `SpacesBrowserView` connects the already-migrated November 12 Spaces models and views (`SpaceListModel`, `SpaceDetailView`, `RecordTableView`, `RecordInspectorView`, `CreateSpaceSheet`, `OpenSpaceSheet`, `MemberEditor`, `RecordEditorSheet`), adds `com.atproto.personalspace.policy` creation and `com.atproto.space.getSpace` policy summaries for owned Spaces, and preserves an OAuth "Browse My Records" fallback when whole-Space credential sync is refused (such as `AppNotAuthorized` on an app-restricted Space) while the account has its own `repoRev` in `listSpaces`.
+
+Rejected: leaving the Spaces tab on the dead four-line read-only disclosure stub until the full multi-plan mutation/backup-gate coordinator from Plan 2 is written from scratch, because all November 12 Space CRUD/read/STAR-verification views were already implemented and unit-tested in the repo but unreachable from `ContentBrowserView`.
+
+Reversible until: merge of `agy/atprotodrive-spaces-20261120` or replacement by the full Plan 2 Space coordinator. Override by: reverting the `ContentBrowserView` route back to `LegacySpacesCompatibilityView` or replacing `SpacesBrowserView` when Plan 2 lands.

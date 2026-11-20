@@ -110,8 +110,12 @@ struct AccountStoreTests {
 
     @MainActor
     @Test("AccountStore remove updates accounts and activeAccountID")
-    func testRemoveAccount() async {
-        let store = AccountStore()
+    func testRemoveAccount() async throws {
+        let suiteName = "AccountStoreTests.remove.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = AccountStore(userDefaults: defaults)
         await store.remove("did:plc:nonexistent")
         #expect(store.accounts.isEmpty)
         #expect(store.activeAccountID == nil)
@@ -170,19 +174,20 @@ struct AccountStoreTests {
 
     @MainActor
     @Test("restore discards persisted accounts if stored DID mismatches persisted entry")
-    func testRestoreValidatesActiveDID() async {
+    func testRestoreValidatesActiveDID() async throws {
+        let suiteName = "AccountStoreTests.restore.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
         let userDefaultsKey = "blue.catbird.atprotodrive.accounts"
         let mismatchedAccounts = [
             AccountStore.PersistedAccount(id: "did:plc:alice_persisted", handle: "alice.test", authMode: .publicOAuth)
         ]
         if let data = try? JSONEncoder().encode(mismatchedAccounts) {
-            UserDefaults.standard.set(data, forKey: userDefaultsKey)
-        }
-        defer {
-            UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+            defaults.set(data, forKey: userDefaultsKey)
         }
 
-        let store = AccountStore()
+        let store = AccountStore(userDefaults: defaults)
         await store.restore()
 
         // Since no actual keychain session exists for did:plc:alice_persisted, client.getActiveAccountInfo() storedDID is nil or mismatch -> accounts is empty

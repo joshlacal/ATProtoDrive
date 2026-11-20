@@ -121,6 +121,8 @@ public struct ContentBrowserView: View {
     @Environment(AccountStore.self) private var accountStore
     @State private var showingAddAccountSheet = false
     @State private var showingOpenRepoSheet = false
+    @State private var pendingOpenSpaceURI: String?
+    @State private var spacesRefreshToken: Int = 0
 
     public init(
         session: BrowserSession,
@@ -133,6 +135,12 @@ public struct ContentBrowserView: View {
     }
 
     private var currentRefreshAction: BrowserRefreshAction? {
+        if case .account(let did, .spaces) = session.selectedSource,
+           accountStore.account(for: did) != nil {
+            return BrowserRefreshAction {
+                spacesRefreshToken += 1
+            }
+        }
         if session.path?.repositoryDestination == .files, let store = publicRepositoryStore.blobStore() {
             return BrowserRefreshAction { await store.reload() }
         }
@@ -157,7 +165,11 @@ public struct ContentBrowserView: View {
                 case .account(let did, let destination):
                     switch destination {
                     case .spaces:
-                        LegacySpacesCompatibilityView(accountDID: did)
+                        SpacesBrowserView(
+                            accountDID: did,
+                            pendingOpenSpaceURI: $pendingOpenSpaceURI,
+                            refreshToken: spacesRefreshToken
+                        )
                     case .publicRecords, .publicBlobs:
                         repositoryContentView(
                             for: .connectedAccount(did: did),
@@ -189,10 +201,14 @@ public struct ContentBrowserView: View {
                             .buttonStyle(.borderedProminent)
                         }
                     case .openSpace:
-                        ContentUnavailableView(
-                            "Open Space",
-                            systemImage: "square.and.arrow.down",
-                            description: Text("Enter a space URI to open.")
+                        OpenSpaceDestinationView(
+                            onOpened: { accountDID, openedSpace in
+                                pendingOpenSpaceURI = openedSpace.ref.uriString()
+                                session.selectSource(.account(did: accountDID, destination: .spaces))
+                            },
+                            onAddAccount: {
+                                showingAddAccountSheet = true
+                            }
                         )
                     case .addAccount:
                         ContentUnavailableView {

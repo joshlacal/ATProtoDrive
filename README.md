@@ -8,9 +8,9 @@ ATProtoDrive is a native macOS browser for AT Protocol repositories, records and
 - **Public Files:** paginated blob inventory for opened repositories and connected accounts, file-type and CID search, sorting and a metadata inspector.
 - **Reference scans:** an explicit, cancellable scan of every public collection and record page, showing each reference's record URI and JSON Pointer. File enumeration and reference-scan completion are reported separately. File type and size come from record declarations; listed files have not been downloaded or hash-verified.
 - **Browser navigation:** per-window Records / Public Files destinations, back/forward history and qualified selection.
-- **Spaces:** legacy read-only Space metadata browsing. The new Space authorization and content browsing architecture is still pending.
+- **Spaces:** full November 12 alpha Space workspace — list owned and shared Spaces, open a Space by `at://` URI, create personal/member-list/public Spaces, inspect Space policies (`getSpace`), list writers (`listWriters`), manage members (`memberspace`), browse/create/edit/delete records, download/QuickLook Space blobs, and verify writer STAR archives.
 
-File previews/downloads, verified backup packages, durable transfer jobs, and the new Space mutation workflows remain planned work. See the [v1 plan index](docs/superpowers/plans/2026-08-23-atprotodrive-v1.md) and [Public Files continuation](docs/superpowers/plans/2026-09-19-public-files-continuation.md).
+File previews/downloads for public repositories, verified backup packages, and durable transfer jobs remain planned work. See the [v1 plan index](docs/superpowers/plans/2026-08-23-atprotodrive-v1.md) and [Public Files continuation](docs/superpowers/plans/2026-09-19-public-files-continuation.md).
 
 ## Prerequisites
 
@@ -24,8 +24,8 @@ The Xcode project references Petrel and Swan as local packages (`XCLocalSwiftPac
 
 | Dependency | Path | Revision |
 |---|---|---|
-| Petrel | `../Petrel` | `59a07d0300d697de8a021f2bceae5bae239c0434` |
-| Swan | `../Swan` | `ab63b35b72bcbf92714fc13975e24c1ce63d0286` (source identical to `7bd022cd6559c0e0f366576c00125f458ff29a3f`; the later commit changes only documentation) |
+| Petrel | `../Petrel` | `c694ea48b23f6f9f2cacf173499e06866fb298c5` |
+| Swan | `../Swan` | `83b9d3ca2564f8751e35dc0abba8357541ab0210` |
 
 Swan's own `Package.swift` uses `../Petrel` when present and otherwise falls back to Petrel revision `59a07d03…` from GitHub. When either dependency moves, update this table in the same change.
 

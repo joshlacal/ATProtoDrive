@@ -458,6 +458,7 @@ public final class RecordListModel {
     public private(set) var isLoading: Bool = false
     public private(set) var error: String?
     public private(set) var errorState: ErrorState?
+    private var loadGeneration: Int = 0
 
     public var sortOrder: [KeyPathComparator<RecordRow>] = [
         KeyPathComparator(\.collection, order: .forward),
@@ -1290,12 +1291,18 @@ public final class RecordListModel {
         credentialGet: @Sendable @escaping (_ url: URL, _ space: SpaceRef) async throws -> (responseCode: Int, data: Data),
         onInvalidateSpace: (@Sendable (SpaceRef) async -> Void)? = nil
     ) async {
+        loadGeneration &+= 1
+        let generation = loadGeneration
         isLoading = true
         error = nil
         errorState = nil
         rows = []
         commit = nil
-        defer { isLoading = false }
+        defer {
+            if loadGeneration == generation {
+                isLoading = false
+            }
+        }
 
         do {
             let (fetchedRecords, fetchedCommit) = try await Self.loadRecordsPipeline(
@@ -1308,6 +1315,8 @@ public final class RecordListModel {
                 credentialGet: credentialGet
             )
 
+            guard !Task.isCancelled, loadGeneration == generation else { return }
+
             let mappedRows = fetchedRecords.map {
                 Self.mapRecordRow(from: $0, space: space.ref, repoDID: repo.did)
             }
@@ -1317,7 +1326,12 @@ public final class RecordListModel {
             self.applySorting()
             self.error = nil
             self.errorState = nil
+        } catch is CancellationError {
+            return
         } catch {
+            if (error as? URLError)?.code == .cancelled || Task.isCancelled || loadGeneration != generation {
+                return
+            }
             let classified = Self.classifyError(error)
             self.errorState = classified
             self.error = classified.message

@@ -16,6 +16,8 @@
 		A10000000000000000000046 /* SpaceListModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000028 /* SpaceListModelTests.swift */; };
 		A10000000000000000000047 /* SpaceDetailModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000029 /* SpaceDetailModel.swift */; };
 		A10000000000000000000048 /* SpaceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* SpaceDetailView.swift */; };
+		A100000000000000000000E1 /* SpacesBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000E0 /* SpacesBrowserView.swift */; };
+		A100000000000000000000E3 /* SpacesBrowserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000E2 /* SpacesBrowserTests.swift */; };
 		A10000000000000000000049 /* SpaceDetailModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002B /* SpaceDetailModelTests.swift */; };
 		A1000000000000000000004A /* RecordListModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002C /* RecordListModel.swift */; };
 		A1000000000000000000004B /* RecordTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002D /* RecordTableView.swift */; };
@@ -107,6 +109,8 @@
 		A10000000000000000000028 /* SpaceListModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceListModelTests.swift; sourceTree = "<group>"; };
 		A10000000000000000000029 /* SpaceDetailModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceDetailModel.swift; sourceTree = "<group>"; };
 		A1000000000000000000002A /* SpaceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceDetailView.swift; sourceTree = "<group>"; };
+		A100000000000000000000E0 /* SpacesBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpacesBrowserView.swift; sourceTree = "<group>"; };
+		A100000000000000000000E2 /* SpacesBrowserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpacesBrowserTests.swift; sourceTree = "<group>"; };
 		A1000000000000000000002B /* SpaceDetailModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceDetailModelTests.swift; sourceTree = "<group>"; };
 		A1000000000000000000002C /* RecordListModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordListModel.swift; sourceTree = "<group>"; };
 		A1000000000000000000002D /* RecordTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordTableView.swift; sourceTree = "<group>"; };
@@ -250,6 +254,7 @@
 				A10000000000000000000027 /* SidebarView.swift */,
 				A10000000000000000000029 /* SpaceDetailModel.swift */,
 				A1000000000000000000002A /* SpaceDetailView.swift */,
+				A100000000000000000000E0 /* SpacesBrowserView.swift */,
 			);
 			path = Spaces;
 			sourceTree = "<group>";
@@ -264,6 +269,7 @@
 				02596E06C76235C65F1F9178 /* BlobInventoryStoreTests.swift */,
 				A10000000000000000000025 /* AccountStoreTests.swift */,
 				A10000000000000000000028 /* SpaceListModelTests.swift */,
+				A100000000000000000000E2 /* SpacesBrowserTests.swift */,
 				A1000000000000000000002B /* SpaceDetailModelTests.swift */,
 				A1000000000000000000002F /* RecordListModelTests.swift */,
 				A1000000000000000000003E /* RecordListModelPipelineTests.swift */,
@@ -519,6 +525,7 @@
 				A10000000000000000000045 /* SidebarView.swift in Sources */,
 				A10000000000000000000047 /* SpaceDetailModel.swift in Sources */,
 				A10000000000000000000048 /* SpaceDetailView.swift in Sources */,
+				A100000000000000000000E1 /* SpacesBrowserView.swift in Sources */,
 				A1000000000000000000004A /* RecordListModel.swift in Sources */,
 				A1000000000000000000004B /* RecordTableView.swift in Sources */,
 				A1000000000000000000004C /* RecordInspectorView.swift in Sources */,
@@ -567,6 +574,7 @@
 				E9DC4EA9E87EEE78B68CE4E7 /* BlobInventoryStoreTests.swift in Sources */,
 				A10000000000000000000043 /* AccountStoreTests.swift in Sources */,
 				A10000000000000000000046 /* SpaceListModelTests.swift in Sources */,
+				A100000000000000000000E3 /* SpacesBrowserTests.swift in Sources */,
 				A10000000000000000000049 /* SpaceDetailModelTests.swift in Sources */,
 				A1000000000000000000004D /* RecordListModelTests.swift in Sources */,
 				A1000000000000000000004E /* RecordListModelPipelineTests.swift in Sources */,

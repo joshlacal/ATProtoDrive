@@ -84,6 +84,7 @@ public final class AccountStore {
     nonisolated public static let scope = "atproto space:*?authority=*&collection=*&manage=create&manage=update&manage=delete"
 
     private static let userDefaultsKey = "blue.catbird.atprotodrive.accounts"
+    private let userDefaults: UserDefaults
 
     public private(set) var accounts: [Account] = []
     public private(set) var spaceModels: [String: SpaceListModel] = [:]
@@ -118,7 +119,9 @@ public final class AccountStore {
     private var pendingLogins: [String: PendingLogin] = [:]
 
 
-    public init() {}
+    public init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+    }
 
     nonisolated public static func namespace(for did: String) -> String {
         "atprotodrive.\(did)"
@@ -249,7 +252,7 @@ public final class AccountStore {
             return
         }
         #endif
-        guard let data = UserDefaults.standard.data(forKey: Self.userDefaultsKey),
+        guard let data = userDefaults.data(forKey: Self.userDefaultsKey),
               let persistedList = try? JSONDecoder().decode([PersistedAccount].self, from: data) else {
             return
         }
@@ -306,14 +309,14 @@ public final class AccountStore {
         if activeAccountID == id {
             activeAccountID = accounts.first?.id
         }
-        UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: id))
+        userDefaults.removeObject(forKey: SpaceListModel.customSpacesKey(for: id))
         savePersistedAccounts()
     }
 
     private func savePersistedAccounts() {
         let list = accounts.map { PersistedAccount(id: $0.id, handle: $0.handle, authMode: $0.authMode) }
         if let data = try? JSONEncoder().encode(list) {
-            UserDefaults.standard.set(data, forKey: Self.userDefaultsKey)
+            userDefaults.set(data, forKey: Self.userDefaultsKey)
         }
     }
 

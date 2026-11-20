@@ -53,7 +53,7 @@ public struct CreateSpaceSheet: View {
                         .textFieldStyle(.roundedBorder)
                         .autocorrectionDisabled()
 
-                    TextField("Space Key (skey)", text: $skey, prompt: Text("self"))
+                    TextField("Space Key (skey)", text: $skey, prompt: Text("self (leave empty for auto TID)"))
                         .textFieldStyle(.roundedBorder)
                         .autocorrectionDisabled()
                 } header: {
@@ -66,7 +66,7 @@ public struct CreateSpaceSheet: View {
                 }
 
                 Section {
-                    Picker("Write Policy", selection: $policy) {
+                    Picker("Policy", selection: $policy) {
                         ForEach(SpacePolicyOption.allCases) { opt in
                             Text(opt.displayName).tag(opt)
                         }
@@ -77,7 +77,7 @@ public struct CreateSpaceSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    LabeledContent("App Access", value: "#open (Fixed)")
+                    LabeledContent("App Access", value: policy.appAccessSummary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } header: {
@@ -134,7 +134,7 @@ public struct CreateSpaceSheet: View {
             }
             .padding()
         }
-        .frame(minWidth: 440, idealWidth: 480, minHeight: 380, idealHeight: 420)
+        .frame(minWidth: 440, idealWidth: 500, minHeight: 420, idealHeight: 460)
     }
 
     private func submit() async {

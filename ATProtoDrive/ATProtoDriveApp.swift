@@ -9,6 +9,7 @@ import SwanSpaces
 
 @MainActor
 private struct BrowserSceneRoot: View {
+    @Environment(AccountStore.self) private var accountStore
     @State private var session: BrowserSession
     @State private var publicRepositoryStore: PublicRepositoryStore
     private let recentRepositoryStore: RecentRepositoryStore
@@ -73,6 +74,14 @@ private struct BrowserSceneRoot: View {
             #endif
         }
         #if DEBUG
+        .onChange(of: accountStore.activeAccount?.id) { _, activeID in
+            guard !isFixtureMode,
+                  session.selectedSource == nil,
+                  ProcessInfo.processInfo.environment["ATPROTODRIVE_INITIAL_DESTINATION"] == "spaces",
+                  let activeID
+            else { return }
+            session.selectSource(.account(did: activeID, destination: .spaces))
+        }
         .task {
             guard isFixtureMode, fixtureReadiness == .idle else { return }
             fixtureReadiness = .loading

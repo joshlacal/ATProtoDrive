@@ -5,7 +5,10 @@
 
 import Foundation
 import Observation
+import OSLog
 import Petrel
+
+private let spaceDetailLogger = Logger(subsystem: "blue.catbird.atprotodrive", category: "Spaces")
 
 public struct RepoEntry: Identifiable, Hashable, Sendable {
     public var id: String { did }
@@ -19,21 +22,85 @@ public struct RepoEntry: Identifiable, Hashable, Sendable {
         self.hash = hash
     }
 }
+public struct SpaceMemberEntry: Identifiable, Hashable, Sendable {
+    public var id: String { did }
+    public let did: String
+    public let read: Bool
+    public let write: Bool
+
+    public init(did: String, read: Bool = true, write: Bool = true) {
+        self.did = did
+        self.read = read
+        self.write = write
+    }
+}
+
+public enum SpacePolicySummary: Equatable, Hashable, Sendable {
+    case personal
+    case memberList(
+        publicRead: Bool,
+        publicWrite: Bool,
+        allowedApps: [String],
+        publishPolicy: Bool,
+        publishMembers: Bool
+    )
+    case managed(managingApp: String, publishPolicy: Bool)
+    case other(String)
+
+    public var title: String {
+        switch self {
+        case .personal:
+            return "Personal Space"
+        case let .memberList(publicRead, publicWrite, _, _, _):
+            if publicRead && publicWrite {
+                return "Member Space (Public Read & Write)"
+            } else if publicRead {
+                return "Member Space (Public Read)"
+            } else if publicWrite {
+                return "Member Space (Public Write)"
+            }
+            return "Member Space"
+        case .managed:
+            return "Managed Space"
+        case let .other(name):
+            return name
+        }
+    }
+
+    public var allowedApps: [String] {
+        switch self {
+        case let .memberList(_, _, apps, _, _):
+            return apps
+        default:
+            return []
+        }
+    }
+}
+
 public enum SpacePolicyOption: String, CaseIterable, Identifiable, Sendable {
+    case personal = "personal"
     case memberList = "memberList"
     case `public` = "public"
 
     public var id: String { rawValue }
     public var displayName: String {
         switch self {
+        case .personal: return "Personal Space"
         case .memberList: return "Member List Policy"
         case .public: return "Public Policy"
         }
     }
     public var description: String {
         switch self {
-        case .memberList: return "Only authorized members can write records."
-        case .public: return "Anyone can write records."
+        case .personal: return "Only your account can read and write records."
+        case .memberList: return "Only authorized members can read and write records."
+        case .public: return "Anyone can read and write records."
+        }
+    }
+    public var appAccessSummary: String {
+        switch self {
+        case .personal: return "Owner account only"
+        case .memberList, .public: return "All apps allowed (no allowedApps restriction)"
         }
     }
 }
@@ -97,9 +164,12 @@ public final class SpaceDetailModel {
 
     public private(set) var repos: [RepoEntry] = []
     public private(set) var members: [String]? // DIDs; nil when the member list is not readable
+    public private(set) var memberEntries: [SpaceMemberEntry]?
+    public private(set) var policySummary: SpacePolicySummary?
     public private(set) var isLoading: Bool = false
     public private(set) var error: String?
     public private(set) var errorState: ErrorState?
+    private var loadGeneration: Int = 0
     public struct StoredVerification: Sendable, Equatable {
         public let targetRev: String
         public let report: VerificationReport
@@ -130,6 +200,8 @@ public final class SpaceDetailModel {
     public init(
         repos: [RepoEntry] = [],
         members: [String]? = nil,
+        memberEntries: [SpaceMemberEntry]? = nil,
+        policySummary: SpacePolicySummary? = nil,
         isLoading: Bool = false,
         error: String? = nil,
         errorState: ErrorState? = nil,
@@ -138,11 +210,45 @@ public final class SpaceDetailModel {
     ) {
         self.repos = repos
         self.members = members
+        self.memberEntries = memberEntries
+        self.policySummary = policySummary
         self.isLoading = isLoading
         self.error = error
         self.errorState = errorState
         self.verificationReports = verificationReports
         self.verifyingRepoDIDs = verifyingRepoDIDs
+    }
+
+    /// Summarizes a `com.atproto.space.getSpace` policy union for UI presentation.
+    nonisolated public static func summarizePolicy(
+        _ policy: ComAtprotoSpaceGetSpace.OutputPolicyUnion
+    ) -> SpacePolicySummary {
+        switch policy {
+        case .comAtprotoPersonalspacePolicy:
+            return .personal
+        case let .comAtprotoMemberspacePolicy(memberPolicy):
+            return .memberList(
+                publicRead: memberPolicy.publicRead == true,
+                publicWrite: memberPolicy.publicWrite == true,
+                allowedApps: memberPolicy.allowedApps?.map(\.description) ?? [],
+                publishPolicy: memberPolicy.publishPolicy == true,
+                publishMembers: memberPolicy.publishMembers == true
+            )
+        case let .comAtprotoManagedspacePolicy(managedPolicy):
+            return .managed(
+                managingApp: managedPolicy.managingApp,
+                publishPolicy: managedPolicy.publishPolicy == true
+            )
+        case let .unexpected(container):
+            if case let .unknownType(type, _) = container {
+                return .other(type)
+            }
+            if case let .object(dict) = container,
+               case let .string(type) = dict["$type"] {
+                return .other(type)
+            }
+            return .other("Custom Policy")
+        }
     }
 
     // MARK: - Pure Static Helpers
@@ -252,15 +358,16 @@ public final class SpaceDetailModel {
         let lowercasedMessage = message.lowercased()
         let lowercasedError = errorString.lowercased()
 
-        if errorString == "RepoTakendown" || errorString == "RepoDeactivated" {
+        if errorString == "RepoTakendown" || errorString == "RepoDeactivated" ||
+            lowercasedMessage.hasPrefix("repotakendown") || lowercasedMessage.hasPrefix("repodeactivated") {
             return .general("Space suspended: \(message)")
         }
 
-        if errorString == "UpstreamFailure" {
+        if errorString == "UpstreamFailure" || lowercasedMessage.hasPrefix("upstreamfailure") {
             return .general("Temporary upstream failure: \(message)")
         }
 
-        if errorString == "InvalidSpaceMac" {
+        if errorString == "InvalidSpaceMac" || lowercasedMessage.hasPrefix("invalidspacemac") {
             return .general("Space response verification failed: \(message)")
         }
 
@@ -349,11 +456,11 @@ public final class SpaceDetailModel {
         return accumulated
     }
 
-    /// Pure pagination helper for `com.atproto.memberspace.listMembers`.
-    nonisolated public static func fetchAllMembers(
+    /// Pure pagination helper for `com.atproto.memberspace.listMembers` returning full read/write member entries.
+    nonisolated public static func fetchAllMemberEntries(
         fetchPage: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoMemberspaceListMembers.Output?)
-    ) async throws -> [String] {
-        var accumulated: [String] = []
+    ) async throws -> [SpaceMemberEntry] {
+        var accumulated: [SpaceMemberEntry] = []
         var currentCursor: String? = nil
         var seenCursors = Set<String>()
 
@@ -366,7 +473,9 @@ public final class SpaceDetailModel {
                 throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body (HTTP \(responseCode))", statusCode: responseCode)
             }
 
-            let pageItems = output.members.map { $0.did.description }
+            let pageItems = output.members.map {
+                SpaceMemberEntry(did: $0.did.description, read: $0.read, write: $0.write)
+            }
             accumulated.append(contentsOf: pageItems)
 
             if let nextCursor = output.cursor, !nextCursor.isEmpty, !seenCursors.contains(nextCursor) {
@@ -378,6 +487,13 @@ public final class SpaceDetailModel {
         } while currentCursor != nil
 
         return accumulated
+    }
+
+    /// Pure pagination helper for `com.atproto.memberspace.listMembers`.
+    nonisolated public static func fetchAllMembers(
+        fetchPage: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoMemberspaceListMembers.Output?)
+    ) async throws -> [String] {
+        try await fetchAllMemberEntries(fetchPage: fetchPage).map(\.did)
     }
 
     // MARK: - Loading Pipeline
@@ -414,14 +530,50 @@ public final class SpaceDetailModel {
         account: AccountStore.Account,
         authorityResolver: SpaceHostResolver? = nil,
         fetchRepos: (@Sendable () async throws -> [RepoEntry])? = nil,
-        listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoMemberspaceListMembers.Output?))? = nil
+        listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoMemberspaceListMembers.Output?))? = nil,
+        getSpaceTransport: (@Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetSpace.Output?))? = nil
     ) async {
+        loadGeneration &+= 1
+        let generation = loadGeneration
         isLoading = true
         error = nil
         errorState = nil
         repos = []
         members = nil
-        defer { isLoading = false }
+        memberEntries = nil
+        policySummary = nil
+        defer {
+            if loadGeneration == generation {
+                isLoading = false
+            }
+        }
+
+        let shouldFetchPolicy = space.isOwnAuthority && (getSpaceTransport != nil || fetchRepos == nil)
+        async let policyTask: SpacePolicySummary? = {
+            guard shouldFetchPolicy else { return nil }
+            let fetchPolicy: @Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetSpace.Output?) =
+                getSpaceTransport ?? {
+                    try await account.client.com.atproto.space.getSpace(
+                        input: ComAtprotoSpaceGetSpace.Parameters(space: space.ref)
+                    )
+                }
+            do {
+                let (code, output) = try await fetchPolicy()
+                if (200...299).contains(code), let output {
+                    return Self.summarizePolicy(output.policy)
+                }
+                spaceDetailLogger.info("getSpace returned status=\(code, privacy: .public) hasOutput=\(output != nil, privacy: .public) for \(space.spaceType, privacy: .public)/\(space.skey, privacy: .public)")
+                return nil
+            } catch is CancellationError {
+                return nil
+            } catch {
+                if (error as? URLError)?.code == .cancelled {
+                    return nil
+                }
+                spaceDetailLogger.info("getSpace failed for \(space.spaceType, privacy: .public)/\(space.skey, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                return nil
+            }
+        }()
 
         let reposFetchClosure: @Sendable () async throws -> [RepoEntry] = fetchRepos ?? {
             let resolver = authorityResolver ?? SpaceHostResolver(didResolver: ClientDIDResolver(client: account.client))
@@ -436,11 +588,11 @@ public final class SpaceDetailModel {
             }
         }
 
-        let membersFetchClosure: @Sendable () async throws -> [String] = {
+        let memberEntriesFetchClosure: @Sendable () async throws -> [SpaceMemberEntry] = {
             if let listMembersTransport = listMembersTransport {
-                return try await Self.fetchAllMembers(fetchPage: listMembersTransport)
+                return try await Self.fetchAllMemberEntries(fetchPage: listMembersTransport)
             } else {
-                return try await Self.fetchAllMembers { cursor in
+                return try await Self.fetchAllMemberEntries { cursor in
                     let (responseCode, output) = try await account.client.com.atproto.memberspace.listMembers(
                         input: ComAtprotoMemberspaceListMembers.Parameters(space: space.ref, cursor: cursor)
                     )
@@ -450,22 +602,65 @@ public final class SpaceDetailModel {
         }
 
         do {
-            let (fetchedRepos, fetchedMembers) = try await Self.loadSpaceDetails(
-                space: space,
-                fetchRepos: reposFetchClosure,
-                fetchMembers: membersFetchClosure
-            )
+            let fetchedRepos = try await reposFetchClosure()
+            let fetchedPolicy = await policyTask
+            guard !Task.isCancelled, loadGeneration == generation else { return }
 
+            let policyAllowsMembers: Bool
+            switch fetchedPolicy {
+            case .personal, .managed:
+                policyAllowsMembers = false
+            case .memberList, .other, nil:
+                policyAllowsMembers = true
+            }
+
+            let fetchedMemberEntries: [SpaceMemberEntry]?
+            if Self.shouldFetchMembers(space: space) && policyAllowsMembers {
+                do {
+                    fetchedMemberEntries = try await memberEntriesFetchClosure()
+                } catch is CancellationError {
+                    return
+                } catch {
+                    if (error as? URLError)?.code == .cancelled || Task.isCancelled {
+                        return
+                    }
+                    if Self.isMemberListNotReadableError(error) {
+                        fetchedMemberEntries = nil
+                    } else {
+                        throw error
+                    }
+                }
+            } else {
+                fetchedMemberEntries = nil
+            }
+
+            guard !Task.isCancelled, loadGeneration == generation else { return }
+            self.policySummary = fetchedPolicy
             self.repos = fetchedRepos
-            self.members = fetchedMembers
+            self.memberEntries = fetchedMemberEntries
+            self.members = fetchedMemberEntries?.map(\.did)
             self.error = nil
             self.errorState = nil
+            let policyLabel = self.policySummary?.title ?? "unavailable"
+            let memberCount = fetchedMemberEntries?.count ?? -1
+            spaceDetailLogger.info("Loaded space \(space.spaceType, privacy: .public)/\(space.skey, privacy: .public): policy=\(policyLabel, privacy: .public) writers=\(fetchedRepos.count, privacy: .public) members=\(memberCount, privacy: .public)")
+        } catch is CancellationError {
+            _ = await policyTask
+            return
         } catch {
+            let fetchedPolicy = await policyTask
+            if (error as? URLError)?.code == .cancelled || Task.isCancelled || loadGeneration != generation {
+                return
+            }
+            self.policySummary = fetchedPolicy
             let classified = Self.classifyError(error)
             self.errorState = classified
             self.error = classified.message
             self.repos = []
             self.members = nil
+            self.memberEntries = nil
+            let policyLabel = self.policySummary?.title ?? "unavailable"
+            spaceDetailLogger.error("Failed to load space \(space.spaceType, privacy: .public)/\(space.skey, privacy: .public): policy=\(policyLabel, privacy: .public) error=\(classified.message, privacy: .public)")
 
             if case .tombstone = classified {
                 await account.credentials.invalidate(space.ref)
@@ -493,22 +688,22 @@ public final class SpaceDetailModel {
             recordKey = nil
         }
 
-        // Both legacy options map exactly onto the memberspace policy: a member list
-        // on both sides is memberspace with no public flags, and public on both sides
-        // is memberspace with public read and public write. Omitting allowedApps keeps
-        // the old open app access.
-        let memberspacePolicy: ComAtprotoMemberspacePolicy
+        let policyUnion: ComAtprotoSpaceCreateSpace.InputPolicyUnion
         switch policy {
+        case .personal:
+            policyUnion = .comAtprotoPersonalspacePolicy(ComAtprotoPersonalspacePolicy())
         case .memberList:
-            memberspacePolicy = ComAtprotoMemberspacePolicy()
+            policyUnion = .comAtprotoMemberspacePolicy(ComAtprotoMemberspacePolicy())
         case .public:
-            memberspacePolicy = ComAtprotoMemberspacePolicy(publicRead: true, publicWrite: true)
+            policyUnion = .comAtprotoMemberspacePolicy(
+                ComAtprotoMemberspacePolicy(publicRead: true, publicWrite: true)
+            )
         }
 
         return ComAtprotoSpaceCreateSpace.Input(
             spaceType: nsid,
             skey: recordKey,
-            policy: .comAtprotoMemberspacePolicy(memberspacePolicy)
+            policy: policyUnion
         )
     }
 

@@ -5,7 +5,10 @@
 
 import Foundation
 import Observation
+import OSLog
 import Petrel
+
+private let spacesListLogger = Logger(subsystem: "blue.catbird.atprotodrive", category: "Spaces")
 
 public struct SpaceItem: Identifiable, Hashable, Sendable {
     public var id: String { "\(accountDID):\(ref.uriString())" }
@@ -15,18 +18,49 @@ public struct SpaceItem: Identifiable, Hashable, Sendable {
     public let spaceType: String
     public let skey: String
     public let isOwnAuthority: Bool    // authority == account DID
+    public let repoRev: String?
+    public let repoDataHash: String?
+    public let spaceRev: String?
 
-    public init(ref: SpaceRef, accountDID: String) {
+    public init(
+        ref: SpaceRef,
+        accountDID: String,
+        repoRev: String? = nil,
+        repoDataHash: String? = nil,
+        spaceRev: String? = nil
+    ) {
         self.ref = ref
         self.accountDID = accountDID
         self.authorityDID = ref.spaceDID
         self.spaceType = ref.spaceType
         self.skey = ref.skey
         self.isOwnAuthority = (ref.spaceDID == accountDID)
+        self.repoRev = repoRev
+        self.repoDataHash = repoDataHash
+        self.spaceRev = spaceRev
     }
-    public init(uriString: String, accountDID: String) throws {
+
+    public init(
+        uriString: String,
+        accountDID: String,
+        repoRev: String? = nil,
+        repoDataHash: String? = nil,
+        spaceRev: String? = nil
+    ) throws {
         let ref = try SpaceRef(uriString: uriString)
-        self.init(ref: ref, accountDID: accountDID)
+        self.init(
+            ref: ref,
+            accountDID: accountDID,
+            repoRev: repoRev,
+            repoDataHash: repoDataHash,
+            spaceRev: spaceRev
+        )
+    }
+
+    /// Own writer repository entry synthesized from `listSpaces` metadata when present.
+    public var ownRepoEntry: RepoEntry? {
+        guard let repoRev, !repoRev.isEmpty else { return nil }
+        return RepoEntry(did: accountDID, rev: repoRev, hash: repoDataHash ?? "")
     }
 }
 public enum OpenSpaceError: LocalizedError, Equatable, Sendable {
@@ -53,6 +87,7 @@ public final class SpaceListModel {
     public private(set) var spaces: [SpaceItem] = []
     public private(set) var error: String?
     public private(set) var isLoading: Bool = false
+    private var loadGeneration: Int = 0
 
     public init(spaces: [SpaceItem] = [], error: String? = nil) {
         self.spaces = spaces
@@ -92,7 +127,15 @@ public final class SpaceListModel {
                 throw ATProtoXRPCError(error: "EmptyResponse", message: "No response body (HTTP \(responseCode))", statusCode: responseCode)
             }
 
-            let pageItems = output.spaces.map { SpaceItem(ref: $0.space, accountDID: accountDID) }
+            let pageItems = output.spaces.map { view in
+                SpaceItem(
+                    ref: view.space,
+                    accountDID: accountDID,
+                    repoRev: view.repoRev?.description,
+                    repoDataHash: view.data?.data.base64EncodedString(),
+                    spaceRev: view.spaceRev?.description
+                )
+            }
             accumulated.append(contentsOf: pageItems)
 
             if let nextCursor = output.cursor, !nextCursor.isEmpty, !seenCursors.contains(nextCursor) {
@@ -119,9 +162,15 @@ public final class SpaceListModel {
         accountDID: String,
         fetchPage: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListSpaces.Output?)
     ) async {
+        loadGeneration &+= 1
+        let generation = loadGeneration
         isLoading = true
         error = nil
-        defer { isLoading = false }
+        defer {
+            if loadGeneration == generation {
+                isLoading = false
+            }
+        }
 
         let customURIs = Self.loadCustomSpaceURIs(for: accountDID)
         let persistedItems = customURIs.compactMap { uri -> SpaceItem? in
@@ -131,6 +180,7 @@ public final class SpaceListModel {
 
         do {
             let fetchedSpaces = try await Self.fetchAllSpaces(accountDID: accountDID, fetchPage: fetchPage)
+            guard !Task.isCancelled, loadGeneration == generation else { return }
             var merged = fetchedSpaces
             var existingURIs = Set(fetchedSpaces.map { $0.ref.uriString() })
             for item in persistedItems {
@@ -141,7 +191,13 @@ public final class SpaceListModel {
             }
             self.spaces = merged
             self.error = nil
+            spacesListLogger.info("Loaded \(fetchedSpaces.count, privacy: .public) spaces from server (total displayed: \(merged.count, privacy: .public))")
+        } catch is CancellationError {
+            return
         } catch {
+            if (error as? URLError)?.code == .cancelled || Task.isCancelled || loadGeneration != generation {
+                return
+            }
             var merged = self.spaces
             var existingURIs = Set(merged.map { $0.ref.uriString() })
             for item in persistedItems {
@@ -152,6 +208,7 @@ public final class SpaceListModel {
             }
             self.spaces = merged.isEmpty ? persistedItems : merged
             self.error = error.localizedDescription
+            spacesListLogger.error("Failed to load spaces: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -223,6 +280,17 @@ public final class SpaceListModel {
             return (responseCode: responseCode, output: data)
         }
         await load(accountDID: account.id, fetchPage: listTransport)
+    }
+
+    public func isCustomSpace(_ space: SpaceItem, accountDID: String, userDefaults: UserDefaults = .standard) -> Bool {
+        Self.loadCustomSpaceURIs(for: accountDID, userDefaults: userDefaults).contains(space.ref.uriString())
+    }
+
+    public func removeCustomSpace(_ space: SpaceItem, accountDID: String, userDefaults: UserDefaults = .standard) {
+        var customURIs = Self.loadCustomSpaceURIs(for: accountDID, userDefaults: userDefaults)
+        customURIs.removeAll { $0 == space.ref.uriString() }
+        Self.saveCustomSpaceURIs(customURIs, for: accountDID, userDefaults: userDefaults)
+        spaces.removeAll { $0.id == space.id }
     }
 
     // MARK: - Open Space by Reference
