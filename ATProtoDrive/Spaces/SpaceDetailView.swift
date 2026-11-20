@@ -19,9 +19,19 @@ public struct SpaceDetailView: View {
     @State private var recordListModel = RecordListModel()
     @State private var showingAddMemberSheet = false
     @State private var showingCreateRecordSheet = false
+    @State private var showingEditPolicySheet = false
+    @State private var memberPendingPermissionEdit: SpaceMemberEntry?
+    @State private var updatingMemberDIDs: Set<String> = []
     @State private var memberToRemove: String?
     @State private var showingDeleteSpaceConfirmation = false
     @State private var actionError: String?
+
+    private var isManagedSpace: Bool {
+        if case .managed = model.policySummary {
+            return true
+        }
+        return false
+    }
 
     public init(
         space: SpaceItem,
@@ -113,6 +123,26 @@ public struct SpaceDetailView: View {
                 )
             }
         }
+        .sheet(isPresented: $showingEditPolicySheet) {
+            if let account {
+                SpacePolicyEditorSheet(
+                    space: space,
+                    currentPolicy: model.policySummary,
+                    account: account,
+                    model: model
+                )
+            }
+        }
+        .sheet(item: $memberPendingPermissionEdit) { memberEntry in
+            if let account {
+                MemberPermissionsEditorSheet(
+                    member: memberEntry,
+                    space: space,
+                    account: account,
+                    model: model
+                )
+            }
+        }
         .confirmationDialog(
             "Remove Member",
             isPresented: Binding(
@@ -196,6 +226,17 @@ public struct SpaceDetailView: View {
                 Spacer()
 
                 if let account {
+                    if space.isOwnAuthority && !isManagedSpace {
+                        Button {
+                            showingEditPolicySheet = true
+                        } label: {
+                            Label("Edit Policy…", systemImage: "slider.horizontal.3")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .help("Edit Space Access Policy")
+                    }
+
                     Button {
                         showingCreateRecordSheet = true
                     } label: {
@@ -219,6 +260,17 @@ public struct SpaceDetailView: View {
                 }
 
                 Menu {
+                    if space.isOwnAuthority && account != nil {
+                        Button {
+                            showingEditPolicySheet = true
+                        } label: {
+                            Label(
+                                isManagedSpace ? "Edit Policy (Managed Space)…" : "Edit Policy…",
+                                systemImage: "slider.horizontal.3"
+                            )
+                        }
+                        Divider()
+                    }
                     ContextMenuEntriesView(
                         items: RecordMenuDescriptors.spaceRowMenu(
                             for: space,
@@ -616,6 +668,8 @@ public struct SpaceDetailView: View {
                 )
                 VStack(spacing: 6) {
                     ForEach(members, id: \.self) { memberDID in
+                        let entry = entriesByDID[memberDID] ?? SpaceMemberEntry(did: memberDID, read: true, write: true)
+                        let isUpdating = updatingMemberDIDs.contains(memberDID)
                         HStack(spacing: 8) {
                             Image(systemName: "person.circle.fill")
                                 .foregroundStyle(.secondary)
@@ -624,9 +678,9 @@ public struct SpaceDetailView: View {
                                 .textSelection(.enabled)
                             Spacer()
 
-                            if let entry = entriesByDID[memberDID] {
+                            if let storedEntry = entriesByDID[memberDID] {
                                 HStack(spacing: 4) {
-                                    if entry.read {
+                                    if storedEntry.read {
                                         Text("Read")
                                             .font(.caption2)
                                             .padding(.horizontal, 6)
@@ -634,7 +688,7 @@ public struct SpaceDetailView: View {
                                             .background(Color.secondary.opacity(0.14))
                                             .clipShape(Capsule())
                                     }
-                                    if entry.write {
+                                    if storedEntry.write {
                                         Text("Write")
                                             .font(.caption2)
                                             .padding(.horizontal, 6)
@@ -643,10 +697,109 @@ public struct SpaceDetailView: View {
                                             .foregroundStyle(.blue)
                                             .clipShape(Capsule())
                                     }
+                                    if !storedEntry.read && !storedEntry.write {
+                                        Text("No Access")
+                                            .font(.caption2)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color.orange.opacity(0.14))
+                                            .foregroundStyle(.orange)
+                                            .clipShape(Capsule())
+                                    }
                                 }
                             }
 
-                            if space.isOwnAuthority {
+                            if space.isOwnAuthority, let account {
+                                if isUpdating {
+                                    ProgressView()
+                                        .controlSize(.mini)
+                                }
+
+                                Menu {
+                                    Button {
+                                        Task {
+                                            await applyMemberPermissions(
+                                                did: memberDID,
+                                                read: true,
+                                                write: true,
+                                                account: account
+                                            )
+                                        }
+                                    } label: {
+                                        if entry.read && entry.write {
+                                            Label("Read & Write", systemImage: "checkmark")
+                                        } else {
+                                            Text("Read & Write")
+                                        }
+                                    }
+
+                                    Button {
+                                        Task {
+                                            await applyMemberPermissions(
+                                                did: memberDID,
+                                                read: true,
+                                                write: false,
+                                                account: account
+                                            )
+                                        }
+                                    } label: {
+                                        if entry.read && !entry.write {
+                                            Label("Read Only", systemImage: "checkmark")
+                                        } else {
+                                            Text("Read Only")
+                                        }
+                                    }
+
+                                    Button {
+                                        Task {
+                                            await applyMemberPermissions(
+                                                did: memberDID,
+                                                read: false,
+                                                write: true,
+                                                account: account
+                                            )
+                                        }
+                                    } label: {
+                                        if !entry.read && entry.write {
+                                            Label("Write Only", systemImage: "checkmark")
+                                        } else {
+                                            Text("Write Only")
+                                        }
+                                    }
+
+                                    Button {
+                                        Task {
+                                            await applyMemberPermissions(
+                                                did: memberDID,
+                                                read: false,
+                                                write: false,
+                                                account: account
+                                            )
+                                        }
+                                    } label: {
+                                        if !entry.read && !entry.write {
+                                            Label("No Access", systemImage: "checkmark")
+                                        } else {
+                                            Text("No Access")
+                                        }
+                                    }
+
+                                    Divider()
+
+                                    Button {
+                                        memberPendingPermissionEdit = entry
+                                    } label: {
+                                        Label("Edit Permissions…", systemImage: "slider.horizontal.3")
+                                    }
+                                } label: {
+                                    Label("Permissions", systemImage: "slider.horizontal.3")
+                                        .labelStyle(.iconOnly)
+                                }
+                                .menuStyle(.borderlessButton)
+                                .fixedSize()
+                                .disabled(isUpdating)
+                                .help("Edit Member Read/Write Permissions")
+
                                 Button(role: .destructive) {
                                     memberToRemove = memberDID
                                 } label: {
@@ -654,6 +807,7 @@ public struct SpaceDetailView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 .buttonStyle(.plain)
+                                .disabled(isUpdating)
                                 .help("Remove Member")
                             }
                         }
@@ -662,6 +816,173 @@ public struct SpaceDetailView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                 }
+            }
+        }
+    }
+
+    private func applyMemberPermissions(
+        did: String,
+        read: Bool,
+        write: Bool,
+        account: AccountStore.Account
+    ) async {
+        updatingMemberDIDs.insert(did)
+        defer { updatingMemberDIDs.remove(did) }
+
+        do {
+            try await model.updateMemberPermissions(
+                did: did,
+                read: read,
+                write: write,
+                space: space,
+                account: account
+            )
+        } catch {
+            if let xrpc = error as? ATProtoXRPCError {
+                actionError = xrpc.errorDescription ?? xrpc.error
+            } else {
+                actionError = error.localizedDescription
+            }
+        }
+    }
+}
+
+private struct MemberPermissionsEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let member: SpaceMemberEntry
+    let space: SpaceItem
+    let account: AccountStore.Account
+    let model: SpaceDetailModel
+
+    @State private var canRead: Bool
+    @State private var canWrite: Bool
+    @State private var isSubmitting: Bool = false
+    @State private var errorMessage: String?
+
+    init(
+        member: SpaceMemberEntry,
+        space: SpaceItem,
+        account: AccountStore.Account,
+        model: SpaceDetailModel
+    ) {
+        self.member = member
+        self.space = space
+        self.account = account
+        self.model = model
+        _canRead = State(initialValue: member.read)
+        _canWrite = State(initialValue: member.write)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Edit Member Permissions")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                        .font(.title3)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding()
+
+            Divider()
+
+            Form {
+                Section {
+                    LabeledContent("Member DID", value: member.did)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                } header: {
+                    Text("Member")
+                        .font(.subheadline.bold())
+                }
+
+                Section {
+                    Toggle("Allow Read", isOn: $canRead)
+                    Toggle("Allow Write", isOn: $canWrite)
+                } header: {
+                    Text("Permissions")
+                        .font(.subheadline.bold())
+                } footer: {
+                    Text("Updates are applied via com.atproto.memberspace.putMembers for space \(space.skey).")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .formStyle(.grouped)
+
+            if let errorMessage {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.red.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+
+            Divider()
+
+            HStack {
+                Button("Cancel", role: .cancel) {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                if isSubmitting {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(.trailing, 4)
+                }
+
+                Button("Save Permissions") {
+                    Task {
+                        await submit()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isSubmitting)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding()
+        }
+        .frame(minWidth: 420, idealWidth: 460, minHeight: 280, idealHeight: 320)
+    }
+
+    private func submit() async {
+        isSubmitting = true
+        errorMessage = nil
+        defer { isSubmitting = false }
+
+        do {
+            try await model.updateMemberPermissions(
+                did: member.did,
+                read: canRead,
+                write: canWrite,
+                space: space,
+                account: account
+            )
+            dismiss()
+        } catch {
+            if let xrpc = error as? ATProtoXRPCError {
+                errorMessage = xrpc.errorDescription ?? xrpc.error
+            } else {
+                errorMessage = error.localizedDescription
             }
         }
     }

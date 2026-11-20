@@ -4,13 +4,17 @@ ATProtoDrive is a native macOS browser for AT Protocol repositories, records and
 
 ## Available now
 
-- **Public Records:** collection browsing, paginated record tables, search, sorting and a JSON inspector.
-- **Public Files:** paginated blob inventory for opened repositories and connected accounts, file-type and CID search, sorting and a metadata inspector.
-- **Reference scans:** an explicit, cancellable scan of every public collection and record page, showing each reference's record URI and JSON Pointer. File enumeration and reference-scan completion are reported separately. File type and size come from record declarations; listed files have not been downloaded or hash-verified.
-- **Browser navigation:** per-window Records / Public Files destinations, back/forward history and qualified selection.
-- **Spaces:** full November 12 alpha Space workspace — list owned and shared Spaces, open a Space by `at://` URI, create personal/member-list/public Spaces, inspect Space policies (`getSpace`), list writers (`listWriters`), manage members (`memberspace`), browse/create/edit/delete records, download/QuickLook Space blobs, and verify writer STAR archives.
+- **Account Overview:** per-account identity, DID document readiness (`#atproto_pds`, `#atproto_kem`, `#atproto_space_host`), loaded Spaces count, and quick navigation to every account destination.
+- **Public Records:** anonymous collection browsing, paginated record tables, search, sorting, JSON inspector, and owner-only create/edit/delete with atomic compare-and-swap (`swapRecord`) conflict detection when browsing a connected account's own repository.
+- **Public Files:** paginated anonymous blob inventory for opened repositories and connected accounts, file-type and CID search, sorting, metadata inspector, explicit cancellable reference scans, and CIDv1 SHA-256 verified file previews and downloads routed through the durable transfer queue.
+- **Spaces:** full November 12 alpha Space workspace — list owned and shared Spaces, open a Space by `at://` URI, create and edit personal/member-list/public Space policies (`getSpace` / `updateSpace`), list writers (`listWriters`), add/remove/edit member read/write permissions (`memberspace`), browse/create/edit/delete records, download/QuickLook Space blobs, and verify writer STAR archives.
+- **Private App State (Read Only):** capability-gated inspection of Bluesky preferences (`app.bsky.actor.getPreferences`) with structured cards, raw JSON toggle, and graceful unsupported-server reporting without public fallback.
+- **Verified Local Backups (`.atprotodrivebackup`):** atomic creation and SHA-256 + CAR/STAR integrity verification for public repositories (anonymous `com.atproto.sync.getRepo`) and permissioned Space repositories (`com.atproto.space.getRepo` / Space credentials), offline collection/record browsing, Reveal in Finder, export copy, and move-to-Trash.
+- **Durable Activity / Transfers:** app-scoped persistent transfer queue with relaunch normalization of in-flight jobs to `interrupted`, live progress, filter pills, cancel/retry, Reveal in Finder, and exact-account transfer parking fence on account removal.
+- **Server & Account Diagnostics:** exact-DID verification, PDS and Space service checks, OAuth mode and scope summary, and deliberately limited local controls (**Reconnect Account** and **Remove from ATProtoDrive** only).
+- **Browser navigation:** per-window Records / Public Files destinations, back/forward history, and qualified selection.
 
-File previews/downloads for public repositories, verified backup packages, and durable transfer jobs remain planned work. See the [v1 plan index](docs/superpowers/plans/2026-08-23-atprotodrive-v1.md) and [Public Files continuation](docs/superpowers/plans/2026-09-19-public-files-continuation.md).
+See the [v1 plan index](docs/superpowers/plans/2026-08-23-atprotodrive-v1.md) and [Public Files continuation](docs/superpowers/plans/2026-09-19-public-files-continuation.md) for the architecture and protocol invariants.
 
 ## Prerequisites
 

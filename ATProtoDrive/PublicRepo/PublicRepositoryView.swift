@@ -178,9 +178,11 @@ public struct BrowserBreadcrumbView: View {
 
 public struct PublicRepositoryHeaderView: View {
     public let repository: ResolvedRepository
+    public var onNewRecord: (() -> Void)?
 
-    public init(repository: ResolvedRepository) {
+    public init(repository: ResolvedRepository, onNewRecord: (() -> Void)? = nil) {
         self.repository = repository
+        self.onNewRecord = onNewRecord
     }
 
     public var body: some View {
@@ -198,6 +200,16 @@ public struct PublicRepositoryHeaderView: View {
                         .textSelection(.enabled)
                 }
                 Spacer()
+                if let onNewRecord {
+                    Button {
+                        onNewRecord()
+                    } label: {
+                        Label("New Record", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .help("Create a new record in this public repository")
+                }
                 Text("PDS: \(repository.pdsURL.host() ?? repository.pdsURL.absoluteString)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -230,22 +242,58 @@ public struct PublicRepositoryHeaderView: View {
 }
 
 public struct PublicRepositoryView: View {
+    private struct CreateRecordContext: Identifiable {
+        let id = UUID()
+        let repository: ResolvedRepository
+        let defaultCollection: String?
+    }
+
     @Bindable var session: BrowserSession
     let store: PublicRepositoryStore
+    let owningAccount: AccountStore.Account?
+    let mutationService: PublicRecordMutationService
+    @State private var createSheetContext: CreateRecordContext?
 
-    public init(session: BrowserSession, store: PublicRepositoryStore) {
+    public init(
+        session: BrowserSession,
+        store: PublicRepositoryStore,
+        owningAccount: AccountStore.Account? = nil,
+        mutationService: PublicRecordMutationService = PublicRecordMutationService()
+    ) {
         self.session = session
         self.store = store
+        self.owningAccount = owningAccount
+        self.mutationService = mutationService
+    }
+
+    private func writableAccount(for repository: ResolvedRepository) -> AccountStore.Account? {
+        guard let owningAccount,
+              PublicRecordPresentation.isWriteEnabled(
+                  repository: repository,
+                  owningAccount: owningAccount
+              ) else {
+            return nil
+        }
+        return owningAccount
     }
 
     public var body: some View {
         BrowserTableShell(state: store.state, retry: {
             Task { await store.refresh() }
         }) { description in
+            let canWrite = writableAccount(for: description.repository) != nil
             VStack(spacing: 0) {
                 BrowserBreadcrumbView(session: session, repository: description.repository)
 
-                PublicRepositoryHeaderView(repository: description.repository)
+                PublicRepositoryHeaderView(
+                    repository: description.repository,
+                    onNewRecord: canWrite ? {
+                        createSheetContext = CreateRecordContext(
+                            repository: description.repository,
+                            defaultCollection: nil
+                        )
+                    } : nil
+                )
 
                 let rows = PublicRepositoryPresentation.collections(description)
                 Table(rows, selection: Binding(
@@ -297,6 +345,14 @@ public struct PublicRepositoryView: View {
                                 )
                             }
                         }
+                        if canWrite {
+                            Button("New Record in \(row.title)…") {
+                                createSheetContext = CreateRecordContext(
+                                    repository: description.repository,
+                                    defaultCollection: row.nsid
+                                )
+                            }
+                        }
                         Button("Copy NSID") {
                             #if os(macOS)
                             NSPasteboard.general.clearContents()
@@ -316,6 +372,25 @@ public struct PublicRepositoryView: View {
                         }
                     }
                 }
+            }
+        }
+        .sheet(item: $createSheetContext) { context in
+            if let account = writableAccount(for: context.repository) {
+                PublicRecordEditorSheet(
+                    repository: context.repository,
+                    account: account,
+                    mode: .create(defaultCollection: context.defaultCollection),
+                    mutationService: mutationService,
+                    onSaved: {
+                        Task {
+                            await store.refresh()
+                            if let col = context.defaultCollection,
+                               let recordStore = store.recordStore(for: col) {
+                                await recordStore.refresh()
+                            }
+                        }
+                    }
+                )
             }
         }
     }

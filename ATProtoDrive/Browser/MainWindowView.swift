@@ -53,6 +53,7 @@ public struct MainWindowView: View {
                         }
                     }
                 }
+                .id(blob.locator)
             } else {
                 BrowserInspectorView(
                     references: Array(session.selectedReferences.values),

@@ -83,6 +83,29 @@
 		44E8CCA03036E0A0BFB98730 /* BlobInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118B45487EC4F0D53E0F52C9 /* BlobInspectorView.swift */; };
 		3928F4B5520CB129204D2847 /* BlobTableProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF240E089BCBD466CB86CEE0 /* BlobTableProjection.swift */; };
 		0380A2C67E18EEC7AA7F9EA9 /* PublicFilesNavigationRaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A286521D48C1E45C4BED8907 /* PublicFilesNavigationRaceTests.swift */; };
+		D10000000000000000000051 /* AccountOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000011 /* AccountOverviewView.swift */; };
+		D10000000000000000000052 /* AccountStatusModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000012 /* AccountStatusModel.swift */; };
+		D10000000000000000000053 /* ServerAndAccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000013 /* ServerAndAccountView.swift */; };
+		D10000000000000000000054 /* BackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000014 /* BackupService.swift */; };
+		D10000000000000000000055 /* BackupStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000015 /* BackupStore.swift */; };
+		D10000000000000000000056 /* BackupTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000016 /* BackupTypes.swift */; };
+		D10000000000000000000057 /* BackupsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000017 /* BackupsView.swift */; };
+		D10000000000000000000058 /* LocalBackupBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000018 /* LocalBackupBrowserView.swift */; };
+		D10000000000000000000059 /* BlobPayloadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000019 /* BlobPayloadService.swift */; };
+		D1000000000000000000005A /* PrivateAppStateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000001A /* PrivateAppStateService.swift */; };
+		D1000000000000000000005B /* PrivateAppStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000001B /* PrivateAppStateView.swift */; };
+		D1000000000000000000005C /* PublicRecordEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000001C /* PublicRecordEditorSheet.swift */; };
+		D1000000000000000000005D /* PublicRecordMutationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000001D /* PublicRecordMutationService.swift */; };
+		D1000000000000000000005E /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000001E /* ActivityView.swift */; };
+		D1000000000000000000005F /* TransferQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000000000000000000001F /* TransferQueue.swift */; };
+		D10000000000000000000060 /* TransferStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000020 /* TransferStore.swift */; };
+		D10000000000000000000061 /* TransferTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000021 /* TransferTypes.swift */; };
+		D10000000000000000000062 /* SpacePolicyEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000022 /* SpacePolicyEditorSheet.swift */; };
+		D10000000000000000000063 /* AccountStatusAndPrivateStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000023 /* AccountStatusAndPrivateStateTests.swift */; };
+		D10000000000000000000064 /* BackupServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000024 /* BackupServiceTests.swift */; };
+		D10000000000000000000065 /* BlobPayloadServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000025 /* BlobPayloadServiceTests.swift */; };
+		D10000000000000000000066 /* PublicCrudAndSpacePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000026 /* PublicCrudAndSpacePolicyTests.swift */; };
+		D10000000000000000000067 /* TransferQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000000000000000000027 /* TransferQueueTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -174,6 +197,29 @@
 		118B45487EC4F0D53E0F52C9 /* BlobInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobInspectorView.swift; sourceTree = "<group>"; };
 		EF240E089BCBD466CB86CEE0 /* BlobTableProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobTableProjection.swift; sourceTree = "<group>"; };
 		A286521D48C1E45C4BED8907 /* PublicFilesNavigationRaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicFilesNavigationRaceTests.swift; sourceTree = "<group>"; };
+		D10000000000000000000011 /* AccountOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountOverviewView.swift; sourceTree = "<group>"; };
+		D10000000000000000000012 /* AccountStatusModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStatusModel.swift; sourceTree = "<group>"; };
+		D10000000000000000000013 /* ServerAndAccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerAndAccountView.swift; sourceTree = "<group>"; };
+		D10000000000000000000014 /* BackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupService.swift; sourceTree = "<group>"; };
+		D10000000000000000000015 /* BackupStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupStore.swift; sourceTree = "<group>"; };
+		D10000000000000000000016 /* BackupTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupTypes.swift; sourceTree = "<group>"; };
+		D10000000000000000000017 /* BackupsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupsView.swift; sourceTree = "<group>"; };
+		D10000000000000000000018 /* LocalBackupBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalBackupBrowserView.swift; sourceTree = "<group>"; };
+		D10000000000000000000019 /* BlobPayloadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobPayloadService.swift; sourceTree = "<group>"; };
+		D1000000000000000000001A /* PrivateAppStateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateAppStateService.swift; sourceTree = "<group>"; };
+		D1000000000000000000001B /* PrivateAppStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateAppStateView.swift; sourceTree = "<group>"; };
+		D1000000000000000000001C /* PublicRecordEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicRecordEditorSheet.swift; sourceTree = "<group>"; };
+		D1000000000000000000001D /* PublicRecordMutationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicRecordMutationService.swift; sourceTree = "<group>"; };
+		D1000000000000000000001E /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
+		D1000000000000000000001F /* TransferQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferQueue.swift; sourceTree = "<group>"; };
+		D10000000000000000000020 /* TransferStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferStore.swift; sourceTree = "<group>"; };
+		D10000000000000000000021 /* TransferTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferTypes.swift; sourceTree = "<group>"; };
+		D10000000000000000000022 /* SpacePolicyEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpacePolicyEditorSheet.swift; sourceTree = "<group>"; };
+		D10000000000000000000023 /* AccountStatusAndPrivateStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountStatusAndPrivateStateTests.swift; sourceTree = "<group>"; };
+		D10000000000000000000024 /* BackupServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupServiceTests.swift; sourceTree = "<group>"; };
+		D10000000000000000000025 /* BlobPayloadServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobPayloadServiceTests.swift; sourceTree = "<group>"; };
+		D10000000000000000000026 /* PublicCrudAndSpacePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicCrudAndSpacePolicyTests.swift; sourceTree = "<group>"; };
+		D10000000000000000000027 /* TransferQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferQueueTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -210,6 +256,10 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000006 /* Accounts */,
+				D10000000000000000000001 /* AccountViews */,
+				D10000000000000000000002 /* Backups */,
+				D10000000000000000000003 /* PrivateState */,
+				D10000000000000000000004 /* Transfers */,
 				A10000000000000000000008 /* Spaces */,
 				A10000000000000000000009 /* Records */,
 				A100000000000000000000A8 /* Write */,
@@ -288,6 +338,11 @@
 				B10000000000000000000059 /* PublicBrowserFixtureTests.swift */,
 				C10000000000000000000014 /* BlobFixtureSupport.swift */,
 				C10000000000000000000015 /* BlobReferenceIndexTests.swift */,
+				D10000000000000000000023 /* AccountStatusAndPrivateStateTests.swift */,
+				D10000000000000000000024 /* BackupServiceTests.swift */,
+				D10000000000000000000025 /* BlobPayloadServiceTests.swift */,
+				D10000000000000000000026 /* PublicCrudAndSpacePolicyTests.swift */,
+				D10000000000000000000027 /* TransferQueueTests.swift */,
 			);
 			path = ATProtoDriveTests;
 			sourceTree = "<group>";
@@ -299,6 +354,7 @@
 				A100000000000000000000A1 /* MemberEditor.swift */,
 				A100000000000000000000A2 /* RecordEditorSheet.swift */,
 				A100000000000000000000C0 /* OpenSpaceSheet.swift */,
+				D10000000000000000000022 /* SpacePolicyEditorSheet.swift */,
 			);
 			path = Write;
 			sourceTree = "<group>";
@@ -364,6 +420,8 @@
 				B10000000000000000000035 /* PublicRecordStore.swift */,
 				B10000000000000000000036 /* PublicRepositoryView.swift */,
 				B10000000000000000000037 /* PublicRecordTable.swift */,
+				D1000000000000000000001C /* PublicRecordEditorSheet.swift */,
+				D1000000000000000000001D /* PublicRecordMutationService.swift */,
 			);
 			path = PublicRepo;
 			sourceTree = "<group>";
@@ -388,8 +446,51 @@
 				C10000000000000000000011 /* BlobTypes.swift */,
 				C10000000000000000000012 /* BlobReferenceScanner.swift */,
 				C10000000000000000000013 /* BlobReferenceIndex.swift */,
+				D10000000000000000000019 /* BlobPayloadService.swift */,
 			);
 			path = Blobs;
+			sourceTree = "<group>";
+		};
+		D10000000000000000000001 /* AccountViews */ = {
+			isa = PBXGroup;
+			children = (
+				D10000000000000000000011 /* AccountOverviewView.swift */,
+				D10000000000000000000012 /* AccountStatusModel.swift */,
+				D10000000000000000000013 /* ServerAndAccountView.swift */,
+			);
+			path = AccountViews;
+			sourceTree = "<group>";
+		};
+		D10000000000000000000002 /* Backups */ = {
+			isa = PBXGroup;
+			children = (
+				D10000000000000000000014 /* BackupService.swift */,
+				D10000000000000000000015 /* BackupStore.swift */,
+				D10000000000000000000016 /* BackupTypes.swift */,
+				D10000000000000000000017 /* BackupsView.swift */,
+				D10000000000000000000018 /* LocalBackupBrowserView.swift */,
+			);
+			path = Backups;
+			sourceTree = "<group>";
+		};
+		D10000000000000000000003 /* PrivateState */ = {
+			isa = PBXGroup;
+			children = (
+				D1000000000000000000001A /* PrivateAppStateService.swift */,
+				D1000000000000000000001B /* PrivateAppStateView.swift */,
+			);
+			path = PrivateState;
+			sourceTree = "<group>";
+		};
+		D10000000000000000000004 /* Transfers */ = {
+			isa = PBXGroup;
+			children = (
+				D1000000000000000000001E /* ActivityView.swift */,
+				D1000000000000000000001F /* TransferQueue.swift */,
+				D10000000000000000000020 /* TransferStore.swift */,
+				D10000000000000000000021 /* TransferTypes.swift */,
+			);
+			path = Transfers;
 			sourceTree = "<group>";
 		};
 		A10000000000000000000004 /* Frameworks */ = {
@@ -560,6 +661,24 @@
 				C10000000000000000000021 /* BlobTypes.swift in Sources */,
 				C10000000000000000000022 /* BlobReferenceScanner.swift in Sources */,
 				C10000000000000000000023 /* BlobReferenceIndex.swift in Sources */,
+				D10000000000000000000051 /* AccountOverviewView.swift in Sources */,
+				D10000000000000000000052 /* AccountStatusModel.swift in Sources */,
+				D10000000000000000000053 /* ServerAndAccountView.swift in Sources */,
+				D10000000000000000000054 /* BackupService.swift in Sources */,
+				D10000000000000000000055 /* BackupStore.swift in Sources */,
+				D10000000000000000000056 /* BackupTypes.swift in Sources */,
+				D10000000000000000000057 /* BackupsView.swift in Sources */,
+				D10000000000000000000058 /* LocalBackupBrowserView.swift in Sources */,
+				D10000000000000000000059 /* BlobPayloadService.swift in Sources */,
+				D1000000000000000000005A /* PrivateAppStateService.swift in Sources */,
+				D1000000000000000000005B /* PrivateAppStateView.swift in Sources */,
+				D1000000000000000000005C /* PublicRecordEditorSheet.swift in Sources */,
+				D1000000000000000000005D /* PublicRecordMutationService.swift in Sources */,
+				D1000000000000000000005E /* ActivityView.swift in Sources */,
+				D1000000000000000000005F /* TransferQueue.swift in Sources */,
+				D10000000000000000000060 /* TransferStore.swift in Sources */,
+				D10000000000000000000061 /* TransferTypes.swift in Sources */,
+				D10000000000000000000062 /* SpacePolicyEditorSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -593,6 +712,11 @@
 				B10000000000000000000069 /* PublicBrowserFixtureTests.swift in Sources */,
 				C10000000000000000000024 /* BlobFixtureSupport.swift in Sources */,
 				C10000000000000000000025 /* BlobReferenceIndexTests.swift in Sources */,
+				D10000000000000000000063 /* AccountStatusAndPrivateStateTests.swift in Sources */,
+				D10000000000000000000064 /* BackupServiceTests.swift in Sources */,
+				D10000000000000000000065 /* BlobPayloadServiceTests.swift in Sources */,
+				D10000000000000000000066 /* PublicCrudAndSpacePolicyTests.swift in Sources */,
+				D10000000000000000000067 /* TransferQueueTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

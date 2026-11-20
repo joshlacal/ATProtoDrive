@@ -4,15 +4,33 @@ import SwiftUI
 public struct BlobBrowserView: View {
     @Bindable var store: BlobInventoryStore
     @Bindable var session: BrowserSession
+    private let payloadService: BlobPayloadService
+    @Environment(TransferQueue.self) private var transferQueue: TransferQueue?
+
     @FocusState private var isSearchFocused: Bool
     @State private var searchInput = ""
     @State private var sortOrder: [KeyPathComparator<BlobTableItem>] = [
         KeyPathComparator(\.suggestedFilename, order: .forward)
     ]
+    @State private var actionError: String?
+    @State private var activeActionCID: String?
 
-    public init(store: BlobInventoryStore, session: BrowserSession) {
+    public init(
+        store: BlobInventoryStore,
+        session: BrowserSession,
+        payloadService: BlobPayloadService = BlobPayloadService()
+    ) {
         self.store = store
         self.session = session
+        self.payloadService = payloadService
+    }
+
+    private var selectedSingleBlob: BlobDescriptor? {
+        guard session.selectedReferences.count == 1,
+              case .blob(let locator) = session.primarySelection else {
+            return nil
+        }
+        return store.blob(for: locator)
     }
 
     public var body: some View {
@@ -128,6 +146,21 @@ public struct BlobBrowserView: View {
         }
         .contextMenu(forSelectionType: BlobTableItem.ID.self) { selection in
             if let id = selection.first, let item = rows.first(where: { $0.id == id }) {
+                let isPublic = isPublicBlob(item.blob)
+                let isDownloadOnly = BlobPayloadService.isActiveDownloadOnlyFormat(mimeType: item.blob.mimeType)
+
+                Button("Preview") {
+                    previewBlob(item.blob)
+                }
+                .disabled(!isPublic || isDownloadOnly)
+
+                Button("Download…") {
+                    downloadBlob(item.blob)
+                }
+                .disabled(!isPublic)
+
+                Divider()
+
                 Button("Copy CID") { copyCID(item.cid) }
                 Button("Inspect") {
                     session.replaceSelection(with: [item.reference])
@@ -145,6 +178,11 @@ public struct BlobBrowserView: View {
     @ViewBuilder
     private var footer: some View {
         VStack(spacing: 0) {
+            if let actionError {
+                InlineErrorBanner(message: actionError, actionTitle: "Dismiss") {
+                    self.actionError = nil
+                }
+            }
             if let failure = store.appendFailure {
                 InlineErrorBanner(message: failure.localizedDescription, actionTitle: "Retry Page") {
                     Task { await store.retryPage() }
@@ -159,12 +197,51 @@ public struct BlobBrowserView: View {
                 pagingControls
                 Divider().frame(height: 18)
                 referenceControls
+                if let selected = selectedSingleBlob {
+                    Divider().frame(height: 18)
+                    selectionActionControls(for: selected)
+                }
                 Spacer()
                 completionSummary
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(.bar)
+        }
+    }
+
+    @ViewBuilder
+    private func selectionActionControls(for blob: BlobDescriptor) -> some View {
+        let isPublic = isPublicBlob(blob)
+        let isBusy = activeActionCID == blob.locator.cid
+        let isDownloadOnly = BlobPayloadService.isActiveDownloadOnlyFormat(mimeType: blob.mimeType)
+
+        HStack(spacing: 6) {
+            Button {
+                previewBlob(blob)
+            } label: {
+                Label(isBusy ? "Verifying…" : "Preview", systemImage: "eye")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!isPublic || isBusy || isDownloadOnly)
+
+            Button {
+                downloadBlob(blob)
+            } label: {
+                Label("Download…", systemImage: "arrow.down.circle")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!isPublic || isBusy)
+
+            Button {
+                copyCID(blob.locator.cid)
+            } label: {
+                Label("Copy CID", systemImage: "doc.on.doc")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
     }
 
@@ -217,6 +294,114 @@ public struct BlobBrowserView: View {
             return "Inventory and reference scan complete"
         }
         return "Metadata only · file bytes not fetched"
+    }
+
+    private func isPublicBlob(_ blob: BlobDescriptor) -> Bool {
+        if case .publicRepository = blob.locator.scope {
+            return true
+        }
+        return false
+    }
+
+    private func previewBlob(_ blob: BlobDescriptor) {
+        guard isPublicBlob(blob) else { return }
+        let locator = blob.locator
+        let mimeType = blob.mimeType
+        let suggestedFilename = blob.suggestedFilename
+        let service = payloadService
+        let queue = transferQueue
+
+        actionError = nil
+        activeActionCID = locator.cid
+
+        Task {
+            defer {
+                if activeActionCID == locator.cid {
+                    activeActionCID = nil
+                }
+            }
+            if let queue {
+                let jobID = queue.enqueueAndRun(
+                    kind: .blobPreview,
+                    title: suggestedFilename,
+                    subtitle: locator.cid,
+                    requiredAccountDIDs: []
+                ) { report in
+                    let result = try await service.materializePreview(
+                        for: locator,
+                        mimeType: mimeType
+                    ) { state, done, total in
+                        report(state, done, total)
+                    }
+                    return result.fileURL
+                }
+                await queue.waitForJob(id: jobID)
+                if let job = queue.job(id: jobID) {
+                    if job.state == .completed, let url = job.destinationURL {
+                        NSWorkspace.shared.open(url)
+                    } else if job.state == .failed {
+                        actionError = job.errorMessage ?? "Preview failed."
+                    }
+                }
+            } else {
+                do {
+                    let result = try await service.materializePreview(
+                        for: locator,
+                        mimeType: mimeType
+                    )
+                    NSWorkspace.shared.open(result.fileURL)
+                } catch {
+                    actionError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func downloadBlob(_ blob: BlobDescriptor) {
+        guard isPublicBlob(blob) else { return }
+        let locator = blob.locator
+        let suggestedFilename = blob.suggestedFilename
+        let mimeType = blob.mimeType
+        let service = payloadService
+        let queue = transferQueue
+
+        actionError = nil
+
+        Task {
+            guard let destinationURL = await BlobSavePanelHelper.presentSavePanel(
+                suggestedFilename: suggestedFilename,
+                mimeType: mimeType
+            ) else {
+                return
+            }
+
+            if let queue {
+                queue.enqueueAndRun(
+                    kind: .blobDownload,
+                    title: suggestedFilename,
+                    subtitle: locator.cid,
+                    requiredAccountDIDs: [],
+                    destinationPath: destinationURL.path
+                ) { report in
+                    let result = try await service.downloadBlob(locator, to: destinationURL) { state, done, total in
+                        report(state, done, total)
+                    }
+                    return result.destinationURL
+                }
+            } else {
+                activeActionCID = locator.cid
+                defer {
+                    if activeActionCID == locator.cid {
+                        activeActionCID = nil
+                    }
+                }
+                do {
+                    _ = try await service.downloadBlob(locator, to: destinationURL)
+                } catch {
+                    actionError = error.localizedDescription
+                }
+            }
+        }
     }
 
     private func selectionBinding(items: [BlobTableItem]) -> Binding<Set<BlobTableItem.ID>> {

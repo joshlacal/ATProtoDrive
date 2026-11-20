@@ -47,3 +47,13 @@ Chose: replace the read-only `LegacySpacesCompatibilityView` route in `ContentBr
 Rejected: leaving the Spaces tab on the dead four-line read-only disclosure stub until the full multi-plan mutation/backup-gate coordinator from Plan 2 is written from scratch, because all November 12 Space CRUD/read/STAR-verification views were already implemented and unit-tested in the repo but unreachable from `ContentBrowserView`.
 
 Reversible until: merge of `agy/atprotodrive-spaces-20261120` or replacement by the full Plan 2 Space coordinator. Override by: reverting the `ContentBrowserView` route back to `LegacySpacesCompatibilityView` or replacing `SpacesBrowserView` when Plan 2 lands.
+
+## 2026-11-20 · ATProtoDrive · Complete v1 account destinations, owner public CRUD, Space policy editing, CID-verified files, verified backups, and durable transfers
+
+Chose: wire all remaining `AccountDestination` routes (`overview`, `privateAppState`, `backups`, `activity`, `serverAndAccount`) in `ContentBrowserView`, inject app-scoped `TransferQueue` and `BackupStore` from `ATProtoDriveApp` (using in-memory/ephemeral temp isolation in fixture and XCTest runs), gate owner-only public record CRUD with CAS (`swapRecord`) strictly to connected-account public routes while keeping opened public repositories read-only, add `updateSpace` policy editing and per-member permission editing in `SpaceDetailView`, add CIDv1 SHA-256 verified anonymous blob previews/downloads, and enforce the Transfer Parking Fence in `AccountStore.removeAccountSafely(did:parkTransfers:)` before Space credential invalidation and OAuth logout (provisional).
+
+Because: all eight sidebar destinations are now live with zero placeholder screens, public/Space/private boundaries remain strictly isolated across transport and storage, `.atprotodrivebackup` packages verify CARv1/STAR integrity directly via existing linked `Petrel` APIs without adding new package product dependencies, and `ServerAndAccountView` restricts account actions strictly to local reconnect and local removal.
+
+Rejected: adding a new `SwanPublicRepository` package product link (absent from `../Swan/Package.swift`), allowing write controls on `.openedPublicRepository` routes even when the DID matches a connected account, or exposing remote account-management mutations (migration, email/handle/password changes, deactivation, or remote deletion).
+
+Reversible until: merge of `agy/atprotodrive-spaces-20261120`. Override by: adjusting destination routing in `ContentBrowserView.swift` or individual subsystem modules before merge.

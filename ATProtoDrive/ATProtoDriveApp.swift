@@ -106,14 +106,19 @@ private struct BrowserSceneRoot: View {
 @main
 struct ATProtoDriveApp: App {
     @State private var accountStore = AccountStore()
+    @State private var transferQueue: TransferQueue
+    @State private var backupStore: BackupStore
     private let publicRepositoryService: any PublicRepositoryServing
     private let publicBlobService: any PublicBlobServing
     private let recentRepositoryStore: RecentRepositoryStore
     private let isFixtureMode: Bool
 
     init() {
+        let env = ProcessInfo.processInfo.environment
+        let isTesting = env["XCTestConfigurationFilePath"] != nil || env["XCTestSessionIdentifier"] != nil
+
         #if DEBUG
-        let fixtureMode = ProcessInfo.processInfo.environment["ATPROTODRIVE_FIXTURE_MODE"] == "public-browser"
+        let fixtureMode = env["ATPROTODRIVE_FIXTURE_MODE"] == "public-browser"
         self.isFixtureMode = fixtureMode
         if fixtureMode {
             self.publicRepositoryService = FixturePublicRepositoryService()
@@ -135,6 +140,7 @@ struct ATProtoDriveApp: App {
             }
         }
         #else
+        let fixtureMode = false
         self.isFixtureMode = false
         self.publicRepositoryService = PublicRepositoryService()
         self.publicBlobService = PublicBlobService()
@@ -148,6 +154,16 @@ struct ATProtoDriveApp: App {
             )
         }
         #endif
+
+        if fixtureMode || isTesting {
+            _transferQueue = State(initialValue: TransferQueue.inMemory())
+            let ephemeralBackupsDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ATProtoDrive-EphemeralBackups-\(UUID().uuidString)", isDirectory: true)
+            _backupStore = State(initialValue: BackupStore(rootDirectory: ephemeralBackupsDir))
+        } else {
+            _transferQueue = State(initialValue: TransferQueue())
+            _backupStore = State(initialValue: BackupStore())
+        }
     }
 
     var body: some Scene {
@@ -159,11 +175,14 @@ struct ATProtoDriveApp: App {
                 isFixtureMode: isFixtureMode
             )
             .environment(accountStore)
+            .environment(transferQueue)
+            .environment(backupStore)
             .task {
                 let env = ProcessInfo.processInfo.environment
                 let isTesting = env["XCTestConfigurationFilePath"] != nil || env["XCTestSessionIdentifier"] != nil
                 if !isFixtureMode && !isTesting {
                     await accountStore.restore()
+                    backupStore.reload()
                 }
                 await recentRepositoryStore.restore()
             }

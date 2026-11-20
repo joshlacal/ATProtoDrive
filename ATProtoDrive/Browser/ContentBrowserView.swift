@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import Petrel
 import SwanSpaces
@@ -119,10 +120,29 @@ public struct ContentBrowserView: View {
     let publicRepositoryStore: PublicRepositoryStore
     let recentRepositoryStore: RecentRepositoryStore
     @Environment(AccountStore.self) private var accountStore
+    @Environment(TransferQueue.self) private var environmentTransferQueue: TransferQueue?
+    @Environment(BackupStore.self) private var environmentBackupStore: BackupStore?
+    @State private var fallbackTransferQueue = TransferQueue.inMemory()
+    @State private var fallbackBackupStore = BackupStore(
+        rootDirectory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("ATProtoDrive-PreviewBackups", isDirectory: true)
+    )
     @State private var showingAddAccountSheet = false
     @State private var showingOpenRepoSheet = false
     @State private var pendingOpenSpaceURI: String?
     @State private var spacesRefreshToken: Int = 0
+    @State private var overviewRefreshToken: Int = 0
+    @State private var privateStateRefreshToken: Int = 0
+    @State private var backupsRefreshToken: Int = 0
+    @State private var serverAccountRefreshToken: Int = 0
+
+    private var activeTransferQueue: TransferQueue {
+        environmentTransferQueue ?? fallbackTransferQueue
+    }
+
+    private var activeBackupStore: BackupStore {
+        environmentBackupStore ?? fallbackBackupStore
+    }
 
     public init(
         session: BrowserSession,
@@ -135,10 +155,34 @@ public struct ContentBrowserView: View {
     }
 
     private var currentRefreshAction: BrowserRefreshAction? {
-        if case .account(let did, .spaces) = session.selectedSource,
-           accountStore.account(for: did) != nil {
-            return BrowserRefreshAction {
-                spacesRefreshToken += 1
+        if case .account(let did, let destination) = session.selectedSource {
+            switch destination {
+            case .overview:
+                if accountStore.account(for: did) != nil {
+                    return BrowserRefreshAction { overviewRefreshToken += 1 }
+                }
+                return nil
+            case .spaces:
+                if accountStore.account(for: did) != nil {
+                    return BrowserRefreshAction { spacesRefreshToken += 1 }
+                }
+                return nil
+            case .privateAppState:
+                if accountStore.account(for: did) != nil {
+                    return BrowserRefreshAction { privateStateRefreshToken += 1 }
+                }
+                return nil
+            case .backups:
+                return BrowserRefreshAction { backupsRefreshToken += 1 }
+            case .serverAndAccount:
+                if accountStore.account(for: did) != nil {
+                    return BrowserRefreshAction { serverAccountRefreshToken += 1 }
+                }
+                return nil
+            case .activity:
+                return nil
+            case .publicRecords, .publicBlobs:
+                break
             }
         }
         if session.path?.repositoryDestination == .files, let store = publicRepositoryStore.blobStore() {
@@ -164,6 +208,14 @@ public struct ContentBrowserView: View {
                 switch selectedSource {
                 case .account(let did, let destination):
                     switch destination {
+                    case .overview:
+                        AccountOverviewView(
+                            accountDID: did,
+                            refreshToken: overviewRefreshToken,
+                            onNavigate: { dest in
+                                session.selectSource(.account(did: did, destination: dest))
+                            }
+                        )
                     case .spaces:
                         SpacesBrowserView(
                             accountDID: did,
@@ -173,19 +225,63 @@ public struct ContentBrowserView: View {
                     case .publicRecords, .publicBlobs:
                         repositoryContentView(
                             for: .connectedAccount(did: did),
-                            selectedSource: .account(did: did, destination: destination)
+                            selectedSource: .account(did: did, destination: destination),
+                            owningAccount: accountStore.account(for: did)
                         )
-                    default:
-                        ContentUnavailableView(
-                            destination.rawValue.capitalized,
-                            systemImage: "folder",
-                            description: Text("Destination \(destination.rawValue) is under development.")
+                    case .privateAppState:
+                        PrivateAppStateView(
+                            accountDID: did,
+                            refreshToken: privateStateRefreshToken
+                        )
+                    case .backups:
+                        BackupsView(
+                            accountDID: did,
+                            backupStore: activeBackupStore,
+                            onRegisterTransfer: { title, subtitle, accountDIDs, work in
+                                let queue = activeTransferQueue
+                                queue.enqueueAndRun(
+                                    kind: .backupExport,
+                                    title: title,
+                                    subtitle: subtitle,
+                                    requiredAccountDIDs: accountDIDs
+                                ) { report in
+                                    report(.running, 0, nil)
+                                    return try await work { completed, total in
+                                        report(.running, completed, total)
+                                    }
+                                }
+                            },
+                            refreshToken: backupsRefreshToken
+                        )
+                    case .activity:
+                        ActivityView(transferQueue: activeTransferQueue)
+                    case .serverAndAccount:
+                        ServerAndAccountView(
+                            accountDID: did,
+                            refreshToken: serverAccountRefreshToken,
+                            onReconnect: { targetDID in
+                                let authURL = try await accountStore.reconnectAccount(did: targetDID)
+                                #if os(macOS)
+                                NSWorkspace.shared.open(authURL)
+                                #endif
+                            },
+                            onRemoveAccount: { targetDID in
+                                let queue = activeTransferQueue
+                                await accountStore.removeAccountSafely(did: targetDID) { accountDIDs in
+                                    _ = await queue.markAccountsUnavailable(accountDIDs)
+                                }
+                                if case .account(let selectedDID, _) = session.selectedSource,
+                                   selectedDID == targetDID {
+                                    session.selectSource(nil)
+                                }
+                            }
                         )
                     }
                 case .openedPublicRepository(let did):
                     repositoryContentView(
                         for: .publicIdentifier(did),
-                        selectedSource: .openedPublicRepository(did: did)
+                        selectedSource: .openedPublicRepository(did: did),
+                        owningAccount: nil
                     )
                 case .global(let globalDestination):
                     switch globalDestination {
@@ -285,13 +381,14 @@ public struct ContentBrowserView: View {
     @ViewBuilder
     private func repositoryContentView(
         for target: RepositoryTarget,
-        selectedSource: BrowserSource
+        selectedSource: BrowserSource,
+        owningAccount: AccountStore.Account?
     ) -> some View {
         VStack(spacing: 0) {
             if let repository = publicRepositoryStore.state.snapshot?.repository {
                 repositoryDestinationPicker(repository: repository)
             }
-            repositoryDetail
+            repositoryDetail(owningAccount: owningAccount)
         }
         .task(id: selectedSource) {
             if publicRepositoryStore.state.snapshot == nil || session.path?.source != selectedSource {
@@ -316,7 +413,7 @@ public struct ContentBrowserView: View {
     }
 
     @ViewBuilder
-    private var repositoryDetail: some View {
+    private func repositoryDetail(owningAccount: AccountStore.Account?) -> some View {
         Group {
             if session.path?.repositoryDestination == .files,
                let store = publicRepositoryStore.blobStore() {
@@ -340,7 +437,8 @@ public struct ContentBrowserView: View {
                             )
                             PublicRecordTable(
                                 store: recordStore,
-                                session: session
+                                session: session,
+                                owningAccount: owningAccount
                             )
                         }
                     }
@@ -357,7 +455,11 @@ public struct ContentBrowserView: View {
                     ProgressView("Loading collection…")
                 }
             } else {
-                PublicRepositoryView(session: session, store: publicRepositoryStore)
+                PublicRepositoryView(
+                    session: session,
+                    store: publicRepositoryStore,
+                    owningAccount: owningAccount
+                )
             }
         }
     }

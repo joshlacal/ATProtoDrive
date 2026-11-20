@@ -139,6 +139,88 @@ public enum CreateSpaceError: LocalizedError, Equatable, Sendable {
     }
 }
 
+public enum EditableSpacePolicy: Equatable, Hashable, Sendable {
+    case personal
+    case memberList(
+        publicRead: Bool,
+        publicWrite: Bool,
+        allowedApps: [String],
+        publishPolicy: Bool,
+        publishMembers: Bool
+    )
+
+    public init(from summary: SpacePolicySummary?) {
+        switch summary {
+        case .personal:
+            self = .personal
+        case let .memberList(publicRead, publicWrite, allowedApps, publishPolicy, publishMembers):
+            self = .memberList(
+                publicRead: publicRead,
+                publicWrite: publicWrite,
+                allowedApps: allowedApps,
+                publishPolicy: publishPolicy,
+                publishMembers: publishMembers
+            )
+        case .managed, .other, nil:
+            self = .memberList(
+                publicRead: false,
+                publicWrite: false,
+                allowedApps: [],
+                publishPolicy: false,
+                publishMembers: false
+            )
+        }
+    }
+
+    public var policySummary: SpacePolicySummary {
+        switch self {
+        case .personal:
+            return .personal
+        case let .memberList(publicRead, publicWrite, allowedApps, publishPolicy, publishMembers):
+            return .memberList(
+                publicRead: publicRead,
+                publicWrite: publicWrite,
+                allowedApps: allowedApps,
+                publishPolicy: publishPolicy,
+                publishMembers: publishMembers
+            )
+        }
+    }
+
+    /// Parses comma- and/or newline-separated OAuth client ID URIs, trimming whitespace,
+    /// discarding blank entries, and deduplicating while preserving order.
+    public static func parseAllowedApps(from rawText: String) -> [String] {
+        var seen = Set<String>()
+        var results: [String] = []
+        let separators = CharacterSet(charactersIn: ",\n\r")
+        for piece in rawText.components(separatedBy: separators) {
+            let trimmed = piece.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if seen.insert(trimmed).inserted {
+                results.append(trimmed)
+            }
+        }
+        return results
+    }
+}
+
+public enum SpaceAdminError: LocalizedError, Equatable, Sendable {
+    case notSpaceAuthority(accountDID: String, authorityDID: String)
+    case invalidAllowedAppURI(String)
+    case invalidMemberDID(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case let .notSpaceAuthority(accountDID, authorityDID):
+            return "Only the space authority (\(authorityDID)) can administer this Space (signed in as \(accountDID))."
+        case let .invalidAllowedAppURI(uri):
+            return "Invalid allowed app URI: \"\(uri)\". Enter a valid OAuth client ID URI."
+        case let .invalidMemberDID(did):
+            return "Invalid member DID: \"\(did)\"."
+        }
+    }
+}
+
 
 @MainActor
 @Observable
@@ -553,9 +635,10 @@ public final class SpaceDetailModel {
             guard shouldFetchPolicy else { return nil }
             let fetchPolicy: @Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetSpace.Output?) =
                 getSpaceTransport ?? {
-                    try await account.client.com.atproto.space.getSpace(
+                    let (responseCode, data) = try await account.client.com.atproto.space.getSpace(
                         input: ComAtprotoSpaceGetSpace.Parameters(space: space.ref)
                     )
+                    return (responseCode: responseCode, output: data)
                 }
             do {
                 let (code, output) = try await fetchPolicy()
@@ -705,6 +788,207 @@ public final class SpaceDetailModel {
             skey: recordKey,
             policy: policyUnion
         )
+    }
+
+    /// Pure helper to construct `ComAtprotoSpaceUpdateSpace.Input` for updating an owned space's policy.
+    nonisolated public static func makeUpdateSpaceInput(
+        space: SpaceItem,
+        policy: EditableSpacePolicy
+    ) throws -> ComAtprotoSpaceUpdateSpace.Input {
+        guard space.isOwnAuthority else {
+            throw SpaceAdminError.notSpaceAuthority(
+                accountDID: space.accountDID,
+                authorityDID: space.authorityDID
+            )
+        }
+
+        let policyUnion: ComAtprotoSpaceUpdateSpace.InputPolicyUnion
+        switch policy {
+        case .personal:
+            policyUnion = .comAtprotoPersonalspacePolicy(ComAtprotoPersonalspacePolicy())
+        case let .memberList(publicRead, publicWrite, allowedApps, publishPolicy, publishMembers):
+            var seen = Set<String>()
+            var validatedApps: [URI] = []
+            for rawApp in allowedApps {
+                let trimmed = rawApp.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { continue }
+                guard seen.insert(trimmed).inserted else { continue }
+                do {
+                    validatedApps.append(try URI(validating: trimmed))
+                } catch {
+                    throw SpaceAdminError.invalidAllowedAppURI(trimmed)
+                }
+            }
+            policyUnion = .comAtprotoMemberspacePolicy(
+                ComAtprotoMemberspacePolicy(
+                    publicRead: publicRead,
+                    publicWrite: publicWrite,
+                    allowedApps: validatedApps.isEmpty ? nil : validatedApps,
+                    publishPolicy: publishPolicy,
+                    publishMembers: publishMembers
+                )
+            )
+        }
+
+        return ComAtprotoSpaceUpdateSpace.Input(
+            space: space.ref,
+            policy: policyUnion
+        )
+    }
+
+    /// Pure helper to construct `ComAtprotoMemberspacePutMembers.Input` for updating a member's read/write permissions.
+    nonisolated public static func makeUpdateMemberPermissionsInput(
+        did: String,
+        read: Bool,
+        write: Bool,
+        space: SpaceItem
+    ) throws -> ComAtprotoMemberspacePutMembers.Input {
+        guard space.isOwnAuthority else {
+            throw SpaceAdminError.notSpaceAuthority(
+                accountDID: space.accountDID,
+                authorityDID: space.authorityDID
+            )
+        }
+        let trimmedDID = did.trimmingCharacters(in: .whitespacesAndNewlines)
+        let memberDID: DID
+        do {
+            memberDID = try DID(didString: trimmedDID)
+        } catch {
+            throw SpaceAdminError.invalidMemberDID(did)
+        }
+        let member = ComAtprotoMemberspaceDefs.Member(did: memberDID, read: read, write: write)
+        return ComAtprotoMemberspacePutMembers.Input(space: space.ref, members: [member])
+    }
+
+    /// Updates an owned space's policy via `com.atproto.space.updateSpace` and updates local state.
+    public func updateSpacePolicy(
+        space: SpaceItem,
+        policy: EditableSpacePolicy,
+        account: AccountStore.Account,
+        transport: (@Sendable (_ input: ComAtprotoSpaceUpdateSpace.Input) async throws -> Int)? = nil,
+        fetchRepos: (@Sendable () async throws -> [RepoEntry])? = nil,
+        listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoMemberspaceListMembers.Output?))? = nil,
+        getSpaceTransport: (@Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetSpace.Output?))? = nil
+    ) async throws {
+        guard space.isOwnAuthority, account.id == space.authorityDID else {
+            throw SpaceAdminError.notSpaceAuthority(
+                accountDID: account.id,
+                authorityDID: space.authorityDID
+            )
+        }
+
+        let input = try Self.makeUpdateSpaceInput(space: space, policy: policy)
+        let execute = transport ?? { input in
+            try await account.client.com.atproto.space.updateSpace(input: input)
+        }
+        let responseCode = try await execute(input)
+        guard (200...299).contains(responseCode) else {
+            throw ATProtoXRPCError(
+                error: "UpdateSpaceFailed",
+                message: "Failed with HTTP \(responseCode)",
+                statusCode: responseCode
+            )
+        }
+
+        let normalizedSummary = normalizedPolicySummary(from: policy)
+        self.policySummary = normalizedSummary
+        if case .personal = policy {
+            self.memberEntries = nil
+            self.members = nil
+        }
+
+        if transport == nil || fetchRepos != nil || listMembersTransport != nil || getSpaceTransport != nil {
+            await load(
+                space: space,
+                account: account,
+                fetchRepos: fetchRepos,
+                listMembersTransport: listMembersTransport,
+                getSpaceTransport: getSpaceTransport
+            )
+            if self.policySummary == nil {
+                self.policySummary = normalizedSummary
+            }
+        }
+    }
+
+    /// Updates a single member's read/write permissions via `com.atproto.memberspace.putMembers`
+    /// and updates `memberEntries`.
+    public func updateMemberPermissions(
+        did: String,
+        read: Bool,
+        write: Bool,
+        space: SpaceItem,
+        account: AccountStore.Account,
+        transport: (@Sendable (_ input: ComAtprotoMemberspacePutMembers.Input) async throws -> Int)? = nil,
+        fetchRepos: (@Sendable () async throws -> [RepoEntry])? = nil,
+        listMembersTransport: (@Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoMemberspaceListMembers.Output?))? = nil,
+        getSpaceTransport: (@Sendable () async throws -> (responseCode: Int, output: ComAtprotoSpaceGetSpace.Output?))? = nil
+    ) async throws {
+        guard space.isOwnAuthority, account.id == space.authorityDID else {
+            throw SpaceAdminError.notSpaceAuthority(
+                accountDID: account.id,
+                authorityDID: space.authorityDID
+            )
+        }
+
+        let input = try Self.makeUpdateMemberPermissionsInput(
+            did: did,
+            read: read,
+            write: write,
+            space: space
+        )
+        let execute = transport ?? { input in
+            try await account.client.com.atproto.memberspace.putMembers(input: input)
+        }
+        let responseCode = try await execute(input)
+        guard (200...299).contains(responseCode) else {
+            throw ATProtoXRPCError(
+                error: "UpdateMemberPermissionsFailed",
+                message: "Failed with HTTP \(responseCode)",
+                statusCode: responseCode
+            )
+        }
+
+        let normalizedDID = did.trimmingCharacters(in: .whitespacesAndNewlines)
+        let updatedEntry = SpaceMemberEntry(did: normalizedDID, read: read, write: write)
+        if var entries = self.memberEntries {
+            if let existingIndex = entries.firstIndex(where: { $0.did == normalizedDID }) {
+                entries[existingIndex] = updatedEntry
+            } else {
+                entries.append(updatedEntry)
+            }
+            self.memberEntries = entries
+            self.members = entries.map(\.did)
+        } else {
+            self.memberEntries = [updatedEntry]
+            self.members = [normalizedDID]
+        }
+
+        if transport == nil || fetchRepos != nil || listMembersTransport != nil || getSpaceTransport != nil {
+            await load(
+                space: space,
+                account: account,
+                fetchRepos: fetchRepos,
+                listMembersTransport: listMembersTransport,
+                getSpaceTransport: getSpaceTransport
+            )
+        }
+    }
+
+    private func normalizedPolicySummary(from policy: EditableSpacePolicy) -> SpacePolicySummary {
+        switch policy {
+        case .personal:
+            return .personal
+        case let .memberList(publicRead, publicWrite, allowedApps, publishPolicy, publishMembers):
+            let cleaned = EditableSpacePolicy.parseAllowedApps(from: allowedApps.joined(separator: "\n"))
+            return .memberList(
+                publicRead: publicRead,
+                publicWrite: publicWrite,
+                allowedApps: cleaned,
+                publishPolicy: publishPolicy,
+                publishMembers: publishMembers
+            )
+        }
     }
 
     /// Resolves an identifier (either a DID or a handle) to a validated `DID`.

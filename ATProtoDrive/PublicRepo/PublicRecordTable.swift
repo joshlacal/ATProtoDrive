@@ -183,6 +183,14 @@ public enum PublicRecordPresentation {
         }
         return result
     }
+
+    /// Returns `true` only when the signed-in account owns `repository` and may mutate its public records.
+    public static func isWriteEnabled(
+        repository: ResolvedRepository,
+        owningAccount: AccountStore.Account?
+    ) -> Bool {
+        PublicRecordMutationService.canMutate(repositoryDID: repository.did, with: owningAccount)
+    }
 }
 
 public extension Array where Element == PublicRecordItem {
@@ -243,15 +251,40 @@ public extension Array where Element == PublicRecordItem {
 public struct PublicRecordTable: View {
     let store: PublicRecordStore
     @Bindable var session: BrowserSession
+    let owningAccount: AccountStore.Account?
+    let mutationService: PublicRecordMutationService
     @FocusState private var isSearchFocused: Bool
     @State private var searchInput: String = ""
     @State private var sortOrder: [KeyPathComparator<PublicRecordItem>] = [
         KeyPathComparator(\.record.rkey, order: .forward)
     ]
+    @State private var editorMode: PublicRecordEditorSheet.Mode?
+    @State private var recordPendingDelete: RecordRow?
+    @State private var isDeletingRecord: Bool = false
+    @State private var deleteConflictMessage: String?
+    @State private var deleteErrorMessage: String?
 
-    public init(store: PublicRecordStore, session: BrowserSession) {
+    public init(
+        store: PublicRecordStore,
+        session: BrowserSession,
+        owningAccount: AccountStore.Account? = nil,
+        mutationService: PublicRecordMutationService = PublicRecordMutationService()
+    ) {
         self.store = store
         self.session = session
+        self.owningAccount = owningAccount
+        self.mutationService = mutationService
+    }
+
+    private var writableAccount: AccountStore.Account? {
+        guard let owningAccount,
+              PublicRecordPresentation.isWriteEnabled(
+                  repository: store.repository,
+                  owningAccount: owningAccount
+              ) else {
+            return nil
+        }
+        return owningAccount
     }
 
     private var surfaceState: PublicRecordSurfaceState {
@@ -262,8 +295,27 @@ public struct PublicRecordTable: View {
         )
     }
 
+    private var visibleItems: [PublicRecordItem] {
+        guard case .rows(let items) = surfaceState else { return [] }
+        return items
+    }
+
+    private var singleSelectedRecord: RecordRow? {
+        let items = visibleItems
+        let visibleIDs = Set(items.map(\.id))
+        let selectedVisible = session.selectedItemIDs.intersection(visibleIDs)
+        guard selectedVisible.count == 1, let onlyID = selectedVisible.first else {
+            return nil
+        }
+        return items.first(where: { $0.id == onlyID })?.record
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
+            if writableAccount != nil {
+                ownerActionBar
+                Divider()
+            }
             contentView
             footerView
         }
@@ -295,6 +347,146 @@ public struct PublicRecordTable: View {
         }
         .onChange(of: store.rows) { _, newRows in
             handleRowsRefresh(newRows)
+        }
+        .sheet(item: $editorMode) { mode in
+            if let account = writableAccount {
+                PublicRecordEditorSheet(
+                    repository: store.repository,
+                    account: account,
+                    mode: mode,
+                    mutationService: mutationService,
+                    onRefreshRequested: {
+                        await store.refresh()
+                    },
+                    onSaved: {
+                        Task { await store.refresh() }
+                    }
+                )
+            }
+        }
+        .confirmationDialog(
+            "Delete Public Record",
+            isPresented: Binding(
+                get: { recordPendingDelete != nil },
+                set: { if !$0 { recordPendingDelete = nil } }
+            ),
+            presenting: recordPendingDelete
+        ) { record in
+            Button("Delete Record", role: .destructive) {
+                if let account = writableAccount {
+                    Task {
+                        await performDelete(record: record, account: account)
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { record in
+            Text("Delete \(record.collection)/\(record.rkey)? This permanently removes the record from your public repository using compare-and-swap protection (CID: \(record.cid)).")
+        }
+        .alert(
+            "Delete Conflict Detected",
+            isPresented: Binding(
+                get: { deleteConflictMessage != nil },
+                set: { if !$0 { deleteConflictMessage = nil } }
+            )
+        ) {
+            Button("Refresh Collection") {
+                deleteConflictMessage = nil
+                Task { await store.refresh() }
+            }
+            Button("Close", role: .cancel) {
+                deleteConflictMessage = nil
+            }
+        } message: {
+            if let deleteConflictMessage {
+                Text(deleteConflictMessage)
+            }
+        }
+        .alert(
+            "Delete Failed",
+            isPresented: Binding(
+                get: { deleteErrorMessage != nil },
+                set: { if !$0 { deleteErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                deleteErrorMessage = nil
+            }
+        } message: {
+            if let deleteErrorMessage {
+                Text(deleteErrorMessage)
+            }
+        }
+    }
+
+    private var ownerActionBar: some View {
+        HStack(spacing: 8) {
+            Label("Owner · Public Repository", systemImage: "globe")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            if isDeletingRecord {
+                ProgressView()
+                    .controlSize(.small)
+            }
+
+            if let selected = singleSelectedRecord {
+                Button {
+                    editorMode = .edit(record: selected)
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isDeletingRecord)
+
+                Button(role: .destructive) {
+                    recordPendingDelete = selected
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isDeletingRecord)
+            }
+
+            Button {
+                editorMode = .create(defaultCollection: store.collection)
+            } label: {
+                Label("New Record", systemImage: "plus")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(isDeletingRecord)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.background.secondary)
+    }
+
+    private func performDelete(record: RecordRow, account: AccountStore.Account) async {
+        isDeletingRecord = true
+        defer { isDeletingRecord = false }
+
+        do {
+            _ = try await mutationService.deleteRecord(
+                targetRepoDID: store.repository.did,
+                collection: record.collection,
+                rkey: record.rkey,
+                expectedCID: record.cid,
+                account: account
+            )
+            await store.refresh()
+        } catch let mutationError as PublicRecordMutationError {
+            if case .conflictDetected(let message) = mutationError {
+                deleteConflictMessage = message
+            } else {
+                deleteErrorMessage = mutationError.localizedDescription
+            }
+        } catch {
+            deleteErrorMessage = error.localizedDescription
         }
     }
 
@@ -353,11 +545,20 @@ public struct PublicRecordTable: View {
     private var contentView: some View {
         switch surfaceState {
         case .emptyCollection:
-            ContentUnavailableView(
-                "No records in this collection",
-                systemImage: "doc.text",
-                description: Text("This collection does not contain any records.")
-            )
+            ContentUnavailableView {
+                Label("No records in this collection", systemImage: "doc.text")
+            } description: {
+                Text("This collection does not contain any records.")
+            } actions: {
+                if writableAccount != nil {
+                    Button {
+                        editorMode = .create(defaultCollection: store.collection)
+                    } label: {
+                        Label("New Record", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
         case .noMatches:
@@ -433,6 +634,48 @@ public struct PublicRecordTable: View {
                         }
                     }
                 }
+            }
+            .contextMenu(forSelectionType: PublicRecordItem.ID.self) { selection in
+                if selection.count == 1,
+                   let selectedID = selection.first,
+                   let item = sorted.first(where: { $0.id == selectedID }) {
+                    Button {
+                        RecordCopyAction.copyRecordURI(item.record)
+                    } label: {
+                        Label("Copy at:// URI", systemImage: "link")
+                    }
+                    Button {
+                        RecordCopyAction.copyRecordCID(item.record)
+                    } label: {
+                        Label("Copy CID", systemImage: "doc.on.doc")
+                    }
+                    Button {
+                        RecordCopyAction.copyRecordJSON(item.record)
+                    } label: {
+                        Label("Copy JSON", systemImage: "curlybraces")
+                    }
+                    if writableAccount != nil {
+                        Divider()
+                        Button {
+                            editorMode = .edit(record: item.record)
+                        } label: {
+                            Label("Edit Record…", systemImage: "pencil")
+                        }
+                        Button(role: .destructive) {
+                            recordPendingDelete = item.record
+                        } label: {
+                            Label("Delete Record…", systemImage: "trash")
+                        }
+                    }
+                }
+            } primaryAction: { selection in
+                guard writableAccount != nil,
+                      selection.count == 1,
+                      let selectedID = selection.first,
+                      let item = sorted.first(where: { $0.id == selectedID }) else {
+                    return
+                }
+                editorMode = .edit(record: item.record)
             }
         }
     }

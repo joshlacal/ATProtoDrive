@@ -148,6 +148,31 @@ public final class AccountStore {
     public func beginLogin(handle: String) async throws -> URL {
         let trimmedHandle = handle.trimmingCharacters(in: .whitespacesAndNewlines)
         let did = try await Self.resolveDID(for: trimmedHandle)
+        return try await beginLogin(
+            identifier: trimmedHandle,
+            expectedDID: did,
+            requestedHandle: trimmedHandle
+        )
+    }
+
+    /// Begin OAuth re-authentication for an existing connected account's exact DID
+    /// without disturbing any other connected accounts.
+    public func reconnectAccount(did: String) async throws -> URL {
+        guard let account = account(for: did) else {
+            throw AuthError.noActiveAccount
+        }
+        return try await beginLogin(
+            identifier: account.id,
+            expectedDID: account.id,
+            requestedHandle: account.handle
+        )
+    }
+
+    private func beginLogin(
+        identifier: String,
+        expectedDID did: String,
+        requestedHandle: String
+    ) async throws -> URL {
         let ns = Self.namespace(for: did)
 
         // Attempt 1: CAB OAuth flow
@@ -162,11 +187,11 @@ public final class AccountStore {
                 authMode: .cab(backendURL: Self.cabBackendURL)
             )
 
-            let (authURL, state) = try await cabClient.startOAuthFlowWithState(identifier: trimmedHandle)
+            let (authURL, state) = try await cabClient.startOAuthFlowWithState(identifier: identifier)
             pendingLogins[state] = PendingLogin(
                 client: cabClient,
                 did: did,
-                requestedHandle: trimmedHandle,
+                requestedHandle: requestedHandle,
                 authMode: .cab,
                 stateToken: state
             )
@@ -183,11 +208,11 @@ public final class AccountStore {
                 authMode: .publicOAuth
             )
 
-            let (authURL, state) = try await publicClient.startOAuthFlowWithState(identifier: trimmedHandle)
+            let (authURL, state) = try await publicClient.startOAuthFlowWithState(identifier: identifier)
             pendingLogins[state] = PendingLogin(
                 client: publicClient,
                 did: did,
-                requestedHandle: trimmedHandle,
+                requestedHandle: requestedHandle,
                 authMode: .publicOAuth,
                 stateToken: state
             )
@@ -300,8 +325,23 @@ public final class AccountStore {
         }
     }
 
+    /// Remove an account only after parking and cancellation-fencing every exact-account transfer.
+    public func removeAccountSafely(
+        did: String,
+        parkTransfers: @MainActor (Set<String>) async -> Void
+    ) async {
+        await parkTransfers(Set([did]))
+        await remove(did)
+    }
+
     public func remove(_ id: String) async {
+        pendingLogins = pendingLogins.filter { $0.value.did != id }
         if let account = accounts.first(where: { $0.id == id }) {
+            if let model = spaceModels[id] {
+                for space in model.spaces {
+                    await account.credentials.invalidate(space.ref)
+                }
+            }
             try? await account.client.logout()
         }
         accounts.removeAll { $0.id == id }
