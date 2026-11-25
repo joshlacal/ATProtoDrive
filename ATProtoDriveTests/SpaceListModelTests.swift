@@ -14,7 +14,7 @@ struct SpaceListModelTests {
     @Test("SpaceItem mapping correctly extracts components and flags own authority")
     func testSpaceItemOwnAuthorityMapping() throws {
         let ownDID = "did:plc:alice123"
-        let spaceURI = "at://did:plc:alice123/space/com.example.drive/main"
+        let spaceURI = "at:space/did:plc:alice123/com.example.drive/main"
         let ref = try SpaceRef(uriString: spaceURI)
 
         let item = SpaceItem(ref: ref, accountDID: ownDID)
@@ -31,7 +31,7 @@ struct SpaceListModelTests {
     @Test("SpaceItem mapping flags foreign authority when account DID does not match")
     func testSpaceItemForeignAuthorityMapping() throws {
         let userDID = "did:plc:bob456"
-        let spaceURI = "at://did:plc:alice123/space/com.example.drive/shared-folder"
+        let spaceURI = "at:space/did:plc:alice123/com.example.drive/shared-folder"
         let ref = try SpaceRef(uriString: spaceURI)
 
         let item = SpaceItem(ref: ref, accountDID: userDID)
@@ -48,7 +48,7 @@ struct SpaceListModelTests {
     @Test("SpaceItem convenience init from uriString")
     func testSpaceItemURIStringInit() throws {
         let ownDID = "did:plc:alice123"
-        let spaceURI = "at://did:plc:alice123/space/com.atproto.feed/custom"
+        let spaceURI = "at:space/did:plc:alice123/com.atproto.feed/custom"
 
         let item = try SpaceItem(uriString: spaceURI, accountDID: ownDID)
         #expect(item.accountDID == ownDID)
@@ -64,9 +64,9 @@ struct SpaceListModelTests {
 
     @Test("SpaceItem Hashable and Identifiable conformance")
     func testSpaceItemHashableAndIdentifiable() throws {
-        let ref1 = try SpaceRef(uriString: "at://did:plc:user1/space/app.bsky.feed/item1")
-        let ref2 = try SpaceRef(uriString: "at://did:plc:user1/space/app.bsky.feed/item1")
-        let ref3 = try SpaceRef(uriString: "at://did:plc:user1/space/app.bsky.feed/item2")
+        let ref1 = try SpaceRef(uriString: "at:space/did:plc:user1/app.bsky.feed/item1")
+        let ref2 = try SpaceRef(uriString: "at:space/did:plc:user1/app.bsky.feed/item1")
+        let ref3 = try SpaceRef(uriString: "at:space/did:plc:user1/app.bsky.feed/item2")
 
         let item1 = SpaceItem(ref: ref1, accountDID: "did:plc:user1")
         let item2 = SpaceItem(ref: ref2, accountDID: "did:plc:user1")
@@ -91,7 +91,7 @@ struct SpaceListModelTests {
     @Test("SpaceListModel initialized with custom items and error")
     func testSpaceListModelCustomInit() throws {
         let item = try SpaceItem(
-            uriString: "at://did:plc:custom1/space/com.example.space/self",
+            uriString: "at:space/did:plc:custom1/com.example.space/self",
             accountDID: "did:plc:custom1"
         )
         let modelWithSpaces = SpaceListModel(spaces: [item])
@@ -106,9 +106,9 @@ struct SpaceListModelTests {
 
     @Test("fetchAllSpaces accumulates across multiple pages using cursor")
     func testFetchAllSpacesPagination() async throws {
-        let ref1 = try SpaceRef(uriString: "at://did:plc:alice/space/com.example.type/space1")
-        let ref2 = try SpaceRef(uriString: "at://did:plc:alice/space/com.example.type/space2")
-        let ref3 = try SpaceRef(uriString: "at://did:plc:alice/space/com.example.type/space3")
+        let ref1 = try SpaceRef(uriString: "at:space/did:plc:alice/com.example.type/space1")
+        let ref2 = try SpaceRef(uriString: "at:space/did:plc:alice/com.example.type/space2")
+        let ref3 = try SpaceRef(uriString: "at:space/did:plc:alice/com.example.type/space3")
 
         let page1 = ComAtprotoSpaceListSpaces.Output(
             cursor: "cursor_page_2",
@@ -142,7 +142,7 @@ struct SpaceListModelTests {
 
     @Test("fetchAllSpaces protects against duplicate cursor cycle loops")
     func testFetchAllSpacesCycleProtection() async throws {
-        let ref = try SpaceRef(uriString: "at://did:plc:alice/space/com.example.type/space1")
+        let ref = try SpaceRef(uriString: "at:space/did:plc:alice/com.example.type/space1")
         let loopingPage = ComAtprotoSpaceListSpaces.Output(
             cursor: "loop_cursor",
             spaces: [ComAtprotoSpaceListSpaces.SpaceView(uri: ref)]
@@ -180,7 +180,7 @@ struct SpaceListModelTests {
         }
 
         let model = SpaceListModel()
-        let validURI = "at://did:plc:authority123/space/space.swan.drive/shared-s1"
+        let validURI = "at:space/did:plc:authority123/space.swan.drive/shared-s1"
         let tracker = OpenSpaceTestTracker()
 
         let item = try await model.openSpace(
@@ -201,6 +201,46 @@ struct SpaceListModelTests {
 
         let persisted = SpaceListModel.loadCustomSpaceURIs(for: accountDID)
         #expect(persisted.contains(validURI))
+    }
+
+    @MainActor
+    @Test("openSpace converts a pasted alpha-form space URI to the at:space/ form")
+    func testOpenSpaceConvertsAlphaFormURI() async throws {
+        let accountDID = "did:plc:bob_alpha_paste"
+        UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: accountDID))
+        defer {
+            UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: accountDID))
+        }
+
+        let model = SpaceListModel()
+        let item = try await model.openSpace(
+            uriString: "at://did:plc:authority123/space/space.swan.drive/shared-s1",
+            accountDID: accountDID
+        )
+
+        let expected = "at:space/did:plc:authority123/space.swan.drive/shared-s1"
+        #expect(item.ref.uriString() == expected)
+        #expect(SpaceListModel.loadCustomSpaceURIs(for: accountDID) == [expected])
+    }
+
+    @Test("custom space URIs saved in the alpha form are rewritten once on load")
+    func testLoadCustomSpaceURIsMigratesAlphaForm() {
+        let accountDID = "did:plc:dave_alpha_saved"
+        let key = SpaceListModel.customSpacesKey(for: accountDID)
+        UserDefaults.standard.set(
+            [
+                "at://did:plc:auth1/space/space.swan.drive/s1",
+                "at:space/did:plc:auth1/space.swan.drive/s1",
+                "at:space/did:plc:auth2/space.swan.drive/s2",
+            ],
+            forKey: key
+        )
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+
+        let expected = ["at:space/did:plc:auth1/space.swan.drive/s1", "at:space/did:plc:auth2/space.swan.drive/s2"]
+        #expect(SpaceListModel.loadCustomSpaceURIs(for: accountDID) == expected)
+        #expect(UserDefaults.standard.stringArray(forKey: key) == expected)
+        #expect(LegacySpaceURI.fromLegacySpaceUri("at://did:plc:auth1/app.bsky.feed.post/1") == nil)
     }
 
     @MainActor
@@ -247,8 +287,8 @@ struct SpaceListModelTests {
     @Test("load restores persisted custom space references across launches")
     func testOpenSpacePersistedRefsRestoredOnLoad() async throws {
         let accountDID = "did:plc:carol_restore"
-        let uri1 = "at://did:plc:auth1/space/space.swan.drive/s1"
-        let uri2 = "at://did:plc:auth2/space/space.swan.drive/s2"
+        let uri1 = "at:space/did:plc:auth1/space.swan.drive/s1"
+        let uri2 = "at:space/did:plc:auth2/space.swan.drive/s2"
 
         SpaceListModel.saveCustomSpaceURIs([uri1, uri2], for: accountDID)
         defer {
@@ -272,7 +312,7 @@ struct SpaceListModelTests {
     @Test("load does not duplicate custom space ref when listSpaces later reports same ref")
     func testOpenSpaceNoDuplicateWhenListSpacesLaterReportsSameRef() async throws {
         let accountDID = "did:plc:dave_dedup"
-        let sharedURI = "at://did:plc:auth1/space/space.swan.drive/shared"
+        let sharedURI = "at:space/did:plc:auth1/space.swan.drive/shared"
         let sharedRef = try SpaceRef(uriString: sharedURI)
 
         SpaceListModel.saveCustomSpaceURIs([sharedURI], for: accountDID)
@@ -298,8 +338,8 @@ struct SpaceListModelTests {
     @Test("load restores persisted custom space references even when listSpaces fails with network/XRPC error")
     func testOpenSpacePersistedRefsRestoredOnFetchFailure() async throws {
         let accountDID = "did:plc:eve_fetch_error"
-        let uri1 = "at://did:plc:auth1/space/space.swan.drive/s1"
-        let uri2 = "at://did:plc:auth2/space/space.swan.drive/s2"
+        let uri1 = "at:space/did:plc:auth1/space.swan.drive/s1"
+        let uri2 = "at:space/did:plc:auth2/space.swan.drive/s2"
 
         SpaceListModel.saveCustomSpaceURIs([uri1, uri2], for: accountDID)
         defer {

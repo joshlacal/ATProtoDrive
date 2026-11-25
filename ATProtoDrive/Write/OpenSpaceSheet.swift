@@ -50,7 +50,7 @@ public struct OpenSpaceSheet: View {
                     TextField(
                         "Space URI",
                         text: $uriString,
-                        prompt: Text("at://did:plc:.../space/space.swan.drive/self")
+                        prompt: Text("at:space/did:plc:.../space.swan.drive/self")
                     )
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
@@ -58,7 +58,7 @@ public struct OpenSpaceSheet: View {
                     Text("Space Reference")
                         .font(.subheadline.bold())
                 } footer: {
-                    Text("Enter the full ATProto space URI (e.g. at://{authorityDID}/space/{spaceType}/{skey}).")
+                    Text("Enter the full ATProto space URI (e.g. at:space/{authorityDID}/{spaceType}/{skey}). Older at://{authorityDID}/space/… URIs are converted.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

@@ -107,7 +107,7 @@ struct WritePipelineTests {
     @Test("createSpace calls injected transport and returns created SpaceRef")
     func testCreateSpace() async throws {
         let tracker = WriteTestCallTracker()
-        let expectedRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+        let expectedRef = try SpaceRef(uriString: "at:space/did:plc:alice123/space.swan.drive/self")
         let dummyAccount = await makeTestAccount()
         let model = SpaceListModel()
 
@@ -169,7 +169,7 @@ struct WritePipelineTests {
     @Test("addMember invokes handle resolution and member transport with SpaceRef and DID")
     func testAddMember() async throws {
         let spaceItem = try SpaceItem(
-            uriString: "at://did:plc:alice123/space/space.swan.drive/self",
+            uriString: "at:space/did:plc:alice123/space.swan.drive/self",
             accountDID: "did:plc:alice123"
         )
         let dummyAccount = await makeTestAccount()
@@ -206,7 +206,7 @@ struct WritePipelineTests {
     @Test("removeMember invokes remove transport with SpaceRef and DID")
     func testRemoveMember() async throws {
         let spaceItem = try SpaceItem(
-            uriString: "at://did:plc:alice123/space/space.swan.drive/self",
+            uriString: "at:space/did:plc:alice123/space.swan.drive/self",
             accountDID: "did:plc:alice123"
         )
         let dummyAccount = await makeTestAccount()
@@ -237,7 +237,7 @@ struct WritePipelineTests {
 
     @Test("makeCreateRecordInput constructs valid payload, injects $type matching collection, and sets validate to nil")
     func testMakeCreateRecordInput() throws {
-        let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+        let spaceRef = try SpaceRef(uriString: "at:space/did:plc:alice123/space.swan.drive/self")
         let json = """
         {
           "text": "Hello ATProto Space",
@@ -267,7 +267,7 @@ struct WritePipelineTests {
 
     @Test("makeCreateRecordInput rejects mismatched $type")
     func testMakeCreateRecordInputRejectsMismatchedType() throws {
-        let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+        let spaceRef = try SpaceRef(uriString: "at:space/did:plc:alice123/space.swan.drive/self")
         let json = """
         {
           "$type": "wrong.collection.name",
@@ -288,7 +288,7 @@ struct WritePipelineTests {
 
     @Test("makePutRecordInput constructs valid payload, injects $type matching collection, and requires rkey")
     func testMakePutRecordInput() throws {
-        let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+        let spaceRef = try SpaceRef(uriString: "at:space/did:plc:alice123/space.swan.drive/self")
         let json = """
         {
           "title": "Document",
@@ -318,7 +318,7 @@ struct WritePipelineTests {
 
     @Test("makeDeleteRecordInput constructs valid delete payload")
     func testMakeDeleteRecordInput() throws {
-        let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+        let spaceRef = try SpaceRef(uriString: "at:space/did:plc:alice123/space.swan.drive/self")
         let input = try RecordListModel.makeDeleteRecordInput(
             space: spaceRef,
             repoDID: "did:plc:alice123",
@@ -335,7 +335,7 @@ struct WritePipelineTests {
     @MainActor
     @Test("createRecord executes injected transport")
     func testCreateRecord() async throws {
-        let spaceItem = try SpaceItem(uriString: "at://did:plc:alice123/space/space.swan.drive/self", accountDID: "did:plc:alice123")
+        let spaceItem = try SpaceItem(uriString: "at:space/did:plc:alice123/space.swan.drive/self", accountDID: "did:plc:alice123")
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
@@ -357,7 +357,7 @@ struct WritePipelineTests {
                 return (200, ComAtprotoSpaceCreateRecord.Output(uri: expectedURI, cid: expectedCID))
             },
             clientListRecords: { _ in (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [])) },
-            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at://did:plc:alice123/space/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1]))))) }
+            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at:space/did:plc:alice123/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1]))))) }
         )
 
         #expect(output.cid == expectedCID)
@@ -369,7 +369,7 @@ struct WritePipelineTests {
     @MainActor
     @Test("putRecord executes injected transport")
     func testPutRecord() async throws {
-        let spaceItem = try SpaceItem(uriString: "at://did:plc:alice123/space/space.swan.drive/self", accountDID: "did:plc:alice123")
+        let spaceItem = try SpaceItem(uriString: "at:space/did:plc:alice123/space.swan.drive/self", accountDID: "did:plc:alice123")
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
@@ -390,7 +390,7 @@ struct WritePipelineTests {
                 return (200, ComAtprotoSpacePutRecord.Output(uri: expectedURI, cid: expectedCID))
             },
             clientListRecords: { _ in (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [])) },
-            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at://did:plc:alice123/space/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1]))))) }
+            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at:space/did:plc:alice123/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1]))))) }
         )
 
         #expect(output.cid == expectedCID)
@@ -402,7 +402,7 @@ struct WritePipelineTests {
     @MainActor
     @Test("deleteRecord executes injected transport")
     func testDeleteRecord() async throws {
-        let spaceItem = try SpaceItem(uriString: "at://did:plc:alice123/space/space.swan.drive/self", accountDID: "did:plc:alice123")
+        let spaceItem = try SpaceItem(uriString: "at:space/did:plc:alice123/space.swan.drive/self", accountDID: "did:plc:alice123")
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
@@ -421,7 +421,7 @@ struct WritePipelineTests {
                 return (200, ComAtprotoSpaceDeleteRecord.Output())
             },
             clientListRecords: { _ in (200, ComAtprotoSpaceListRecords.Output(cursor: nil, records: [])) },
-            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at://did:plc:alice123/space/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1]))))) }
+            clientGetLatestCommit: { (200, ComAtprotoSpaceGetLatestCommit.Output(commit: ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at:space/did:plc:alice123/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1]))))) }
         )
 
         let count = await tracker.callCount
@@ -433,7 +433,7 @@ struct WritePipelineTests {
     @MainActor
     @Test("JSON validation gate: empty string throws and NEVER calls transport")
     func testValidationGateEmptyString() async throws {
-        let spaceItem = try SpaceItem(uriString: "at://did:plc:alice123/space/space.swan.drive/self", accountDID: "did:plc:alice123")
+        let spaceItem = try SpaceItem(uriString: "at:space/did:plc:alice123/space.swan.drive/self", accountDID: "did:plc:alice123")
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
@@ -464,7 +464,7 @@ struct WritePipelineTests {
     @MainActor
     @Test("JSON validation gate: malformed syntax throws and NEVER calls transport")
     func testValidationGateMalformedSyntax() async throws {
-        let spaceItem = try SpaceItem(uriString: "at://did:plc:alice123/space/space.swan.drive/self", accountDID: "did:plc:alice123")
+        let spaceItem = try SpaceItem(uriString: "at:space/did:plc:alice123/space.swan.drive/self", accountDID: "did:plc:alice123")
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
@@ -499,7 +499,7 @@ struct WritePipelineTests {
     @MainActor
     @Test("JSON validation gate: array root instead of object throws notJSONObject and NEVER calls transport")
     func testValidationGateArrayRoot() async throws {
-        let spaceItem = try SpaceItem(uriString: "at://did:plc:alice123/space/space.swan.drive/self", accountDID: "did:plc:alice123")
+        let spaceItem = try SpaceItem(uriString: "at:space/did:plc:alice123/space.swan.drive/self", accountDID: "did:plc:alice123")
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
         let dummyAccount = await makeTestAccount()
         let tracker = WriteTestCallTracker()
@@ -607,7 +607,7 @@ struct WritePipelineTests {
         }
         UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: dummyAccount.id))
         let model = SpaceListModel()
-        let createdRef = try SpaceRef(uriString: "at://did:plc:alice_reloads/space/space.swan.drive/self")
+        let createdRef = try SpaceRef(uriString: "at:space/did:plc:alice_reloads/space.swan.drive/self")
         let createTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
 
@@ -656,7 +656,7 @@ struct WritePipelineTests {
         }
         UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: dummyAccount.id))
         let model = SpaceListModel()
-        let createdRef = try SpaceRef(uriString: "at://\(dummyAccount.id)/space/space.swan.drive/new-empty-space")
+        let createdRef = try SpaceRef(uriString: "at:space/\(dummyAccount.id)/space.swan.drive/new-empty-space")
 
         // listSpaces always returns empty list (as repo host holds no repos yet)
         let listTransport: @Sendable (_ cursor: String?) async throws -> (responseCode: Int, output: ComAtprotoSpaceListSpaces.Output?) = { _ in
@@ -688,7 +688,7 @@ struct WritePipelineTests {
     @Test("SpaceListModel deleteSpace executes transport and reloads model state to empty")
     func testSpaceListModelDeleteSpaceReloads() async throws {
         let dummyAccount = await makeTestAccount()
-        let spaceRef = try SpaceRef(uriString: "at://did:plc:alice123/space/space.swan.drive/self")
+        let spaceRef = try SpaceRef(uriString: "at:space/did:plc:alice123/space.swan.drive/self")
         let spaceItem = SpaceItem(ref: spaceRef, accountDID: "did:plc:alice123")
         let model = SpaceListModel()
 
@@ -731,7 +731,7 @@ struct WritePipelineTests {
     @Test("RecordListModel createRecord executes transport and reloads model state from empty to populated")
     func testRecordListModelCreateRecordReloads() async throws {
         let spaceItem = try SpaceItem(
-            uriString: "at://did:plc:alice123/space/space.swan.drive/self",
+            uriString: "at:space/did:plc:alice123/space.swan.drive/self",
             accountDID: "did:plc:alice123"
         )
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
@@ -748,7 +748,7 @@ struct WritePipelineTests {
             value: try RecordListModel.validateRecordJSON("{\"text\": \"New Post\"}")
         )
 
-        let signedCommit = ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at://did:plc:alice123/space/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1, 2, 3])))
+        let signedCommit = ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at:space/did:plc:alice123/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1, 2, 3])))
 
         let createTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
@@ -805,7 +805,7 @@ struct WritePipelineTests {
     @Test("RecordListModel putRecord executes transport and reloads model state with updated content")
     func testRecordListModelPutRecordReloads() async throws {
         let spaceItem = try SpaceItem(
-            uriString: "at://did:plc:alice123/space/space.swan.drive/self",
+            uriString: "at:space/did:plc:alice123/space.swan.drive/self",
             accountDID: "did:plc:alice123"
         )
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
@@ -829,7 +829,7 @@ struct WritePipelineTests {
             value: try RecordListModel.validateRecordJSON("{\"text\": \"Updated Post\"}")
         )
 
-        let signedCommit = ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at://did:plc:alice123/space/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1, 2, 3])))
+        let signedCommit = ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at:space/did:plc:alice123/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1, 2, 3])))
 
         let putTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
@@ -886,7 +886,7 @@ struct WritePipelineTests {
     @Test("RecordListModel deleteRecord executes transport and reloads model state to empty")
     func testRecordListModelDeleteRecordReloads() async throws {
         let spaceItem = try SpaceItem(
-            uriString: "at://did:plc:alice123/space/space.swan.drive/self",
+            uriString: "at:space/did:plc:alice123/space.swan.drive/self",
             accountDID: "did:plc:alice123"
         )
         let repo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
@@ -901,7 +901,7 @@ struct WritePipelineTests {
             value: try RecordListModel.validateRecordJSON("{\"text\": \"Post\"}")
         )
 
-        let signedCommit = ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at://did:plc:alice123/space/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1, 2, 3])))
+        let signedCommit = ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at:space/did:plc:alice123/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1, 2, 3])))
 
         let deleteTracker = WriteTestCallTracker()
         let listTracker = WriteTestCallTracker()
@@ -954,7 +954,7 @@ struct WritePipelineTests {
     @Test("SpaceDetailModel addMember executes transport and reloads model state with new member")
     func testSpaceDetailModelAddMemberReloads() async throws {
         let spaceItem = try SpaceItem(
-            uriString: "at://did:plc:alice123/space/space.swan.drive/self",
+            uriString: "at:space/did:plc:alice123/space.swan.drive/self",
             accountDID: "did:plc:alice123"
         )
         let dummyAccount = await makeTestAccount()
@@ -1007,7 +1007,7 @@ struct WritePipelineTests {
     @Test("SpaceDetailModel removeMember executes transport and reloads model state removing member")
     func testSpaceDetailModelRemoveMemberReloads() async throws {
         let spaceItem = try SpaceItem(
-            uriString: "at://did:plc:alice123/space/space.swan.drive/self",
+            uriString: "at:space/did:plc:alice123/space.swan.drive/self",
             accountDID: "did:plc:alice123"
         )
         let dummyAccount = await makeTestAccount()

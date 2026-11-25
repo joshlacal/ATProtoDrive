@@ -9,7 +9,7 @@ import Petrel
 
 public struct SpaceItem: Identifiable, Hashable, Sendable {
     public var id: String { "\(accountDID):\(ref.uriString())" }
-    public let ref: SpaceRef           // at://authority/space/type/skey
+    public let ref: SpaceRef           // at:space/authority/type/skey
     public let accountDID: String
     public let authorityDID: String
     public let spaceType: String
@@ -29,6 +29,37 @@ public struct SpaceItem: Identifiable, Hashable, Sendable {
         self.init(ref: ref, accountDID: accountDID)
     }
 }
+/// Lenient reading of space URIs from the Spaces alpha, which used
+/// `at://{spaceDid}/space/{spaceType}/{skey}[/...]`. `SpaceRef` accepts only the
+/// current `at:space/{spaceDid}/...` form; this rewrites saved or pasted
+/// alpha-form values before they are parsed, so nothing is sent in the old form.
+/// Mirrors `fromLegacySpaceUri` in `@atproto/syntax`.
+///
+/// TODO: remove before beta.
+public enum LegacySpaceURI {
+    public static let spaceURIPrefix = "at:space/"
+
+    /// `uri` in the current form when it is an alpha-form space URI
+    /// (`at://X/space/...` becomes `at:space/X/...`), otherwise nil.
+    public static func fromLegacySpaceUri(_ uri: String) -> String? {
+        guard uri.hasPrefix("at://") else { return nil }
+        let rest = uri.dropFirst("at://".count)
+        guard let slash = rest.firstIndex(of: "/") else { return nil }
+        let authority = rest[..<slash]
+        let path = rest[rest.index(after: slash)...]
+        guard !authority.isEmpty,
+              !authority.contains(where: { $0 == "?" || $0 == "#" || $0.isWhitespace }),
+              path.hasPrefix("space/")
+        else { return nil }
+        return "\(spaceURIPrefix)\(authority)/\(path.dropFirst("space/".count))"
+    }
+
+    /// `uri` converted when it is an alpha-form space URI, unchanged otherwise.
+    public static func normalized(_ uri: String) -> String {
+        fromLegacySpaceUri(uri) ?? uri
+    }
+}
+
 public enum OpenSpaceError: LocalizedError, Equatable, Sendable {
     case emptyURI
     case invalidURI(String)
@@ -64,8 +95,18 @@ public final class SpaceListModel {
         "blue.catbird.atprotodrive.customSpaces.\(accountDID)"
     }
 
+    /// Space URIs saved during the Spaces alpha (`at://{did}/space/...`) are
+    /// rewritten to the `at:space/` form and saved back the first time they are read.
     nonisolated public static func loadCustomSpaceURIs(for accountDID: String, userDefaults: UserDefaults = .standard) -> [String] {
-        userDefaults.stringArray(forKey: customSpacesKey(for: accountDID)) ?? []
+        let stored = userDefaults.stringArray(forKey: customSpacesKey(for: accountDID)) ?? []
+        var uris: [String] = []
+        for uri in stored.map(LegacySpaceURI.normalized) where !uris.contains(uri) {
+            uris.append(uri)
+        }
+        if uris != stored {
+            saveCustomSpaceURIs(uris, for: accountDID, userDefaults: userDefaults)
+        }
+        return uris
     }
 
     nonisolated public static func saveCustomSpaceURIs(_ uris: [String], for accountDID: String, userDefaults: UserDefaults = .standard) {
@@ -261,10 +302,11 @@ public final class SpaceListModel {
             throw OpenSpaceError.emptyURI
         }
 
-        // Step 1: Validate space URI locally before any network call
+        // Step 1: Validate space URI locally before any network call. A pasted
+        // alpha-form URI (`at://{did}/space/...`) is converted to `at:space/` first.
         let spaceRef: SpaceRef
         do {
-            spaceRef = try SpaceRef(uriString: trimmed)
+            spaceRef = try SpaceRef(uriString: LegacySpaceURI.normalized(trimmed))
         } catch {
             throw OpenSpaceError.invalidURI(error.localizedDescription)
         }

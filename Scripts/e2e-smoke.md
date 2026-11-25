@@ -98,7 +98,7 @@ This checklist provides a manual, step-by-step verification script for human exe
 ### Step 1.4: Account B Opens Space S1 by Reference
 1. In the sidebar under Account B, click the **"+"** menu in the header and select **"Open Space by Reference…"**.
 2. In the "Open Space by Reference" sheet, enter the full space URI:
-   `at://<ACCOUNT_A_DID>/space/space.swan.drive/drive-s1`
+   `at:space/<ACCOUNT_A_DID>/space.swan.drive/drive-s1`
 3. Click **"Open Space"**.
 - **Expected Observation:** Sheet dismisses; `drive-s1` appears in Account B's spaces list with a purple icon and "Shared" badge. Selecting it displays "Shared Space" with Account A as the Authority.
 - **Result:** Pass [ ] / Fail [ ]
@@ -139,7 +139,7 @@ This checklist provides a manual, step-by-step verification script for human exe
 
 ### Step 2.4: Account A Opens Space S2 by Reference & Verifies
 1. In sidebar under Account A, click **"+"** → **"Open Space by Reference…"**.
-2. Enter `at://<ACCOUNT_B_DID>/space/space.swan.drive/alpha-s2` and click **"Open Space"**.
+2. Enter `at:space/<ACCOUNT_B_DID>/space.swan.drive/alpha-s2` and click **"Open Space"**.
 3. Select `alpha-s2` (marked Shared).
 4. Under **"Writer Repos"**, click **"Verify"** next to Account B's repo.
 - **Expected Observation:** CAR verified via `SwanSpaces`; green badge **"Verified (1 recs)"** appears.
@@ -247,12 +247,12 @@ This checklist provides a manual, step-by-step verification script for human exe
 1. Right-click any space row in the sidebar.
 2. Select **"Copy Space Ref"**.
 3. Paste into TextEdit or Terminal.
-- **Expected Observation:** Clipboard contains exact string `at://{authorityDID}/space/{spaceType}/{skey}`.
+- **Expected Observation:** Clipboard contains exact string `at:space/{authorityDID}/{spaceType}/{skey}`.
 - **Result:** Pass [ ] / Fail [ ]
 
 ### Step 6.2: Record Row Context Menu
 1. Right-click a record row in Record Table:
-   - Select **"Copy at:// URI"** → paste into TextEdit → verify clipboard contains `at://{spaceDID}/space/{type}/{skey}/{authorDID}/{collection}/{rkey}`.
+   - Select **"Copy at:// URI"** → paste into TextEdit → verify clipboard contains `at:space/{spaceDID}/{type}/{skey}/{authorDID}/{collection}/{rkey}`.
    - Select **"Copy CID"** → paste into TextEdit → verify clipboard contains the record CID.
    - Select **"Copy JSON"** → paste into TextEdit → verify clipboard contains formatted JSON.
 - **Expected Observation:** All three pasteboard copy actions output accurate values matching the exact menu item labels.

@@ -238,8 +238,8 @@ struct PublicBrowserPresentationTests {
         #expect(PublicRecordPresentation.surface(
             rows: [],
             repository: .fixture,
-            query: .init(tokens: [.space("at://did:plc:z72i7hdynmk6r22z27h6tvur/space/type/key")])
-        ) == .unsupportedTokens([.space("at://did:plc:z72i7hdynmk6r22z27h6tvur/space/type/key")]))
+            query: .init(tokens: [.space("at:space/did:plc:z72i7hdynmk6r22z27h6tvur/type/key")])
+        ) == .unsupportedTokens([.space("at:space/did:plc:z72i7hdynmk6r22z27h6tvur/type/key")]))
     }
 
     @Test("inspector keeps friendly and exact public identity")

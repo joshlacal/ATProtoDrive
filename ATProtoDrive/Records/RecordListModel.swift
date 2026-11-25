@@ -36,7 +36,7 @@ public enum RecordOrigin: Hashable, Sendable {
 
 public struct RecordRow: Identifiable, Hashable, Sendable {
     public var id: String { uri }
-    public let uri: String        // full space record at:// URI: at://{spaceDid}/space/{spaceType}/{skey}/{authorDid}/{collection}/{rkey}
+    public let uri: String        // full space record URI: at:space/{spaceDid}/{spaceType}/{skey}/{authorDid}/{collection}/{rkey}
     public let collection: String
     public let rkey: String
     public let cid: String
@@ -853,8 +853,8 @@ public final class RecordListModel {
         return extractBlobEntries(from: container).map(\.cid)
     }
 
-    /// Constructs the canonical record `at://` URI for a space record:
-    /// `at://{spaceDid}/space/{spaceType}/{skey}/{authorDid}/{collection}/{rkey}`
+    /// Constructs the canonical record URI for a space record:
+    /// `at:space/{spaceDid}/{spaceType}/{skey}/{authorDid}/{collection}/{rkey}`
     nonisolated public static func makeRecordURI(space: SpaceRef, repoDID: String, collection: String, rkey: String) -> String {
         if let uri = try? space.recordURI(authorDID: repoDID, collection: collection, recordKey: rkey) {
             return uri.uriString()
