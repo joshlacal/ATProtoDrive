@@ -77,7 +77,7 @@ extension RepositoryScope {
     }
 
     public static func fixtureSpace(
-        spaceURI: String = "at://did:plc:owner/space/app.example.drive/shared",
+        spaceURI: String = "at:space/did:plc:owner/app.example.drive/shared",
         writerDID: String = "did:plc:alice",
         accountDID: String = "did:plc:alice"
     ) -> RepositoryScope {
@@ -104,7 +104,7 @@ extension RecordLocator {
     }
 
     public static func fixtureSpace(
-        spaceURI: String = "at://did:plc:owner/space/app.example.drive/shared",
+        spaceURI: String = "at:space/did:plc:owner/app.example.drive/shared",
         writerDID: String = "did:plc:alice",
         accountDID: String = "did:plc:alice",
         rkey: String = "one",
@@ -130,7 +130,7 @@ extension BlobLocator {
     }
 
     public static func fixtureSpace(
-        spaceURI: String = "at://did:plc:owner/space/app.example.drive/shared",
+        spaceURI: String = "at:space/did:plc:owner/app.example.drive/shared",
         writerDID: String = "did:plc:alice",
         accountDID: String = "did:plc:alice",
         cid: String = "bafkreigh2akiscaildcq"
@@ -143,7 +143,7 @@ extension BlobLocator {
     ) -> BlobLocator {
         BlobLocator(
             scope: .permissionedSpace(
-                spaceURI: "at://did:plc:owner/space/app.example.drive/other",
+                spaceURI: "at:space/did:plc:owner/app.example.drive/other",
                 writerDID: "did:plc:alice",
                 accountDID: "did:plc:alice"
             ),
@@ -156,7 +156,7 @@ extension BlobLocator {
     ) -> BlobLocator {
         BlobLocator(
             scope: .permissionedSpace(
-                spaceURI: "at://did:plc:foreign/space/app.example.drive/foreign",
+                spaceURI: "at:space/did:plc:foreign/app.example.drive/foreign",
                 writerDID: "did:plc:stranger",
                 accountDID: "did:plc:foreign"
             ),

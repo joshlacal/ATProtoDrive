@@ -12,7 +12,7 @@ struct BlobReferenceIndexTests {
             pdsURL: try #require(URL(string: "https://alice.example"))
         )
         let spaceScope = RepositoryScope.permissionedSpace(
-            spaceURI: "at://did:plc:owner/space/app.example.drive/shared",
+            spaceURI: "at:space/did:plc:owner/app.example.drive/shared",
             writerDID: "did:plc:alice",
             accountDID: "did:plc:alice"
         )
@@ -32,7 +32,7 @@ struct BlobReferenceIndexTests {
         )
         let spaceRecord = RecordLocator(
             scope: spaceScope,
-            uri: "at://did:plc:owner/space/app.example.drive/shared/did:plc:alice/app.example.file/one",
+            uri: "at:space/did:plc:owner/app.example.drive/shared/did:plc:alice/app.example.file/one",
             collection: "app.example.file",
             rkey: "one",
             cid: "bafyreispace"
@@ -200,8 +200,8 @@ struct BlobReferenceIndexTests {
 
     @Test("removeSpace isolates removal to target space and account while removing all writers and preserving other spaces/accounts/public")
     func removeSpaceIsolation() async throws {
-        let spaceURI1 = "at://did:plc:owner/space/app.example.drive/space1"
-        let spaceURI2 = "at://did:plc:owner/space/app.example.drive/space2"
+        let spaceURI1 = "at:space/did:plc:owner/app.example.drive/space1"
+        let spaceURI2 = "at:space/did:plc:owner/app.example.drive/space2"
 
         let scopeSpace1AliceWriter1 = RepositoryScope.permissionedSpace(spaceURI: spaceURI1, writerDID: "did:plc:alice", accountDID: "did:plc:alice")
         let scopeSpace1AliceWriter2 = RepositoryScope.permissionedSpace(spaceURI: spaceURI1, writerDID: "did:plc:writer2", accountDID: "did:plc:alice")

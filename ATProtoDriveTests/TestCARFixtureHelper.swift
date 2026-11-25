@@ -12,7 +12,7 @@ import SwanSpaces
 
 public enum TestCARFixtureHelper {
     public static let authorDID = "did:plc:alice"
-    public static let spaceRefString = "at://did:plc:alice/space/app.bsky.bookmarks/shared"
+    public static let spaceRefString = "at:space/did:plc:alice/app.bsky.bookmarks/shared"
     public static let revision = "3l3vbfz2zsk22"
     public static let privateKeyRaw = Data(repeating: 1, count: 32)
     public static let secp256k1PrivateRaw = Data(repeating: 2, count: 32)

@@ -55,7 +55,7 @@ struct SpaceDetailModelTests {
     @Test("makeListReposURL builds correct endpoint URL with space query item")
     func testMakeListReposURLStandard() throws {
         let spaceHost = URL(string: "https://pds.example.com")!
-        let ref = try SpaceRef(uriString: "at://did:plc:alice123/space/com.atproto.feed/main")
+        let ref = try SpaceRef(uriString: "at:space/did:plc:alice123/com.atproto.feed/main")
 
         let url = try #require(SpaceDetailModel.makeListReposURL(spaceHost: spaceHost, space: ref))
 
@@ -63,33 +63,33 @@ struct SpaceDetailModelTests {
         #expect(comps.scheme == "https")
         #expect(comps.host == "pds.example.com")
         #expect(comps.path == "/xrpc/com.atproto.space.listRepos")
-        #expect(comps.queryItems?.contains(URLQueryItem(name: "space", value: "at://did:plc:alice123/space/com.atproto.feed/main")) == true)
+        #expect(comps.queryItems?.contains(URLQueryItem(name: "space", value: "at:space/did:plc:alice123/com.atproto.feed/main")) == true)
         #expect(comps.queryItems?.contains(where: { $0.name == "cursor" }) == false)
     }
 
     @Test("makeListReposURL handles trailing slash in host and appends cursor when present")
     func testMakeListReposURLWithCursorAndTrailingSlash() throws {
         let spaceHost = URL(string: "https://space.swan.place/")!
-        let ref = try SpaceRef(uriString: "at://did:plc:alice123/space/com.atproto.simplespace/my-space")
+        let ref = try SpaceRef(uriString: "at:space/did:plc:alice123/com.atproto.simplespace/my-space")
 
         let url = try #require(SpaceDetailModel.makeListReposURL(spaceHost: spaceHost, space: ref, cursor: "cursor_page_2"))
 
         let comps = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
         #expect(comps.path == "/xrpc/com.atproto.space.listRepos")
-        #expect(comps.queryItems?.first(where: { $0.name == "space" })?.value == "at://did:plc:alice123/space/com.atproto.simplespace/my-space")
+        #expect(comps.queryItems?.first(where: { $0.name == "space" })?.value == "at:space/did:plc:alice123/com.atproto.simplespace/my-space")
         #expect(comps.queryItems?.first(where: { $0.name == "cursor" })?.value == "cursor_page_2")
     }
 
     @Test("makeListReposURL preserves subpaths in space host")
     func testMakeListReposURLWithSubpath() throws {
         let spaceHost = URL(string: "http://127.0.0.1:8080/custom/prefix")!
-        let ref = try SpaceRef(uriString: "at://did:plc:bob456/space/com.example.drive/root")
+        let ref = try SpaceRef(uriString: "at:space/did:plc:bob456/com.example.drive/root")
 
         let url = try #require(SpaceDetailModel.makeListReposURL(spaceHost: spaceHost, space: ref))
 
         let comps = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
         #expect(comps.path == "/custom/prefix/xrpc/com.atproto.space.listRepos")
-        #expect(comps.queryItems?.first(where: { $0.name == "space" })?.value == "at://did:plc:bob456/space/com.example.drive/root")
+        #expect(comps.queryItems?.first(where: { $0.name == "space" })?.value == "at:space/did:plc:bob456/com.example.drive/root")
     }
 
     // MARK: - mapRepoEntries Tests
@@ -456,19 +456,19 @@ struct SpaceDetailModelTests {
         let accountDID = "did:plc:alice"
 
         let ownSimplespace = SpaceItem(
-            ref: try SpaceRef(uriString: "at://did:plc:alice/space/com.atproto.simplespace/my-space"),
+            ref: try SpaceRef(uriString: "at:space/did:plc:alice/com.atproto.simplespace/my-space"),
             accountDID: accountDID
         )
         let ownArbitraryType = SpaceItem(
-            ref: try SpaceRef(uriString: "at://did:plc:alice/space/com.example.customdrive/work-drive"),
+            ref: try SpaceRef(uriString: "at:space/did:plc:alice/com.example.customdrive/work-drive"),
             accountDID: accountDID
         )
         let foreignSimplespace = SpaceItem(
-            ref: try SpaceRef(uriString: "at://did:plc:bob/space/com.atproto.simplespace/shared-space"),
+            ref: try SpaceRef(uriString: "at:space/did:plc:bob/com.atproto.simplespace/shared-space"),
             accountDID: accountDID
         )
         let foreignArbitraryType = SpaceItem(
-            ref: try SpaceRef(uriString: "at://did:plc:bob/space/com.example.customdrive/shared-drive"),
+            ref: try SpaceRef(uriString: "at:space/did:plc:bob/com.example.customdrive/shared-drive"),
             accountDID: accountDID
         )
 
@@ -482,7 +482,7 @@ struct SpaceDetailModelTests {
     func testLoadSpaceDetailsInvokesMembersForOwnedArbitraryType() async throws {
         let accountDID = "did:plc:alice"
         let space = SpaceItem(
-            ref: try SpaceRef(uriString: "at://did:plc:alice/space/org.custom.workspace/project1"),
+            ref: try SpaceRef(uriString: "at:space/did:plc:alice/org.custom.workspace/project1"),
             accountDID: accountDID
         )
 
@@ -508,7 +508,7 @@ struct SpaceDetailModelTests {
     func testLoadSpaceDetailsSkipsMembersForForeignArbitraryType() async throws {
         let accountDID = "did:plc:alice"
         let space = SpaceItem(
-            ref: try SpaceRef(uriString: "at://did:plc:bob/space/org.custom.workspace/project1"),
+            ref: try SpaceRef(uriString: "at:space/did:plc:bob/org.custom.workspace/project1"),
             accountDID: accountDID
         )
 
@@ -534,7 +534,7 @@ struct SpaceDetailModelTests {
     func testLoadSpaceDetailsErrorBehavior() async throws {
         let accountDID = "did:plc:alice"
         let space = SpaceItem(
-            ref: try SpaceRef(uriString: "at://did:plc:alice/space/com.example.drive/main"),
+            ref: try SpaceRef(uriString: "at:space/did:plc:alice/com.example.drive/main"),
             accountDID: accountDID
         )
 
@@ -720,7 +720,7 @@ struct SpaceDetailModelTests {
         let session = Self.makeMockSession()
         let accountDID = "did:plc:user123"
         let authorityDID = "did:plc:6u6rzv6fk3ga37kgs3tybgdk"
-        let spaceURI = "at://\(authorityDID)/space/my.bulletin.board/self"
+        let spaceURI = "at:space/\(authorityDID)/my.bulletin.board/self"
 
         UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: accountDID))
         defer {
@@ -811,7 +811,7 @@ struct SpaceDetailModelTests {
         let session = Self.makeMockSession()
         let accountDID = "did:plc:user1"
         let authorityDID = "did:plc:case1deletedauthority"
-        let spaceURI = "at://\(authorityDID)/space/my.bulletin.board/self"
+        let spaceURI = "at:space/\(authorityDID)/my.bulletin.board/self"
 
         UserDefaults.standard.removeObject(forKey: SpaceListModel.customSpacesKey(for: accountDID))
         defer {
@@ -890,7 +890,7 @@ struct SpaceDetailModelTests {
         let session = Self.makeMockSession()
         let accountDID = "did:plc:user2"
         let authorityDID = "did:plc:case2refusedauthority"
-        let spaceURI = "at://\(authorityDID)/space/my.bulletin.board/self"
+        let spaceURI = "at:space/\(authorityDID)/my.bulletin.board/self"
 
         let client = await ATProtoClient(baseURL: URL(string: "https://bsky.social")!)
         let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: client), urlSession: session)
@@ -958,7 +958,7 @@ struct SpaceDetailModelTests {
         let session = Self.makeMockSession()
         let accountDID = "did:plc:user4"
         let authorityDID = "did:plc:case4opaqueauthority"
-        let spaceURI = "at://\(authorityDID)/space/my.bulletin.board/self"
+        let spaceURI = "at:space/\(authorityDID)/my.bulletin.board/self"
 
         let client = await ATProtoClient(baseURL: URL(string: "https://bsky.social")!)
         let resolver = SpaceHostResolver(didResolver: ClientDIDResolver(client: client), urlSession: session)

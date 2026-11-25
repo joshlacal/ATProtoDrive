@@ -79,15 +79,15 @@ struct AccountStoreTests {
         let accounts = [accountAlice, accountBob]
 
         let spaceAlice = SpaceItem(
-            ref: try SpaceRef(uriString: "at://did:plc:alice/space/com.atproto.simplespace/my-space"),
+            ref: try SpaceRef(uriString: "at:space/did:plc:alice/com.atproto.simplespace/my-space"),
             accountDID: "did:plc:alice"
         )
         let spaceBob = SpaceItem(
-            ref: try SpaceRef(uriString: "at://did:plc:bob/space/com.atproto.simplespace/shared-space"),
+            ref: try SpaceRef(uriString: "at:space/did:plc:bob/com.atproto.simplespace/shared-space"),
             accountDID: "did:plc:bob"
         )
         let spaceCharlie = SpaceItem(
-            ref: try SpaceRef(uriString: "at://did:plc:charlie/space/com.atproto.simplespace/orphaned-space"),
+            ref: try SpaceRef(uriString: "at:space/did:plc:charlie/com.atproto.simplespace/orphaned-space"),
             accountDID: "did:plc:charlie"
         )
 

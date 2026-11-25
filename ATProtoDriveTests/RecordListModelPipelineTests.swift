@@ -16,7 +16,7 @@ struct RecordListModelPipelineTests {
     @Test("Dual-path routing: own repo exclusively invokes clientListRecords and clientGetLatestCommit")
     func testOwnRepoRoutingExclusivity() async throws {
         let spaceItem = try SpaceItem(
-            uriString: "at://did:plc:alice123/space/com.atproto.feed/main",
+            uriString: "at:space/did:plc:alice123/com.atproto.feed/main",
             accountDID: "did:plc:alice123"
         )
         let ownRepo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
@@ -33,7 +33,7 @@ struct RecordListModelPipelineTests {
             value: nil
         )
 
-        let signedCommit = ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at://did:plc:alice123/space/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1, 2, 3])))
+        let signedCommit = ComAtprotoSpaceDefs.Commit(ver: 1, repo: try DID(didString: "did:plc:alice123"), space: try SpaceRef(uriString: "at:space/did:plc:alice123/com.example.test/shared"), rev: try TID(tidString: "3l3vbfz2zsk22"), data: Bytes(data: Data([1, 2, 3])))
 
         let (records, commit) = try await RecordListModel.loadRecordsPipeline(
             space: spaceItem,
@@ -75,7 +75,7 @@ struct RecordListModelPipelineTests {
     @Test("Dual-path routing: foreign repo exclusively invokes resolveDIDToPDS and credentialGet")
     func testForeignRepoRoutingExclusivity() async throws {
         let spaceItem = try SpaceItem(
-            uriString: "at://did:plc:alice123/space/com.atproto.feed/main",
+            uriString: "at:space/did:plc:alice123/com.atproto.feed/main",
             accountDID: "did:plc:alice123"
         )
         let foreignRepo = RepoEntry(did: "did:plc:bob456", rev: "rev2", hash: "hash2")
@@ -133,7 +133,7 @@ struct RecordListModelPipelineTests {
     @MainActor
     func testForeignCommitRawErrorInModelLoad() async throws {
         let spaceItem = try SpaceItem(
-            uriString: "at://did:plc:alice123/space/com.atproto.feed/main",
+            uriString: "at:space/did:plc:alice123/com.atproto.feed/main",
             accountDID: "did:plc:alice123"
         )
         let foreignRepo = RepoEntry(did: "did:plc:bob456", rev: "rev2", hash: "hash2")
@@ -193,7 +193,7 @@ struct RecordListModelPipelineTests {
     @MainActor
     func testOwnCommitThrownErrorInModelLoad() async throws {
         let spaceItem = try SpaceItem(
-            uriString: "at://did:plc:alice123/space/com.atproto.feed/main",
+            uriString: "at:space/did:plc:alice123/com.atproto.feed/main",
             accountDID: "did:plc:alice123"
         )
         let ownRepo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
@@ -317,7 +317,7 @@ struct RecordListModelPipelineTests {
     @Test("Dual-path blob routing: own repo exclusively invokes clientGetBlob")
     func testGetBlobOwnRepoRoutingExclusivity() async throws {
         let spaceItem = try SpaceItem(
-            uriString: "at://did:plc:space1/space/com.atproto.feed/main",
+            uriString: "at:space/did:plc:space1/com.atproto.feed/main",
             accountDID: "did:plc:alice123"
         )
         let ownRepo = RepoEntry(did: "did:plc:alice123", rev: "rev1", hash: "hash1")
@@ -361,7 +361,7 @@ struct RecordListModelPipelineTests {
     @Test("Dual-path blob routing: foreign repo exclusively invokes resolveDIDToPDS and credentialGet")
     func testGetBlobForeignRepoRoutingExclusivity() async throws {
         let spaceItem = try SpaceItem(
-            uriString: "at://did:plc:space1/space/com.atproto.feed/main",
+            uriString: "at:space/did:plc:space1/com.atproto.feed/main",
             accountDID: "did:plc:alice123"
         )
         let foreignRepo = RepoEntry(did: "did:plc:bob456", rev: "rev1", hash: "hash1")
@@ -392,7 +392,7 @@ struct RecordListModelPipelineTests {
                 #expect(url.host == "bob.pds.place")
                 #expect(url.path.contains("/xrpc/com.atproto.space.getBlob"))
                 let query = url.query ?? ""
-                #expect(query.contains("space=at%3A%2F%2Fdid%3Aplc%3Aspace1%2Fspace%2Fcom.atproto.feed%2Fmain") || query.contains("space=at://did:plc:space1/space/com.atproto.feed/main"))
+                #expect(query.contains("space=at%3Aspace%2Fdid%3Aplc%3Aspace1%2Fcom.atproto.feed%2Fmain") || query.contains("space=at:space/did:plc:space1/com.atproto.feed/main"))
                 #expect(query.contains("repo=did:plc:bob456") || query.contains("repo=did%3Aplc%3Abob456"))
                 #expect(query.contains("cid=\(targetCID)"))
                 return (200, expectedData)
@@ -411,7 +411,7 @@ struct RecordListModelPipelineTests {
 
     @Test("makeGetBlobURL constructs valid XRPC query parameters")
     func testMakeGetBlobURL() throws {
-        let spaceRef = try SpaceRef(uriString: "at://did:plc:space1/space/com.atproto.feed/main")
+        let spaceRef = try SpaceRef(uriString: "at:space/did:plc:space1/com.atproto.feed/main")
         let pdsHost = URL(string: "https://pds.example.com/subpath/")!
         let blobURL = try #require(RecordListModel.makeGetBlobURL(
             pdsHost: pdsHost,
@@ -486,7 +486,7 @@ struct RecordListModelPipelineTests {
             size: 12345
         )
         let record = RecordRow(
-            uri: "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz",
+            uri: "at:space/did:plc:space1/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz",
             collection: "app.bsky.feed.post",
             rkey: "3l3vbfz",
             cid: "bafyreih321cid",
@@ -514,7 +514,7 @@ struct RecordListModelPipelineTests {
         #expect(uriItem.payload?() == record.uri)
         uriItem.action()
         #expect(pasteboard.readString() == record.uri)
-        #expect(pasteboard.readString() == "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz")
+        #expect(pasteboard.readString() == "at:space/did:plc:space1/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz")
 
         // Item 1: Copy CID
         let cidItem = menuItems[1]
@@ -648,7 +648,7 @@ struct RecordListModelPipelineTests {
     @MainActor
     func testSpaceRowMenuDescriptorWiring() throws {
         let spaceItem = try SpaceItem(
-            uriString: "at://did:plc:space1/space/com.atproto.feed/main",
+            uriString: "at:space/did:plc:space1/com.atproto.feed/main",
             accountDID: "did:plc:space1"
         )
 
@@ -666,7 +666,7 @@ struct RecordListModelPipelineTests {
         #expect(ownedMenu[0].payload?() == spaceItem.ref.uriString())
         ownedMenu[0].action()
         #expect(pasteboard.readString() == spaceItem.ref.uriString())
-        #expect(pasteboard.readString() == "at://did:plc:space1/space/com.atproto.feed/main")
+        #expect(pasteboard.readString() == "at:space/did:plc:space1/com.atproto.feed/main")
 
         #expect(ownedMenu[1].title == "Delete Space…")
         #expect(ownedMenu[1].isDestructive == true)
@@ -676,7 +676,7 @@ struct RecordListModelPipelineTests {
 
         // 2. Shared space (not own authority)
         let sharedSpace = try SpaceItem(
-            uriString: "at://did:plc:space1/space/com.atproto.feed/main",
+            uriString: "at:space/did:plc:space1/com.atproto.feed/main",
             accountDID: "did:plc:otheruser"
         )
         let sharedMenu = RecordMenuDescriptors.spaceRowMenu(
@@ -689,7 +689,7 @@ struct RecordListModelPipelineTests {
 
         // 3. Inspector menus
         let record = RecordRow(
-            uri: "at://did:plc:space1/space/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz",
+            uri: "at:space/did:plc:space1/com.atproto.feed/main/did:plc:alice/app.bsky.feed.post/3l3vbfz",
             collection: "app.bsky.feed.post",
             rkey: "3l3vbfz",
             cid: "bafyreih321cid",
@@ -899,7 +899,7 @@ struct ForeignRepoArchiveLimitTests {
     func largeForeignArchiveIsBrowsableOnlyAfterVerification() async throws {
         let host = try #require(URL(string: "http://127.0.0.1:\(ForeignArchiveMockURLProtocol.port)"))
         let spaceItem = try SpaceItem(
-            uriString: "at://\(Self.accountDID)/space/com.example.drive/self",
+            uriString: "at:space/\(Self.accountDID)/com.example.drive/self",
             accountDID: Self.accountDID
         )
         let repo = RepoEntry(did: Self.memberDID, rev: Self.rev, hash: "unused")
@@ -1019,7 +1019,7 @@ struct ForeignRepoArchiveLimitTests {
     func ownRepoVerificationAcceptsArchiveAbovePetrelDefault() async throws {
         let host = try #require(URL(string: "http://127.0.0.1:\(ForeignArchiveMockURLProtocol.port)"))
         let spaceItem = try SpaceItem(
-            uriString: "at://\(Self.accountDID)/space/com.example.drive/self",
+            uriString: "at:space/\(Self.accountDID)/com.example.drive/self",
             accountDID: Self.accountDID
         )
         let ownRepo = RepoEntry(did: Self.accountDID, rev: Self.rev, hash: "unused")
@@ -1048,7 +1048,7 @@ struct ForeignRepoArchiveLimitTests {
     func spaceBlobDownloadsAcceptBlobsAbovePetrelDefault() async throws {
         let host = try #require(URL(string: "http://127.0.0.1:\(ForeignArchiveMockURLProtocol.port)"))
         let spaceItem = try SpaceItem(
-            uriString: "at://\(Self.accountDID)/space/com.example.drive/self",
+            uriString: "at:space/\(Self.accountDID)/com.example.drive/self",
             accountDID: Self.accountDID
         )
         let account = await Self.makeLoopbackAccount(host: host)

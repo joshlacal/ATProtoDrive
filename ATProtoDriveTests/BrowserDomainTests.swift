@@ -12,7 +12,7 @@ struct BrowserDomainTests {
             pdsURL: URL(string: "https://pds.example")!
         )
         let spaceScope = RepositoryScope.permissionedSpace(
-            spaceURI: "at://did:plc:z72i7hdynmk6r22z27h6tvur/space/place.swan.drive/main",
+            spaceURI: "at:space/did:plc:z72i7hdynmk6r22z27h6tvur/place.swan.drive/main",
             writerDID: did,
             accountDID: did
         )
